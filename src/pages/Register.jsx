@@ -1,224 +1,381 @@
-import { useState } from 'react';
-import { Toaster, toast } from 'sonner';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import { StepIndicator } from '../components/onboarding/StepIndicator';
-import { PersonalDetailsForm } from '../components/onboarding/PersonalDetailsForm';
-import { DocumentsForm } from '../components/onboarding/DocumentsForm';
-import { PaymentForm } from '../components/onboarding/PaymentForm';
-import { ConfirmationStep } from '../components/onboarding/ConfirmationStep';
-import { CiUser } from "react-icons/ci";
-import { IoDocumentTextOutline } from "react-icons/io5";
-import { CiMail } from "react-icons/ci";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { useContext, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { AuthContext } from "../context/AuthContext.jsx";
+import bgImage from "../assets/hero.png";
+import logo from "../assets/logo-light.png";
 
-function Register() {
-  const [currentStep, setCurrentStep] = useState(1);
-  const [isLoading, setIsLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    firstName: '',
-    surname: '',
-    email: '',
-    nationalId: '',
-    kraPin: '',
-    phone: '',
-    occupation: '',
-    address: '',
-    idFile: null,
-    photoFile: null,
-    termsAccepted: false,
-  });
-  const [errors, setErrors] = useState({});
-  const [showResetDialog, setShowResetDialog] = useState(false);
+export default function Register() {
+  const navigate = useNavigate();
+  const { register, authError, isLoading } = useContext(AuthContext);
 
-  const updateFormData = (field, value) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-    if (errors.step1 || errors.step2) setErrors({});
-  };
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
-  const validateStep1 = () => {
-    const errMsg = !formData.firstName ? 'First name is required'
-      : !formData.surname ? 'Surname is required'
-      : !formData.email ? 'Email is required'
-      : !formData.email.includes('@') ? 'Valid email is required'
-      : !formData.nationalId ? 'National ID is required'
-      : !formData.phone ? 'Phone number is required'
-      : !formData.termsAccepted ? 'You must accept the terms and conditions'
-      : null;
+  const [formError, setFormError] = useState(null);
 
-    if (errMsg) {
-      setErrors({ step1: errMsg });
-      toast.error(errMsg);
-      return false;
-    }
-    setErrors({});
-    return true;
-  };
-
-  const validateStep2 = () => {
-    const errMsg = !formData.idFile ? 'ID document is required'
-      : !formData.photoFile ? 'Passport photo is required'
-      : null;
-
-    if (errMsg) {
-      setErrors({ step2: errMsg });
-      toast.error(errMsg);
-      return false;
-    }
-    setErrors({});
-    return true;
-  };
-
-  const handleStep1Submit = (e) => {
+  async function onSubmit(e) {
     e.preventDefault();
-    if (validateStep1()) {
-      setCurrentStep(2);
-      toast.success('Personal details saved. Now upload documents.');
+    setFormError(null);
+
+    if (!firstName.trim()) return setFormError("First name is required");
+    if (!lastName.trim()) return setFormError("Last name is required");
+    if (!email.trim()) return setFormError("Email is required");
+    if (!phone.trim()) return setFormError("Phone number is required");
+    if (password.length < 8)
+      return setFormError("Password must be at least 8 characters");
+    if (password !== confirmPassword)
+      return setFormError("Passwords do not match");
+
+    try {
+      await register({
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        password,
+        role: "MEMBER",
+      });
+      navigate("/dashboard", { replace: true });
+    } catch (err) {
+      setFormError(err?.message || "Registration failed");
     }
-  };
-
-  const handleStep2Submit = (e) => {
-    e.preventDefault();
-    if (validateStep2()) {
-      setCurrentStep(3);
-      toast.success('Documents uploaded. Proceed to payment.');
-    }
-  };
-
-  const handlePaymentSuccess = () => {
-    toast.success('Registration and payment completed successfully!');
-    setCurrentStep(4);
-    setIsLoading(false);
-  };
-
-  const handleReset = () => {
-    setFormData({
-      firstName: '',
-      surname: '',
-      email: '',
-      nationalId: '',
-      kraPin: '',
-      phone: '',
-      occupation: '',
-      address: '',
-      idFile: null,
-      photoFile: null,
-      termsAccepted: false,
-    });
-    setCurrentStep(1);
-    setErrors({});
-    toast.info('Form has been reset. You can start a new registration.');
-    setShowResetDialog(false);
-  };
+  }
 
   return (
-    <>
-      <Toaster position="top-right" richColors />
-      <div className="min-h-screen bg-linear-to-br from-slate-50 to-slate-100 py-8 px-4">
-        <div className="container max-w-7xl mx-auto">
-          <Card className="border-0 shadow-lg">
-            <CardHeader className="text-left border-b bg-white/50 rounded-t-xl">
-              <CardDescription className="font-bold text-[12px] uppercase text-[#828385]">
-                IDENTITY VERIFICATION
-              </CardDescription>
-              <CardTitle className="text-2xl font-bold text-primary">
-                AYEDOS SACCO KYC
-              </CardTitle>
-              <CardDescription>
-                A few steps to verify your identity and meet regulatory requirements
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Main form area */}
-                <div className="lg:col-span-2">
-                  <StepIndicator currentStep={currentStep} />
+    <div
+      data-register-container
+      style={{
+        minHeight: "100vh",
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 0,
+        background: "var(--color-background)",
+        position: "relative",
+        overflow: "hidden",
+      }}
+    >
+      {/* Left Column - Image with Wave */}
+      <div
+        data-register-image
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundImage: `url(${bgImage})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+          height: "100vh",
+          width: "100%",
 
-                  {currentStep === 1 && (
-                    <PersonalDetailsForm
-                      formData={formData}
-                      onChange={updateFormData}
-                      errors={errors}
-                      isLoading={isLoading}
-                      onSubmit={handleStep1Submit}
-                    />
-                  )}
-                  {currentStep === 2 && (
-                    <DocumentsForm
-                      formData={formData}
-                      onFileChange={updateFormData}
-                   errors={errors}
-                      isLoading={isLoading}
-                      onSubmit={handleStep2Submit}
-                      onBack={() => setCurrentStep(1)}
-                    />
-                  )}
-                  {currentStep === 3 && (
-                    <PaymentForm
-                      onBack={() => setCurrentStep(2)}
-                      onPaymentSuccess={handlePaymentSuccess}
-                      isLoading={isLoading}
-                      setLoading={setIsLoading}
-                      userData={formData}
-                    />
-                  )}
-                  {currentStep === 4 && (
-                    <ConfirmationStep onReset={() => setShowResetDialog(true)} />
-                  )}
-                </div>
+          position: "relative",
+        }}
+      >
+        {/* SVG Wave separator */}
+        <svg
+          style={{
+            position: "absolute",
+            right: "-80px",
+            top: 0,
+            width: "200px",
+            height: "100%",
+            preserveAspectRatio: "none",
+            zIndex: 10,
+          }}
+          viewBox="0 0 100 1000"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <defs>
+            <filter
+              id="waveShadow"
+              x="-50%"
+              y="-50%"
+              width="200%"
+              height="200%"
+            >
+              <feGaussianBlur in="SourceGraphic" stdDeviation="1" />
+            </filter>
+          </defs>
+          <path
+            d="M 0 0 C 120 150, 120 850, 0 1000 L 100 1000 L 100 0 Z"
+            fill="white"
+            opacity="1"
+            filter="url(#waveShadow)"
+          />
+        </svg>
 
-                {/* Sidebar checklist */}
-                <div className="lg:col-span-1">
-                  <Card className="border-[0.5px] bg-muted/10">
-                    <CardHeader className="text-left border-b">
-                      <CardDescription className="font-bold">CHECKLIST</CardDescription>
-                      <CardTitle className="text-md font-semibold">Before you submit</CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-0 space-y-1">
-                      <div className="flex items-center gap-2">
-                        <CiUser className="text-[#8cc63f] w-7 h-7 font-medium" />
-                        <span className="text-sm font-medium text-gray-600">Name and ID must match your document exactly</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <CiMail className="text-[#8cc63f] w-7 h-7 font-semibold" />
-                        <span className="text-sm font-medium text-gray-600">Use contact details you can verify (OTP, email).</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <IoDocumentTextOutline className="text-[#8cc63f] w-6 h-6 font-semibold" />
-                        <span className="text-sm font-medium text-gray-600">PDF or Image, legible, under 2MB each</span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
+        {/* Content placeholder with gradient and text */}
+        <div
+          style={{
+            textAlign: "center",
+            color: "white",
+            zIndex: 5,
+            padding: "10px",
+          }}
+        ></div>
+      </div>
+
+      {/* Right Column - Form */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "10px",
+          background: "var(--color-white)",
+          overflowY: "auto",
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
+        <div style={{ width: "100%", maxWidth: 380 }}>
+          <img
+            src={logo}
+            alt="Logo"
+            style={{
+              height: 50,
+              width: "auto",
+              objectFit: "contain",
+              marginBottom: 30,
+            }}
+          />
+          <h1
+            style={{
+              fontSize: 28,
+              fontWeight: 700,
+              color: "var(--color-primary)",
+              margin: "0 0 24px 0",
+            }}
+          >
+            Sign up
+          </h1>
+
+          <form onSubmit={onSubmit} style={{ marginBottom: 24 }}>
+            <div
+              style={{
+                display: "flex",
+                gap: 12,
+                marginBottom: 16,
+              }}
+            >
+              {/* First Name */}
+              <input
+                id="firstName"
+                name="firstName"
+                type="text"
+                placeholder="First name"
+                autoComplete="given-name"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "12px 16px",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 8,
+                  fontSize: 14,
+                  background: "white",
+                  color: "var(--color-text)",
+                  boxSizing: "border-box",
+                }}
+                required
+              />
+
+              {/* Last Name */}
+              <input
+                id="lastName"
+                name="lastName"
+                type="text"
+                placeholder="Last name"
+                autoComplete="family-name"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "12px 16px",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 8,
+                  fontSize: 14,
+                  background: "white",
+                  color: "var(--color-text)",
+                  boxSizing: "border-box",
+                }}
+                required
+              />
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                placeholder="Email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "12px 16px",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 8,
+                  fontSize: 14,
+                  transition: "all 300ms ease",
+                  background: "white",
+                  color: "var(--color-text)",
+                  boxSizing: "border-box",
+                }}
+                required
+              />
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <input
+                id="phone"
+                name="phone"
+                type="tel"
+                placeholder="Phone number"
+                autoComplete="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "12px 16px",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 8,
+                  fontSize: 14,
+                  transition: "all 300ms ease",
+                  background: "white",
+                  color: "var(--color-text)",
+                  boxSizing: "border-box",
+                }}
+                required
+              />
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                placeholder="Password"
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "12px 16px",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 8,
+                  fontSize: 14,
+                  transition: "all 300ms ease",
+                  background: "white",
+                  color: "var(--color-text)",
+                  boxSizing: "border-box",
+                }}
+                required
+              />
+            </div>
+
+            <div style={{ marginBottom: 24 }}>
+              <input
+                id="confirmPassword"
+                name="confirmPassword"
+                type="password"
+                placeholder="Confirm password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "12px 16px",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 8,
+                  fontSize: 14,
+                  transition: "all 300ms ease",
+                  background: "white",
+                  color: "var(--color-text)",
+                  boxSizing: "border-box",
+                }}
+                required
+              />
+            </div>
+
+            {(formError || authError) && (
+              <div
+                role="alert"
+                style={{
+                  marginBottom: 20,
+                  padding: 12,
+                  borderRadius: 8,
+                  background: "rgba(239, 68, 68, 0.1)",
+                  border: "1px solid rgba(239, 68, 68, 0.2)",
+                  color: "#ef4444",
+                  fontWeight: 600,
+                  fontSize: 13,
+                }}
+              >
+                {formError || authError}
               </div>
-            </CardContent>
-          </Card>
+            )}
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              style={{
+                width: "100%",
+                padding: "12px 24px",
+                borderRadius: 8,
+                border: 0,
+                background: "var(--color-accent)",
+                color: "var(--color-white)",
+                fontWeight: 700,
+                fontSize: 14,
+                cursor: isLoading ? "not-allowed" : "pointer",
+                opacity: isLoading ? 0.7 : 1,
+                transition: "all 300ms ease",
+              }}
+            >
+              {isLoading ? "Creating account..." : "Create account"}
+            </button>
+          </form>
+
+          <p
+            style={{
+              textAlign: "center",
+              color: "var(--color-muted)",
+              fontSize: 13,
+            }}
+          >
+            Already have an account?{" "}
+            <a
+              href="/login"
+              style={{
+                color: "var(--color-primary)",
+                fontWeight: 700,
+                textDecoration: "none",
+              }}
+            >
+              Sign in
+            </a>
+          </p>
         </div>
       </div>
 
-      {/* Reset Confirmation Dialog */}
-      <AlertDialog open={showResetDialog} onOpenChange={setShowResetDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Reset Registration</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will clear all entered data and files. You will lose any unsaved progress.
-              Are you sure you want to reset?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleReset}>Yes, Reset</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+      {/* Responsive Media Query - Stack on smaller screens */}
+      <style>{`
+        @media (max-width: 1024px) {
+          [data-register-container] {
+            grid-template-columns: 1fr;
+          }
+          [data-register-image] {
+            display: none !important;
+          }
+        }
+      `}</style>
+    </div>
   );
 }
-
-export default Register;
