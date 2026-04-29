@@ -17,7 +17,7 @@ import { IoDocumentTextOutline } from "react-icons/io5";
 import { CiMail } from "react-icons/ci";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
-function Register() {
+function Onboarding() {
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -152,7 +152,7 @@ function Register() {
                     <DocumentsForm
                       formData={formData}
                       onFileChange={updateFormData}
-                   errors={errors}
+                      errors={errors}
                       isLoading={isLoading}
                       onSubmit={handleStep2Submit}
                       onBack={() => setCurrentStep(1)}
@@ -221,4 +221,4 @@ function Register() {
   );
 }
 
-export default Register;
+export default Onboarding;
