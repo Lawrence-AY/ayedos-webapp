@@ -1,5 +1,5 @@
 /// PaymentForm.jsx
-import { useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -10,9 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
- 
-import { GrLinkNext } from "react-icons/gr";
-import { AlertCircle, ArrowLeft, Phone, Receipt } from 'lucide-react';
+import { GrLinkNext } from 'react-icons/gr';
+import { ArrowLeft, Phone, Receipt } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -22,16 +21,17 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
-
-const API_BASE = import.meta.env.VITE_API_BASE ;
+import { apiRequest, unwrapEnvelopeData } from '../../lib/apiClient';
+import { AuthContext } from '../../context/AuthContext.jsx';
 
 export const PaymentForm = ({
   onBack,
   onPaymentSuccess,
   isLoading,
   setLoading,
-  userData, // contains all personal details + files
+  userData,
 }) => {
+  const { accessToken } = useContext(AuthContext);
   const [paymentMethod, setPaymentMethod] = useState('stk');
   const [stkPhone, setStkPhone] = useState('');
   const [amount, setAmount] = useState('1');
@@ -40,32 +40,27 @@ export const PaymentForm = ({
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [progress, setProgress] = useState(0);
 
-  // Pre-fill STK phone from registration phone if available
-  useState(() => {
-    if (userData.phone && !stkPhone) setStkPhone(userData.phone);
-  }, [userData.phone]);
+  useEffect(() => {
+    if (userData.phone && !stkPhone) {
+      setStkPhone(userData.phone);
+    }
+  }, [userData.phone, stkPhone]);
 
-  const registerUserWithPayment = async (paymentRef) => {
-    const formData = new FormData();
-    formData.append('firstname', userData.firstName);
-    formData.append('surname', userData.surname);
-    formData.append('email', userData.email);
-    formData.append('nationalId', userData.nationalId);
-    formData.append('kraPin', userData.kraPin || '');
-    formData.append('phone', userData.phone);
-    formData.append('occupation', userData.occupation || '');
-    formData.append('address', userData.address || '');
-    formData.append('idDocument', userData.idFile);
-    formData.append('passportPhoto', userData.photoFile);
-    formData.append('paymentReference', paymentRef);
-
-    const response = await fetch(`${API_BASE}/users/register`, {
-      method: 'POST',
-      body: formData,
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Registration failed');
-    return data;
+  const buildApplicationPayload = () => {
+    const name = [userData.firstName, userData.surname].filter(Boolean).join(' ').trim();
+    return {
+      name,
+      email: userData.email,
+      phone: userData.phone,
+      nationalId: userData.nationalId,
+      kraPin: userData.kraPin || null,
+      occupation: userData.occupation || null,
+      address: userData.address || null,
+      type: userData.occupation === 'Employed' ? 'EMPLOYEE' : 'NON_EMPLOYEE',
+      consentGiven: userData.termsAccepted,
+      idDocumentName: userData.idFile?.name ?? null,
+      passportPhotoName: userData.photoFile?.name ?? null,
+    };
   };
 
   const handlePayment = async () => {
@@ -78,37 +73,38 @@ export const PaymentForm = ({
     }, 300);
 
     try {
-      if (paymentMethod === 'stk') {
-        if (!stkPhone) throw new Error('Phone number is required');
-        if (!amount || Number(amount) <= 0) throw new Error('Valid amount required');
+      const payload = buildApplicationPayload();
+      const createRes = await apiRequest('/api/applications', {
+        method: 'POST',
+        body: payload,
+        accessToken,
+      });
 
-        // Initiate STK Push
-        const stkResponse = await fetch(`${API_BASE}/payments/stk`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: stkPhone, amount: Number(amount) }),
-        });
-        const stkData = await stkResponse.json();
-        if (!stkResponse.ok) throw new Error(stkData.error || 'STK Push failed');
+      if (!createRes.ok) {
+        throw new Error(createRes.json?.message || `Application creation failed (status ${createRes.status})`);
+      }
 
-        const paymentRef = stkData.reference || `STK_${Date.now()}`;
-        // After initiating STK, we assume the backend will confirm payment asynchronously.
-        // For simplicity, we proceed with registration using the payment reference.
-        await registerUserWithPayment(paymentRef);
-      } else {
-        // Manual verification
-        if (!mpesaReceipt) throw new Error('Receipt number required');
+      const application = unwrapEnvelopeData(createRes.json);
+      const applicationId = application?.id;
+      if (!applicationId) {
+        throw new Error('Application ID is unavailable');
+      }
 
-        // Verify receipt with backend
-        const verifyResponse = await fetch(`${API_BASE}/payments/verify`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mpesaReceipt }),
-        });
-        const verifyData = await verifyResponse.json();
-        if (!verifyResponse.ok) throw new Error(verifyData.error || 'Verification failed');
+      const paymentReference = paymentMethod === 'stk' ? `STK_${Date.now()}` : mpesaReceipt.trim();
+      const paymentPhone = paymentMethod === 'stk' ? stkPhone.trim() : userData.phone;
 
-        await registerUserWithPayment(mpesaReceipt);
+      const verifyRes = await apiRequest(`/api/applications/${applicationId}/verify-payment`, {
+        method: 'POST',
+        body: {
+          paymentReference,
+          paymentPhone,
+          paymentMethod,
+        },
+        accessToken,
+      });
+
+      if (!verifyRes.ok) {
+        throw new Error(verifyRes.json?.message || `Payment verification failed (status ${verifyRes.status})`);
       }
 
       clearInterval(interval);
@@ -116,17 +112,18 @@ export const PaymentForm = ({
       setTimeout(() => onPaymentSuccess(), 500);
     } catch (err) {
       clearInterval(interval);
-      setError(err.message);
+      setError(err.message || 'Payment registration failed');
       setLoading(false);
     }
   };
 
   const openConfirmDialog = () => {
-    if (paymentMethod === 'stk' && (!stkPhone || !amount)) {
-      setError('Please fill in phone number and amount');
+    setError('');
+    if (paymentMethod === 'stk' && (!stkPhone || !amount || Number(amount) <= 0)) {
+      setError('Please fill in phone number and valid amount');
       return;
     }
-    if (paymentMethod === 'manual' && !mpesaReceipt) {
+    if (paymentMethod === 'manual' && !mpesaReceipt.trim()) {
       setError('Please enter the receipt number');
       return;
     }
@@ -206,13 +203,11 @@ export const PaymentForm = ({
           </div>
         )}
 
-        {/*{error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Payment Error</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}*/}
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            {error}
+          </div>
+        )}
 
         {isLoading && (
           <div className="space-y-2">
@@ -223,45 +218,38 @@ export const PaymentForm = ({
           </div>
         )}
 
-        
-          <div className="flex justify-between">
-                 
-                 <Button 
-                   type="button" 
-                  className="p-2 h-13 bg-[#003a16]  
-                   text-white rounded-md flex items-center justify-center gap-2" 
-                  size="lg" 
-                   onClick={onBack}
-                  disabled={isLoading}
-                >
-                  <div className="flex items-center gap-2"> {/* flex-row is default for flex */}
-                <ArrowLeft className="w-4 h-4 mr-1" />
-                    <div className="flex flex-col text-left">
-                      <span className="text-xs font-light">Back</span>
-                      <span className="font-semibold">Documents</span>
-                    </div>
-                  </div>
-                </Button>
-                 <Button 
-                   type="button" 
-                  className="p-2 h-13 bg-[#8cc63f]  
-                   text-white rounded-md flex items-center justify-center gap-2" 
-                  size="lg" 
-                   
-                  disabled={isLoading}
-                >
-                  <div className="flex items-center gap-2">  
-                 
-                    <div className="flex flex-col text-left">
-                      <span className="text-xs font-light">Next</span>
-                      <span className="font-semibold">Confirmation</span>
-                    </div>
-                     <GrLinkNext />
-                  </div>
-                </Button>
-        
-                  
+        <div className="flex justify-between">
+          <Button
+            type="button"
+            className="p-2 h-13 bg-[#003a16] text-white rounded-md flex items-center justify-center gap-2"
+            size="lg"
+            onClick={onBack}
+            disabled={isLoading}
+          >
+            <div className="flex items-center gap-2">
+              <ArrowLeft className="w-4 h-4 mr-1" />
+              <div className="flex flex-col text-left">
+                <span className="text-xs font-light">Back</span>
+                <span className="font-semibold">Documents</span>
               </div>
+            </div>
+          </Button>
+          <Button
+            type="button"
+            className="p-2 h-13 bg-[#8cc63f] text-white rounded-md flex items-center justify-center gap-2"
+            size="lg"
+            onClick={openConfirmDialog}
+            disabled={isLoading}
+          >
+            <div className="flex items-center gap-2">
+              <div className="flex flex-col text-left">
+                <span className="text-xs font-light">Next</span>
+                <span className="font-semibold">Confirmation</span>
+              </div>
+              <GrLinkNext />
+            </div>
+          </Button>
+        </div>
       </div>
 
       <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
@@ -270,15 +258,17 @@ export const PaymentForm = ({
             <DialogTitle>Confirm Payment</DialogTitle>
             <DialogDescription>
               {paymentMethod === 'stk'
-                ? `You will receive an STK Push on ${stkPhone} for KES ${amount}. Ensure you have sufficient funds.`
-                : `Please confirm that you have already sent money and the receipt number is ${mpesaReceipt}.`}
+                ? `You will use ${stkPhone} for M-PESA payment of KES ${amount}.`
+                : `Please confirm that you have already sent funds and the receipt number is ${mpesaReceipt}.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowConfirmDialog(false)}>
               Cancel
             </Button>
-            <Button onClick={handlePayment}>Proceed</Button>
+            <Button onClick={handlePayment} disabled={isLoading}>
+              Proceed
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

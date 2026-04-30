@@ -126,11 +126,21 @@ export function AuthProvider({ children }) {
   )
 
   const register = useCallback(
-    async ({ name, email, password, phone, role }) => {
+    async ({ firstName, lastName, name, email, password, phone, role }) => {
       setAuthError(null)
+      const payload = {
+        firstName: firstName?.trim(),
+        lastName: lastName?.trim(),
+        name: name?.trim() || [firstName, lastName].filter(Boolean).join(' ').trim(),
+        email,
+        password,
+        phone,
+        role,
+      }
+
       const res = await apiRequest('/api/auth/register', {
         method: 'POST',
-        body: { name, email, password, phone, role },
+        body: payload,
       })
 
       if (!res.ok) {
@@ -138,24 +148,20 @@ export function AuthProvider({ children }) {
         throw new Error(msg)
       }
 
-      const data = unwrapEnvelopeData(res.json) // expected: { user, tokens }
+      const data = unwrapEnvelopeData(res.json)
       const nextUser = data?.user ?? null
-      const tokens = data?.tokens ?? null
-
+      const tokens = data?.tokens ?? data?.token ?? null
       const nextAccessToken = tokens?.accessToken ?? null
       const nextRefreshToken = tokens?.refreshToken ?? null
 
-      if (!nextUser || !nextAccessToken || !nextRefreshToken) {
-        // Some backends might only return user without tokens; try to refresh/load user.
-        throw new Error('Register succeeded but response shape is unexpected')
+      if (nextUser && nextAccessToken && nextRefreshToken) {
+        setUser(nextUser)
+        setAccessToken(nextAccessToken)
+        setRefreshToken(nextRefreshToken)
+        persistAuth({ user: nextUser, accessToken: nextAccessToken, refreshToken: nextRefreshToken })
       }
 
-      setUser(nextUser)
-      setAccessToken(nextAccessToken)
-      setRefreshToken(nextRefreshToken)
-      persistAuth({ user: nextUser, accessToken: nextAccessToken, refreshToken: nextRefreshToken })
-
-      return nextUser
+      return data
     },
     [persistAuth]
   )

@@ -7,7 +7,7 @@ function normalizeBaseUrl(url) {
 
 export function getApiBaseUrl() {
   const envUrl = import.meta.env.VITE_API_URL
-  return normalizeBaseUrl(envUrl)
+  return normalizeBaseUrl(envUrl) || DEFAULT_API_PATH_PREFIX
 }
 
 export function buildApiUrl(path) {

@@ -1,16 +1,17 @@
 import { useContext, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext.jsx";
+import { apiRequest } from "../lib/apiClient";
 import logo from "../assets/logo-light.png";
 import DotSwarmCanvas from "../components/landing/DotTextCanvas.jsx";
 import * as React from "react";
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogFooter,
-  AlertDialogTrigger,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,8 +22,14 @@ import {
 
 export default function Register() {
   const navigate = useNavigate();
-  const { register, authError, isLoading } = useContext(AuthContext);
-  const [value, setValue] = React.useState("");
+  const { register, login, authError, isLoading } = useContext(AuthContext);
+  const [otpDialogOpen, setOtpDialogOpen] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [pendingEmail, setPendingEmail] = useState("");
+  const [pendingPassword, setPendingPassword] = useState("");
+  const [otpError, setOtpError] = useState(null);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -34,6 +41,7 @@ export default function Register() {
   async function onSubmit(e) {
     e.preventDefault();
     setFormError(null);
+    setOtpError(null);
 
     if (!firstName.trim()) return setFormError("First name is required");
     if (!lastName.trim()) return setFormError("Last name is required");
@@ -44,6 +52,8 @@ export default function Register() {
     if (password !== confirmPassword)
       return setFormError("Passwords do not match");
 
+    setIsRegistering(true);
+
     try {
       await register({
         firstName: firstName.trim(),
@@ -53,9 +63,47 @@ export default function Register() {
         password,
         role: "MEMBER",
       });
-      navigate("/dashboard", { replace: true });
+
+      setPendingEmail(email.trim());
+      setPendingPassword(password);
+      setOtpDialogOpen(true);
     } catch (err) {
       setFormError(err?.message || "Registration failed");
+    } finally {
+      setIsRegistering(false);
+    }
+  }
+
+  async function handleVerifyOtp() {
+    setOtpError(null);
+
+    if (!otp.trim() || otp.trim().length !== 6) {
+      setOtpError("Please enter the 6-digit OTP sent to your email");
+      return;
+    }
+
+    setIsVerifyingOtp(true);
+
+    try {
+      const res = await apiRequest("/api/auth/verify-otp", {
+        method: "POST",
+        body: {
+          email: pendingEmail,
+          otp: otp.trim(),
+        },
+      });
+
+      if (!res.ok) {
+        throw new Error(res.json?.message || `OTP verification failed (status ${res.status})`);
+      }
+
+      await login({ email: pendingEmail, password: pendingPassword });
+      setOtpDialogOpen(false);
+      navigate("/onboarding", { replace: true });
+    } catch (err) {
+      setOtpError(err?.message || "OTP verification failed");
+    } finally {
+      setIsVerifyingOtp(false);
     }
   }
 
@@ -216,45 +264,54 @@ export default function Register() {
 
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isRegistering || isLoading}
               style={{
                 ...buttonStyle,
-                cursor: isLoading ? "not-allowed" : "pointer",
-                opacity: isLoading ? 0.7 : 1,
+                cursor: isRegistering || isLoading ? "not-allowed" : "pointer",
+                opacity: isRegistering || isLoading ? 0.7 : 1,
               }}
             >
-              {isLoading ? "Creating account..." : "Create account"}
+              {isRegistering ? "Sending OTP..." : "Create account"}
             </button>
           </form>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="outline">Show Dialog</Button>
-            </AlertDialogTrigger>
+          <AlertDialog open={otpDialogOpen} onOpenChange={setOtpDialogOpen}>
             <AlertDialogContent>
-              <InputOTP
-                maxLength={6}
-                value={value}
-                onChange={(value) => setValue(value)}
-              >
-                <InputOTPGroup>
-                  <InputOTPSlot index={0} />
-                  <InputOTPSlot index={1} />
-                  <InputOTPSlot index={2} />
-                  <InputOTPSlot index={3} />
-                  <InputOTPSlot index={4} />
-                  <InputOTPSlot index={5} />
-                </InputOTPGroup>
-              </InputOTP>
-              <div className="text-center text-sm">
-                {value === "" ? (
-                  <>Enter your one-time password.</>
-                ) : (
-                  <>You entered: {value}</>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Verify your email</AlertDialogTitle>
+              </AlertDialogHeader>
+              <div className="space-y-4">
+                <p style={{ margin: 0, color: '#475569' }}>
+                  Enter the 6-digit code sent to <strong>{pendingEmail}</strong> to continue.
+                </p>
+                <InputOTP
+                  maxLength={6}
+                  value={otp}
+                  onChange={(value) => setOtp(value)}
+                >
+                  <InputOTPGroup>
+                    <InputOTPSlot index={0} />
+                    <InputOTPSlot index={1} />
+                    <InputOTPSlot index={2} />
+                    <InputOTPSlot index={3} />
+                    <InputOTPSlot index={4} />
+                    <InputOTPSlot index={5} />
+                  </InputOTPGroup>
+                </InputOTP>
+                {(otpError || authError) && (
+                  <div role="alert" style={errorStyle}>
+                    {otpError || authError}
+                  </div>
                 )}
               </div>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction>Continue</AlertDialogAction>
+                <Button
+                  type="button"
+                  onClick={handleVerifyOtp}
+                  disabled={isVerifyingOtp}
+                >
+                  {isVerifyingOtp ? "Verifying..." : "Verify OTP"}
+                </Button>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
