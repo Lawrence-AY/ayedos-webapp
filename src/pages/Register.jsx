@@ -3,11 +3,26 @@ import { useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext.jsx";
 import logo from "../assets/logo-light.png";
 import DotSwarmCanvas from "../components/landing/DotTextCanvas.jsx";
+import * as React from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogFooter,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
 
 export default function Register() {
   const navigate = useNavigate();
   const { register, authError, isLoading } = useContext(AuthContext);
-
+  const [value, setValue] = React.useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -53,7 +68,7 @@ export default function Register() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-     
+
         overflowX: "hidden",
       }}
     >
@@ -69,11 +84,7 @@ export default function Register() {
           pointerEvents: "none",
         }}
       >
-        <DotSwarmCanvas
-          textLine1="AYEDOS"
-          textLine2="SACCO"
-          color="#88cc63" 
-        />
+        <DotSwarmCanvas textLine1="AYEDOS" textLine2="SACCO" color="#88cc63" />
       </div>
 
       {/* Content Layer */}
@@ -82,7 +93,7 @@ export default function Register() {
           position: "relative",
           zIndex: 1,
           width: "100%",
-          maxWidth: 480, 
+          maxWidth: 480,
           padding: "40px 20px",
           boxSizing: "border-box",
         }}
@@ -98,7 +109,13 @@ export default function Register() {
           }}
         >
           {/* Logo Section */}
-          <div style={{ display: "flex", justifyContent: "center", marginBottom: 5 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              marginBottom: 5,
+            }}
+          >
             <img
               src={logo}
               alt="Logo"
@@ -209,7 +226,38 @@ export default function Register() {
               {isLoading ? "Creating account..." : "Create account"}
             </button>
           </form>
-
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline">Show Dialog</Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <InputOTP
+                maxLength={6}
+                value={value}
+                onChange={(value) => setValue(value)}
+              >
+                <InputOTPGroup>
+                  <InputOTPSlot index={0} />
+                  <InputOTPSlot index={1} />
+                  <InputOTPSlot index={2} />
+                  <InputOTPSlot index={3} />
+                  <InputOTPSlot index={4} />
+                  <InputOTPSlot index={5} />
+                </InputOTPGroup>
+              </InputOTP>
+              <div className="text-center text-sm">
+                {value === "" ? (
+                  <>Enter your one-time password.</>
+                ) : (
+                  <>You entered: {value}</>
+                )}
+              </div>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction>Continue</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           <div style={mutedTextStyle}>
             Already have an account?{" "}
             <a href="/login" style={linkStyle}>
@@ -242,7 +290,7 @@ const buttonStyle = {
   color: "white",
   fontWeight: 700,
   fontSize: 16,
- 
+
   transition: "all 0.2s ease",
 };
 
