@@ -48,7 +48,7 @@ export default function DotSwarmCanvas({
       canvas.width = container.offsetWidth;
       canvas.height = container.offsetHeight;
       particles = [];
-      // Adjust density based on screen size
+      // Adjust density based on screen size 
       const count = Math.floor((canvas.width * canvas.height) / 15000); 
       for (let i = 0; i < count; i++) {
         particles.push(new Particle(canvas.width, canvas.height));
