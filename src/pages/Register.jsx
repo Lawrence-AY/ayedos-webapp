@@ -1,8 +1,8 @@
 import { useContext, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext.jsx";
-import bgImage from "../assets/hero.png";
 import logo from "../assets/logo-light.png";
+import DotSwarmCanvas from "../components/landing/DotTextCanvas.jsx";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -14,7 +14,6 @@ export default function Register() {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-
   const [formError, setFormError] = useState(null);
 
   async function onSubmit(e) {
@@ -47,277 +46,153 @@ export default function Register() {
 
   return (
     <div
-      data-register-container
       style={{
         minHeight: "100vh",
-        display: "grid",
-        gridTemplateColumns: "1fr 1fr",
-        gap: 0,
-        background: "var(--color-background)",
+        width: "100%",
         position: "relative",
-        overflow: "hidden",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+     
+        overflowX: "hidden",
       }}
     >
-      {/* Left Column - Image with Wave */}
+      {/* Background Layer - Fixed to prevent gaps during scroll */}
       <div
-        data-register-image
         style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundImage: `url(${bgImage})`,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          backgroundRepeat: "no-repeat",
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100vw",
           height: "100vh",
-          width: "100%",
-
-          position: "relative",
+          zIndex: 0,
+          pointerEvents: "none",
         }}
       >
-        {/* SVG Wave separator */}
-        <svg
-          style={{
-            position: "absolute",
-            right: "-80px",
-            top: 0,
-            width: "200px",
-            height: "100%",
-            preserveAspectRatio: "none",
-            zIndex: 10,
-          }}
-          viewBox="0 0 100 1000"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <defs>
-            <filter
-              id="waveShadow"
-              x="-50%"
-              y="-50%"
-              width="200%"
-              height="200%"
-            >
-              <feGaussianBlur in="SourceGraphic" stdDeviation="1" />
-            </filter>
-          </defs>
-          <path
-            d="M 0 0 C 120 150, 120 850, 0 1000 L 100 1000 L 100 0 Z"
-            fill="white"
-            opacity="1"
-            filter="url(#waveShadow)"
-          />
-        </svg>
-
-        {/* Content placeholder with gradient and text */}
-        <div
-          style={{
-            textAlign: "center",
-            color: "white",
-            zIndex: 5,
-            padding: "10px",
-          }}
-        ></div>
+        <DotSwarmCanvas
+          textLine1="AYEDOS"
+          textLine2="SACCO"
+          color="#88cc63" 
+        />
       </div>
 
-      {/* Right Column - Form */}
+      {/* Content Layer */}
       <div
         style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "10px",
-          background: "var(--color-white)",
-          overflowY: "auto",
           position: "relative",
           zIndex: 1,
+          width: "100%",
+          maxWidth: 480, 
+          padding: "40px 20px",
+          boxSizing: "border-box",
         }}
       >
-        <div style={{ width: "100%", maxWidth: 380 }}>
-          <img
-            src={logo}
-            alt="Logo"
-            style={{
-              height: 50,
-              width: "auto",
-              objectFit: "contain",
-              marginBottom: 30,
-            }}
-          />
+        <div
+          style={{
+            background: "rgba(255, 255, 255, 0.5)",
+            backdropFilter: "blur(4px)",
+            borderRadius: 20,
+            padding: "40px",
+            boxShadow: "0 20px 40px rgba(0, 0, 0, 0.06)",
+            border: "1px solid rgba(226, 232, 240, 0.8)",
+          }}
+        >
+          {/* Logo Section */}
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 5 }}>
+            <img
+              src={logo}
+              alt="Logo"
+              style={{
+                height: 45,
+                width: "auto",
+                objectFit: "contain",
+              }}
+            />
+          </div>
+
           <h1
             style={{
-              fontSize: 28,
-              fontWeight: 700,
-              color: "var(--color-primary)",
-              margin: "0 0 24px 0",
+              fontSize: 24,
+              fontWeight: 800,
+              textAlign: "center",
+              letterSpacing: "-0.02em",
+              color: "var(--color-primary, #1a202c)",
+              margin: "0 0 32px 0",
             }}
           >
-            Sign up
+            Create Account
           </h1>
 
-          <form onSubmit={onSubmit} style={{ marginBottom: 24 }}>
-            <div
-              style={{
-                display: "flex",
-                gap: 12,
-                marginBottom: 16,
-              }}
-            >
-              {/* First Name */}
-              <input
-                id="firstName"
-                name="firstName"
-                type="text"
-                placeholder="First name"
-                autoComplete="given-name"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "12px 16px",
-                  border: "1px solid #e2e8f0",
-                  borderRadius: 8,
-                  fontSize: 14,
-                  background: "white",
-                  color: "var(--color-text)",
-                  boxSizing: "border-box",
-                }}
-                required
-              />
-
-              {/* Last Name */}
-              <input
-                id="lastName"
-                name="lastName"
-                type="text"
-                placeholder="Last name"
-                autoComplete="family-name"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "12px 16px",
-                  border: "1px solid #e2e8f0",
-                  borderRadius: 8,
-                  fontSize: 14,
-                  background: "white",
-                  color: "var(--color-text)",
-                  boxSizing: "border-box",
-                }}
-                required
-              />
+          <form onSubmit={onSubmit}>
+            <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+              <div style={{ flex: 1 }}>
+                <input
+                  type="text"
+                  placeholder="First name"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  style={inputStyle}
+                  required
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <input
+                  type="text"
+                  placeholder="Last name"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  style={inputStyle}
+                  required
+                />
+              </div>
             </div>
 
             <div style={{ marginBottom: 16 }}>
               <input
-                id="email"
-                name="email"
                 type="email"
-                placeholder="Email"
-                autoComplete="email"
+                placeholder="Email Address"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "12px 16px",
-                  border: "1px solid #e2e8f0",
-                  borderRadius: 8,
-                  fontSize: 14,
-                  transition: "all 300ms ease",
-                  background: "white",
-                  color: "var(--color-text)",
-                  boxSizing: "border-box",
-                }}
+                style={inputStyle}
                 required
               />
             </div>
 
             <div style={{ marginBottom: 16 }}>
               <input
-                id="phone"
-                name="phone"
                 type="tel"
-                placeholder="Phone number"
-                autoComplete="tel"
+                placeholder="Phone Number"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "12px 16px",
-                  border: "1px solid #e2e8f0",
-                  borderRadius: 8,
-                  fontSize: 14,
-                  transition: "all 300ms ease",
-                  background: "white",
-                  color: "var(--color-text)",
-                  boxSizing: "border-box",
-                }}
+                style={inputStyle}
                 required
               />
             </div>
 
             <div style={{ marginBottom: 16 }}>
               <input
-                id="password"
-                name="password"
                 type="password"
                 placeholder="Password"
-                autoComplete="new-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "12px 16px",
-                  border: "1px solid #e2e8f0",
-                  borderRadius: 8,
-                  fontSize: 14,
-                  transition: "all 300ms ease",
-                  background: "white",
-                  color: "var(--color-text)",
-                  boxSizing: "border-box",
-                }}
+                style={inputStyle}
                 required
               />
             </div>
 
-            <div style={{ marginBottom: 24 }}>
+            <div style={{ marginBottom: 15 }}>
               <input
-                id="confirmPassword"
-                name="confirmPassword"
                 type="password"
                 placeholder="Confirm password"
-                autoComplete="new-password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "12px 16px",
-                  border: "1px solid #e2e8f0",
-                  borderRadius: 8,
-                  fontSize: 14,
-                  transition: "all 300ms ease",
-                  background: "white",
-                  color: "var(--color-text)",
-                  boxSizing: "border-box",
-                }}
+                style={inputStyle}
                 required
               />
             </div>
 
             {(formError || authError) && (
-              <div
-                role="alert"
-                style={{
-                  marginBottom: 20,
-                  padding: 12,
-                  borderRadius: 8,
-                  background: "rgba(239, 68, 68, 0.1)",
-                  border: "1px solid rgba(239, 68, 68, 0.2)",
-                  color: "#ef4444",
-                  fontWeight: 600,
-                  fontSize: 13,
-                }}
-              >
+              <div role="alert" style={errorStyle}>
                 {formError || authError}
               </div>
             )}
@@ -326,56 +201,71 @@ export default function Register() {
               type="submit"
               disabled={isLoading}
               style={{
-                width: "100%",
-                padding: "12px 24px",
-                borderRadius: 8,
-                border: 0,
-                background: "var(--color-accent)",
-                color: "var(--color-white)",
-                fontWeight: 700,
-                fontSize: 14,
+                ...buttonStyle,
                 cursor: isLoading ? "not-allowed" : "pointer",
                 opacity: isLoading ? 0.7 : 1,
-                transition: "all 300ms ease",
               }}
             >
               {isLoading ? "Creating account..." : "Create account"}
             </button>
           </form>
 
-          <p
-            style={{
-              textAlign: "center",
-              color: "var(--color-muted)",
-              fontSize: 13,
-            }}
-          >
+          <div style={mutedTextStyle}>
             Already have an account?{" "}
-            <a
-              href="/login"
-              style={{
-                color: "var(--color-primary)",
-                fontWeight: 700,
-                textDecoration: "none",
-              }}
-            >
+            <a href="/login" style={linkStyle}>
               Sign in
             </a>
-          </p>
+          </div>
         </div>
       </div>
-
-      {/* Responsive Media Query - Stack on smaller screens */}
-      <style>{`
-        @media (max-width: 1024px) {
-          [data-register-container] {
-            grid-template-columns: 1fr;
-          }
-          [data-register-image] {
-            display: none !important;
-          }
-        }
-      `}</style>
     </div>
   );
 }
+
+const inputStyle = {
+  width: "100%",
+  padding: "14px 16px",
+  border: "1px solid #e2e8f0",
+  borderRadius: 12,
+  fontSize: 15,
+  background: "#f8fafc",
+  color: "#1e293b",
+  boxSizing: "border-box",
+};
+
+const buttonStyle = {
+  width: "100%",
+  padding: "16px 24px",
+  borderRadius: 12,
+  border: 0,
+  background: "#8cc63f",
+  color: "white",
+  fontWeight: 700,
+  fontSize: 16,
+ 
+  transition: "all 0.2s ease",
+};
+
+const errorStyle = {
+  marginBottom: 20,
+  padding: 14,
+  borderRadius: 12,
+  background: "#fef2f2",
+  border: "1px solid #fee2e2",
+  color: "#b91c1c",
+  fontWeight: 500,
+  fontSize: 14,
+};
+
+const mutedTextStyle = {
+  marginTop: 20,
+  textAlign: "center",
+  color: "#64748b",
+  fontSize: 14,
+};
+
+const linkStyle = {
+  color: "var(--color-primary, #003a16)",
+  fontWeight: 700,
+  textDecoration: "none",
+};
