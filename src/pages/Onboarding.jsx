@@ -1,5 +1,6 @@
 // Onboarding.jsx
 import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Toaster, toast } from 'sonner';
 import {
   Card,
@@ -10,28 +11,31 @@ import {
 } from '@/components/ui/card';
 import { StepIndicator } from '../components/onboarding/StepIndicator';
 import { PersonalDetailsForm } from '../components/onboarding/PersonalDetailsForm';
-import { DocumentsForm } from '../components/onboarding/DocumentsForm';
+ 
 import { PaymentForm } from '../components/onboarding/PaymentForm';
 import { ConfirmationStep } from '../components/onboarding/ConfirmationStep';
 import { CiUser } from "react-icons/ci";
-import { IoDocumentTextOutline } from "react-icons/io5";
+ 
 import { CiMail } from "react-icons/ci";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import DotSwarmCanvas from '../components/landing/DotTextCanvas'; // adjust path if needed
-import logo from "../assets/logo-light.png"; // ensure you have the logo
+import DotSwarmCanvas from '../components/landing/DotTextCanvas';
+import logo from "../assets/logo-light.png";
 
 function Onboarding() {
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     firstName: '',
+    secondName: '',
     surname: '',
     email: '',
     nationalId: '',
     kraPin: '',
     phone: '',
     occupation: '',
-    address: '',
+    poBox: '',
+    county: '',
+    subCounty: '',
     idFile: null,
     photoFile: null,
     termsAccepted: false,
@@ -66,11 +70,15 @@ function Onboarding() {
 
   const validateStep1 = () => {
     const errMsg = !formData.firstName ? 'First name is required'
+      : !formData.secondName ? 'Second name is required'
       : !formData.surname ? 'Surname is required'
       : !formData.email ? 'Email is required'
       : !formData.email.includes('@') ? 'Valid email is required'
       : !formData.nationalId ? 'National ID is required'
       : !formData.phone ? 'Phone number is required'
+      : !formData.poBox ? 'Physical address (PO Box) is required'
+      : !formData.county ? 'County is required'
+      : !formData.subCounty ? 'Sub-county is required'
       : !formData.termsAccepted ? 'You must accept the terms and conditions'
       : null;
 
@@ -83,36 +91,18 @@ function Onboarding() {
     return true;
   };
 
-  const validateStep2 = () => {
-    const errMsg = !formData.idFile ? 'ID document is required'
-      : !formData.photoFile ? 'Passport photo is required'
-      : null;
-
-    if (errMsg) {
-      setErrors({ step2: errMsg });
-      toast.error(errMsg);
-      return false;
-    }
-    setErrors({});
-    return true;
-  };
+ 
 
   const handleStep1Submit = (e) => {
     e.preventDefault();
     if (validateStep1()) {
       setCurrentStep(2);
-      toast.success('Personal details saved. Now upload documents.');
+      toast.success('Personal details saved. ');
     }
   };
 
- /* const handleStep2Submit = (e) => {
-    e.preventDefault();
-    if (validateStep2()) {
-      setCurrentStep(3);
-      toast.success('Documents uploaded. Proceed to payment.');
-    }
-  };
-*/
+  
+
   const handlePaymentSuccess = () => {
     toast.success('Registration and payment completed successfully!');
     setCurrentStep(4);
@@ -122,15 +112,17 @@ function Onboarding() {
   const handleReset = () => {
     setFormData({
       firstName: '',
+      secondName: '',
       surname: '',
       email: '',
       nationalId: '',
       kraPin: '',
       phone: '',
       occupation: '',
-      address: '',
-      idFile: null,
-      photoFile: null,
+      poBox: '',
+      county: '',
+      subCounty: '',
+     
       termsAccepted: false,
     });
     setCurrentStep(1);
@@ -184,8 +176,9 @@ function Onboarding() {
           }}
         >
           <div
+            className="glass-card"
             style={{
-              background: "rgba(255, 255, 255, 0.5)",
+              background: "rgba(255, 255, 255, 0.95)",
               backdropFilter: "blur(4px)",
               borderRadius: 24,
               padding: "32px 40px",
@@ -215,8 +208,6 @@ function Onboarding() {
               >
                 Identity Verification ~ KYC Registration
               </div>
-              
-             
             </div>
 
             {/* Main Content Grid */}
@@ -234,7 +225,9 @@ function Onboarding() {
                     onSubmit={handleStep1Submit}
                   />
                 )}
-                
+
+               
+
                 {currentStep === 2 && (
                   <PaymentForm
                     onBack={() => setCurrentStep(2)}
@@ -244,6 +237,7 @@ function Onboarding() {
                     userData={formData}
                   />
                 )}
+
                 {currentStep === 3 && (
                   <ConfirmationStep onReset={() => setShowResetDialog(true)} />
                 )}
@@ -252,7 +246,6 @@ function Onboarding() {
               {/* Checklist Sidebar */}
               <div className="lg:col-span-1">
                 <Card className="border border-gray-200 bg-white/50 shadow-sm">
-                 
                   <CardHeader className="border-b border-gray-100 pb-1">
                     <CardDescription className="font-bold text-xs uppercase text-[#828385]">
                       CHECKLIST
@@ -270,13 +263,10 @@ function Onboarding() {
                       <CiMail className="text-[#8cc63f] w-5 h-5 mt-0.5 flex-shrink-0" />
                       <span className="text-sm text-gray-600">Use contact details you can verify (OTP, email).</span>
                     </div>
-                    <div className="flex items-start gap-3">
-                      <IoDocumentTextOutline className="text-[#8cc63f] w-5 h-5 mt-0.5 flex-shrink-0" />
-                      <span className="text-sm text-gray-600">Upload clear, high-quality images.</span>
-                    </div>
+                     
                     <div style={{ fontSize: 10, color: "#64748b", marginTop: 8 }}>
-                A few steps to verify your identity and meet regulatory requirements
-              </div>
+                      A few steps to verify your identity and meet regulatory requirements
+                    </div>
                   </CardContent>
                 </Card>
               </div>
@@ -304,7 +294,6 @@ function Onboarding() {
 
       {/* Global style overrides to match Login form inputs/buttons */}
       <style>{`
-        /* Glass card inner forms - override any default shadcn styles */
         .glass-card input,
         .glass-card select,
         .glass-card textarea,
@@ -362,12 +351,10 @@ function Onboarding() {
         .glass-card .secondary-button:hover {
           background: #f1f5f9;
         }
-        /* Fix file inputs */
         .glass-card input[type="file"] {
           padding: 10px;
           background: white;
         }
-        /* Ensure all form groups inside the glass card */
         .glass-card .form-group,
         .glass-card .space-y-4 > div {
           margin-bottom: 1.25rem;
