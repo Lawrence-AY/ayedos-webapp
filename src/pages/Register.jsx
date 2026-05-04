@@ -98,6 +98,16 @@ export default function Register() {
       }
 
       await login({ email: pendingEmail, password: pendingPassword });
+      
+      // Store registration data in sessionStorage for onboarding pre-population
+      const registrationData = {
+        firstName,
+        surname: lastName,
+        email: pendingEmail,
+        phone,
+      };
+      sessionStorage.setItem('registrationData', JSON.stringify(registrationData));
+      
       setOtpDialogOpen(false);
       navigate("/onboarding", { replace: true });
     } catch (err) {

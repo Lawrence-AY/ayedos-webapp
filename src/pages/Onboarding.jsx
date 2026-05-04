@@ -1,5 +1,5 @@
 // Onboarding.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Toaster, toast } from 'sonner';
 import {
   Card,
@@ -38,6 +38,26 @@ function Onboarding() {
   });
   const [errors, setErrors] = useState({});
   const [showResetDialog, setShowResetDialog] = useState(false);
+
+  // Load registration data from sessionStorage and pre-populate form
+  useEffect(() => {
+    const registrationData = sessionStorage.getItem('registrationData');
+    if (registrationData) {
+      try {
+        const data = JSON.parse(registrationData);
+        setFormData((prev) => ({
+          ...prev,
+          firstName: data.firstName || '',
+          surname: data.surname || '',
+          email: data.email || '',
+          phone: data.phone || '',
+        }));
+        toast.info('Your registration details have been pre-filled');
+      } catch (err) {
+        console.error('Failed to load registration data:', err);
+      }
+    }
+  }, []);
 
   const updateFormData = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));

@@ -5,6 +5,7 @@ import { AuthContext } from '../context/AuthContext.jsx'
 import Sidebar from '../components/layout/Sidebar.jsx'
 import TopNavbar from '../components/layout/TopNavbar.jsx'
 import { getTransactions, getLoans, getShares, getDividends, getApplications, getDeductions } from '../services/api.js'
+import { getSystemStats, getAllUsers } from '../features/admin/adminService.js'
 
 // Overview Card Component
 function OverviewCard({ title, value, accent = false }) {
@@ -37,7 +38,10 @@ function OverviewCard({ title, value, accent = false }) {
 }
 
 // Admin Overview
-function AdminOverview({ stats }) {
+function AdminOverview({ stats, applications }) {
+  // Filter pending applications
+  const pendingApps = (applications || []).filter((app) => app.status === 'PENDING').slice(0, 5)
+
   return (
     <div>
       <h2 style={{ marginBottom: 24 }}>Administrator Dashboard</h2>
@@ -52,6 +56,34 @@ function AdminOverview({ stats }) {
         <OverviewCard title="Active Loans" value={stats.activeLoans || 0} />
         <OverviewCard title="Total Shares" value={`KSh ${(stats.totalShares || 0).toLocaleString()}`} />
       </div>
+      
+      {/* Pending Applications Preview */}
+      {pendingApps.length > 0 && (
+        <div className="feature-card" style={{ marginBottom: 24 }}>
+          <h3 style={{ marginBottom: 16 }}>Pending Applications</h3>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--code-bg)' }}>
+                  <th style={{ padding: '10px 0', textAlign: 'left', fontWeight: 600, color: 'var(--color-muted)' }}>Name</th>
+                  <th style={{ padding: '10px 0', textAlign: 'left', fontWeight: 600, color: 'var(--color-muted)' }}>Email</th>
+                  <th style={{ padding: '10px 0', textAlign: 'left', fontWeight: 600, color: 'var(--color-muted)' }}>Submitted</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingApps.map((app) => (
+                  <tr key={app.id} style={{ borderBottom: '1px solid rgba(10, 42, 67, 0.06)' }}>
+                    <td style={{ padding: '10px 0', color: 'var(--color-text)' }}>{app.applicantName || 'N/A'}</td>
+                    <td style={{ padding: '10px 0', color: 'var(--color-text)' }}>{app.applicantEmail || 'N/A'}</td>
+                    <td style={{ padding: '10px 0', color: 'var(--color-text)' }}>{app.submittedAt ? new Date(app.submittedAt).toLocaleDateString() : 'N/A'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      
       <div className="feature-card" style={{ marginTop: 18 }}>
         <h3 style={{ marginBottom: 12 }}>Quick Actions</h3>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
@@ -164,6 +196,7 @@ export default function Dashboard() {
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [stats, setStats] = useState(null)
   const [data, setData] = useState({
     transactions: [],
     loans: [],
@@ -173,21 +206,27 @@ export default function Dashboard() {
     deductions: [],
   })
 
-  // Mock stats - replace with real /stats endpoint
-  const stats = {
-    totalMembers: role === 'MEMBER' ? 0 : 1274,
-    pendingApplications: role === 'MEMBER' ? 0 : 42,
-    activeLoans: role === 'MEMBER' ? 2 : 487,
-    totalShares: role === 'MEMBER' ? 0 : 35800000,
-    deposits: 4580000,
-    withdrawals: 2890000,
-    loansDisbursed: 12500000,
-    dividends: 850000,
-    balance: 157500,
-    loanBalance: 85000,
-    shares: 150,
-    dividendBalance: 12500,
-    memberSince: 'Jan 2023',
+  const getMemberStats = () => {
+    const balance = data.transactions.reduce((sum, transaction) => {
+      const amount = Number(transaction?.amount || 0)
+      if (transaction?.type === 'DEPOSIT' || transaction?.type === 'DIVIDEND' || transaction?.type === 'LOAN_REPAYMENT') {
+        return sum + amount
+      }
+      if (transaction?.type === 'WITHDRAWAL' || transaction?.type === 'LOAN_DISBURSEMENT' || transaction?.type === 'MEMBERSHIP_FEE') {
+        return sum - amount
+      }
+      return sum
+    }, 0)
+
+    const activeLoans = data.loans.filter((loan) => ['ACTIVE', 'APPROVED'].includes(loan.status)).length
+    const shares = data.shares.reduce((sum, share) => sum + Number(share?.shares || 0), 0)
+
+    return {
+      balance,
+      activeLoans,
+      shares,
+      memberSince: user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A',
+    }
   }
 
   useEffect(() => {
@@ -200,28 +239,49 @@ export default function Dashboard() {
       setError(null)
 
       try {
-        const opts = { accessToken }
-        const results = await Promise.allSettled([
-          getTransactions(accessToken),
-          getLoans(accessToken),
-          getShares(accessToken),
-          getDividends(accessToken),
-          (role === 'ADMIN' || role === 'FINANCE') ? getApplications(accessToken) : Promise.resolve([]),
-          (role === 'ADMIN' || role === 'FINANCE') ? getDeductions(accessToken) : Promise.resolve([]),
-        ])
+        const requests = [
+        getTransactions(accessToken),
+        getLoans(accessToken),
+        getShares(accessToken),
+        getDividends(accessToken),
+      ]
 
-        if (cancelled) return
+      if (role === 'ADMIN' || role === 'FINANCE') {
+        requests.push(getApplications(accessToken), getDeductions(accessToken), getSystemStats(accessToken))
+      }
 
-        const getData = (r) => r.status === 'fulfilled' ? r.value : []
+      if (role === 'ADMIN') {
+        requests.push(getAllUsers(accessToken))
+      }
 
-        setData({
-          transactions: getData(results[0]),
-          loans: getData(results[1]),
-          shares: getData(results[2]),
-          dividends: getData(results[3]),
-          applications: getData(results[4]),
-          deductions: getData(results[5]),
-        })
+      const results = await Promise.allSettled(requests)
+
+      if (cancelled) return
+
+      const getData = (r) => r.status === 'fulfilled' ? r.value : []
+
+      const nextData = {
+        transactions: getData(results[0]),
+        loans: getData(results[1]),
+        shares: getData(results[2]),
+        dividends: getData(results[3]),
+        applications: [],
+        deductions: [],
+        users: [],
+      }
+
+      if (role === 'ADMIN' || role === 'FINANCE') {
+        nextData.applications = getData(results[4])
+        nextData.deductions = getData(results[5])
+        setStats(results[6].status === 'fulfilled' ? results[6].value : null)
+      }
+
+      if (role === 'ADMIN') {
+        const adminUserIndex = role === 'ADMIN' && (role === 'ADMIN' || role === 'FINANCE') ? 7 : 4
+        nextData.users = getData(results[adminUserIndex])
+      }
+
+      setData(nextData)
       } catch (e) {
         if (!cancelled) setError(e?.message || 'Failed to load data')
       } finally {
@@ -234,6 +294,7 @@ export default function Dashboard() {
   }, [accessToken, role])
 
   const path = location.pathname
+  const dashboardStats = (role === 'ADMIN' || role === 'FINANCE') ? (stats || {}) : getMemberStats()
 
   function renderContent() {
     if (loading) {
@@ -271,9 +332,9 @@ export default function Dashboard() {
 
     // Role-based routing
     if (path === '/dashboard' || path === '/dashboard/') {
-      if (role === 'ADMIN') return <AdminOverview stats={stats} />
-      if (role === 'FINANCE') return <FinanceOverview stats={stats} />
-      return <MemberOverview stats={stats} />
+      if (role === 'ADMIN') return <AdminOverview stats={dashboardStats} applications={data.applications} />
+      if (role === 'FINANCE') return <FinanceOverview stats={dashboardStats} />
+      return <MemberOverview stats={dashboardStats} />
     }
 
     if (path.includes('/transactions')) {
@@ -402,6 +463,28 @@ export default function Dashboard() {
       )
     }
 
+    if (path.includes('/members') && role === 'ADMIN') {
+      return (
+        <div>
+          <h2 style={{ marginBottom: 24 }}>Members Management</h2>
+          <div className="feature-card" style={{ padding: 0, overflow: 'hidden' }}>
+            <DataTable
+              columns={[
+                { key: 'id', label: 'ID' },
+                { key: 'name', label: 'Name' },
+                { key: 'email', label: 'Email' },
+                { key: 'phone', label: 'Phone' },
+                { key: 'role', label: 'Role' },
+                { key: 'active', label: 'Status', render: (v) => v ? 'Active' : 'Inactive' },
+              ]}
+              data={data.users}
+              emptyMessage="No members found"
+            />
+          </div>
+        </div>
+      )
+    }
+
     if (path.includes('/profile')) {
       return (
         <div>
@@ -430,7 +513,25 @@ export default function Dashboard() {
       )
     }
 
-    return <MemberOverview stats={stats} />
+    // Access Denied for restricted sections
+    if (
+      (path.includes('/applications') || path.includes('/deductions') || path.includes('/members')) &&
+      role !== 'ADMIN' && role !== 'FINANCE'
+    ) {
+      return (
+        <div style={{ paddingTop: 40, textAlign: 'center' }}>
+          <h2 style={{ marginBottom: 24, color: '#ef4444' }}>Access Denied</h2>
+          <p style={{ color: 'var(--color-muted)', marginBottom: 24, fontSize: 16 }}>
+            You don't have permission to access this section. Only administrators and finance officers can view this content.
+          </p>
+          <a href="/dashboard" className="button button-primary" style={{ display: 'inline-block', padding: '12px 24px' }}>
+            Back to Dashboard
+          </a>
+        </div>
+      )
+    }
+
+    return <MemberOverview stats={dashboardStats} />
   }
 
   return (
