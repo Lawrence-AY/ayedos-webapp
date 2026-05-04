@@ -109,17 +109,6 @@ export default function Sidebar() {
         ))}
       </nav>
 
-<<<<<<< Updated upstream
-      <div style={{
-        marginTop: 'auto',
-        padding: 18,
-        borderRadius: 18,
-        background: 'rgba(255, 255, 255, 0.08)',
-        border: '1px solid rgba(255, 255, 255, 0.1)',
-      }}>
-        <p style={{ margin: 0, color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>
-          © 2026 AYEDOS SACCO
-=======
       <div
         style={{
           marginTop: "auto",
@@ -130,8 +119,7 @@ export default function Sidebar() {
         }}
       >
         <p style={{ margin: 0, color: "rgba(255,255,255,0.4)", fontSize: 11 }}>
-          © 2024 AYEDOS SACCO
->>>>>>> Stashed changes
+          © 2026 AYEDOS SACCO
         </p>
         <p
           style={{
