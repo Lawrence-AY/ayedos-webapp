@@ -1,4 +1,3 @@
-/// PaymentForm.jsx
 import { useContext, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -11,7 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { GrLinkNext } from 'react-icons/gr';
-import { ArrowLeft, Phone, Receipt } from 'lucide-react';
+import { ArrowLeft, Phone, Receipt, Copy, Check } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -32,30 +31,46 @@ export const PaymentForm = ({
   userData,
 }) => {
   const { accessToken } = useContext(AuthContext);
-  const [paymentMethod, setPaymentMethod] = useState('stk');
+  const [paymentMethod, setPaymentMethod] = useState('stk'); // 'stk' or 'manual'
   const [stkPhone, setStkPhone] = useState('');
-  const [amount, setAmount] = useState('1');
   const [mpesaReceipt, setMpesaReceipt] = useState('');
   const [error, setError] = useState('');
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [copied, setCopied] = useState(false);
 
+  // Fixed registration amount
+  const REGISTRATION_FEE = 1;
+
+  // Pre-fill phone from userData if available
   useEffect(() => {
     if (userData.phone && !stkPhone) {
       setStkPhone(userData.phone);
     }
   }, [userData.phone, stkPhone]);
 
+  // Build payload with correct address fields (poBox, county, subCounty)
   const buildApplicationPayload = () => {
-    const name = [userData.firstName, userData.surname].filter(Boolean).join(' ').trim();
+    const fullName = [userData.firstName, userData.surname].filter(Boolean).join(' ').trim();
+    // Combine address fields into a single string for backend compatibility
+    const addressParts = [
+      userData.poBox,
+      userData.county,
+      userData.subCounty
+    ].filter(Boolean);
+    const fullAddress = addressParts.join(', ') || null;
+
     return {
-      name,
+      name: fullName,
       email: userData.email,
       phone: userData.phone,
       nationalId: userData.nationalId,
       kraPin: userData.kraPin || null,
       occupation: userData.occupation || null,
-      address: userData.address || null,
+      address: fullAddress,      // was 'address' before, now combined
+      poBox: userData.poBox || null,
+      county: userData.county || null,
+      subCounty: userData.subCounty || null,
       type: userData.occupation === 'Employed' ? 'EMPLOYEE' : 'NON_EMPLOYEE',
       consentGiven: userData.termsAccepted,
       idDocumentName: userData.idFile?.name ?? null,
@@ -99,6 +114,7 @@ export const PaymentForm = ({
           paymentReference,
           paymentPhone,
           paymentMethod,
+          amount: REGISTRATION_FEE,
         },
         accessToken,
       });
@@ -119,8 +135,8 @@ export const PaymentForm = ({
 
   const openConfirmDialog = () => {
     setError('');
-    if (paymentMethod === 'stk' && (!stkPhone || !amount || Number(amount) <= 0)) {
-      setError('Please fill in phone number and valid amount');
+    if (paymentMethod === 'stk' && !stkPhone.trim()) {
+      setError('Please enter your M-PESA phone number');
       return;
     }
     if (paymentMethod === 'manual' && !mpesaReceipt.trim()) {
@@ -130,148 +146,210 @@ export const PaymentForm = ({
     setShowConfirmDialog(true);
   };
 
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
-    <>
-      <div className="space-y-6">
-        <div className="space-y-3">
-          <Label>Payment Method</Label>
-          <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select payment method" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="stk">
-                <div className="flex items-center gap-2">
-                  <Phone className="w-4 h-4" />
-                  Pay via STK Push (M-PESA)
-                </div>
-              </SelectItem>
-              <SelectItem value="manual">
-                <div className="flex items-center gap-2">
-                  <Receipt className="w-4 h-4" />
-                  I already paid – Enter Receipt Number
-                </div>
-              </SelectItem>
-            </SelectContent>
-          </Select>
+    <div className="space-y-6">
+      {/* Payment Details Card */}
+      <div className="bg-gradient-to-r from-[#8cc63f]/10 to-transparent border border-[#8cc63f]/20 rounded-xl p-4 space-y-3">
+        <div className="flex justify-between items-center">
+          <span className="text-sm font-semibold text-gray-600">Registration Fee</span>
+          <span className="text-2xl font-bold text-[#8cc63f]">KES {REGISTRATION_FEE}</span>
         </div>
-
-        {paymentMethod === 'stk' && (
-          <div className="space-y-4 bg-muted/30 p-4 rounded-lg">
-            <div className="space-y-2">
-              <Label htmlFor="stkPhone">M-PESA Phone Number</Label>
-              <Input
-                id="stkPhone"
-                value={stkPhone}
-                onChange={(e) => setStkPhone(e.target.value)}
-                placeholder="e.g., 0712345678"
-                disabled={isLoading}
-              />
-              <p className="text-xs text-muted-foreground">
-                Ensure this number is registered with M-PESA
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="amount">Amount (KES)</Label>
-              <Input
-                id="amount"
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="Amount"
-                disabled={isLoading}
-              />
-            </div>
-          </div>
-        )}
-
-        {paymentMethod === 'manual' && (
-          <div className="space-y-4 bg-muted/30 p-4 rounded-lg">
-            <div className="space-y-2">
-              <Label htmlFor="receipt">M-PESA Receipt Number</Label>
-              <Input
-                id="receipt"
-                value={mpesaReceipt}
-                onChange={(e) => setMpesaReceipt(e.target.value)}
-                placeholder="e.g., NCL9X1K1TQ"
-                disabled={isLoading}
-              />
-              <p className="text-xs text-muted-foreground">
-                Enter the receipt number from your M-PESA message
-              </p>
-            </div>
-          </div>
-        )}
-
-        {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            {error}
-          </div>
-        )}
-
-        {isLoading && (
-          <div className="space-y-2">
-            <Progress value={progress} className="w-full" />
-            <p className="text-sm text-muted-foreground text-center">
-              Processing payment and registration...
-            </p>
-          </div>
-        )}
-
-        <div className="flex justify-between">
-          <Button
-            type="button"
-            className="p-2 h-13 bg-[#003a16] text-white rounded-md flex items-center justify-center gap-2"
-            size="lg"
-            onClick={onBack}
-            disabled={isLoading}
-          >
+        <div className="border-t border-gray-200 my-2" />
+        <div className="space-y-2">
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-gray-600">Paybill Number:</span>
             <div className="flex items-center gap-2">
-              <ArrowLeft className="w-4 h-4 mr-1" />
-              <div className="flex flex-col text-left">
-                <span className="text-xs font-light">Back</span>
-                <span className="font-semibold">Documents</span>
-              </div>
+              <span className="font-mono font-bold text-gray-800">522533</span>
+              <button
+                onClick={() => copyToClipboard('522533')}
+                className="text-gray-400 hover:text-[#8cc63f] transition"
+              >
+                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              </button>
             </div>
-          </Button>
-          <Button
-            type="button"
-            className="p-2 h-13 bg-[#8cc63f] text-white rounded-md flex items-center justify-center gap-2"
-            size="lg"
-            onClick={openConfirmDialog}
-            disabled={isLoading}
-          >
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-gray-600">Account Number:</span>
             <div className="flex items-center gap-2">
-              <div className="flex flex-col text-left">
-                <span className="text-xs font-light">Next</span>
-                <span className="font-semibold">Confirmation</span>
-              </div>
-              <GrLinkNext />
+              <span className="font-mono font-bold text-gray-800">7929884</span>
+              <button
+                onClick={() => copyToClipboard('7929884')}
+                className="text-gray-400 hover:text-[#8cc63f] transition"
+              >
+                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              </button>
             </div>
-          </Button>
+          </div>
         </div>
+        <p className="text-xs text-gray-500 mt-2">
+          Use this Paybill and Account number when sending money via M-PESA.
+        </p>
       </div>
 
+      {/* Payment Method Selection */}
+      <div className="space-y-3">
+        <Label className="text-gray-700">Payment Method</Label>
+        <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+          <SelectTrigger className="w-full bg-[#f8fafc] border-gray-200 rounded-xl p-3">
+            <SelectValue placeholder="Select payment method" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="stk">
+              <div className="flex items-center gap-2">
+                <Phone className="w-4 h-4 text-[#8cc63f]" />
+                <span>Pay via STK Push (M-PESA)</span>
+              </div>
+            </SelectItem>
+            <SelectItem value="manual">
+              <div className="flex items-center gap-2">
+                <Receipt className="w-4 h-4 text-[#8cc63f]" />
+                <span>I already paid – Enter Receipt Number</span>
+              </div>
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* STK Push Section */}
+      {paymentMethod === 'stk' && (
+        <div className="space-y-4 bg-gray-50 rounded-xl p-4 border border-gray-100">
+          <div className="space-y-2">
+            <Label htmlFor="stkPhone" className="text-gray-700">M-PESA Phone Number</Label>
+            <Input
+              id="stkPhone"
+              value={stkPhone}
+              onChange={(e) => setStkPhone(e.target.value.replace(/\D/g, ''))}
+              placeholder="e.g., 0712345678"
+              disabled={isLoading}
+              className="bg-white border-gray-200 rounded-xl p-3"
+            />
+            <p className="text-xs text-gray-500">
+              Ensure this number is registered with M-PESA. You will receive a prompt to enter your PIN.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-gray-700">Amount (KES)</Label>
+            <div className="bg-gray-100 border border-gray-200 rounded-xl p-3 text-gray-800 font-medium">
+              {REGISTRATION_FEE} KES
+            </div>
+            <p className="text-xs text-gray-500">Fixed registration fee – non-editable</p>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Payment (Receipt) Section */}
+      {paymentMethod === 'manual' && (
+        <div className="space-y-4 bg-gray-50 rounded-xl p-4 border border-gray-100">
+          <div className="space-y-2">
+            <Label htmlFor="receipt" className="text-gray-700">M-PESA Receipt Number</Label>
+            <Input
+              id="receipt"
+              value={mpesaReceipt}
+              onChange={(e) => setMpesaReceipt(e.target.value.toUpperCase())}
+              placeholder="e.g., NCL9X1K1TQ"
+              disabled={isLoading}
+              className="bg-white border-gray-200 rounded-xl p-3"
+            />
+            <p className="text-xs text-gray-500">
+              Enter the 10‑character receipt number from your M-PESA confirmation message.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Error Display */}
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      {/* Progress Indicator */}
+      {isLoading && (
+        <div className="space-y-2">
+          <Progress value={progress} className="w-full h-2" />
+          <p className="text-sm text-gray-500 text-center">
+            Processing payment and registration...
+          </p>
+        </div>
+      )}
+
+      {/* Action Buttons */}
+      <div className="flex justify-between gap-4">
+        <Button 
+           type="button" 
+          className="p-2 h-13 bg-[#003a16]  
+           text-white rounded-md flex items-center justify-center gap-2" 
+          size="lg" 
+           onClick={onBack}
+          disabled={isLoading}
+        >
+          <div className="flex items-center gap-2"> {/* flex-row is default for flex */}
+        <ArrowLeft className="w-4 h-4 mr-1" />
+            <div className="flex flex-col text-left">
+              <span className="text-xs font-light">Back</span>
+              <span className="font-semibold">Personal Details</span>
+            </div>
+          </div>
+        </Button>
+         <Button 
+          type="submit" 
+          className="p-2 h-13 bg-[#8cc63f]  
+           text-white rounded-md flex items-center justify-center gap-2" 
+          size="lg" 
+           onClick={openConfirmDialog}
+          disabled={isLoading}
+        >
+          <div className="flex items-center gap-2"> {/* flex-row is default for flex */}
+         
+            <div className="flex flex-col text-left">
+              <span className="text-xs font-light">Next</span>
+              <span className="font-semibold">Confirm Payment</span>
+            </div>
+             <GrLinkNext />
+          </div>
+        </Button>
+        
+        
+      </div>
+
+      {/* Confirmation Dialog */}
       <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
-        <DialogContent>
+        <DialogContent className="rounded-2xl max-w-md">
           <DialogHeader>
-            <DialogTitle>Confirm Payment</DialogTitle>
-            <DialogDescription>
-              {paymentMethod === 'stk'
-                ? `You will use ${stkPhone} for M-PESA payment of KES ${amount}.`
-                : `Please confirm that you have already sent funds and the receipt number is ${mpesaReceipt}.`}
+            <DialogTitle className="text-md">Confirm Payment</DialogTitle>
+            <DialogDescription className="text-gray-600">
+              {paymentMethod === 'stk' ? (
+                <>You will pay <strong>KES {REGISTRATION_FEE}</strong> via STK push to <strong>{stkPhone}</strong>.</>
+              ) : (
+                <>You have confirmed payment with receipt number <strong>{mpesaReceipt}</strong>.</>
+              )}
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowConfirmDialog(false)}>
+          <DialogFooter className="flex gap-3 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setShowConfirmDialog(false)}
+              className="flex-1 rounded-xl"
+            >
               Cancel
             </Button>
-            <Button onClick={handlePayment} disabled={isLoading}>
-              Proceed
+            <Button
+              onClick={handlePayment}
+              disabled={isLoading}
+              className="flex-1 bg-[#8cc63f] hover:bg-[#7ab52e] rounded-xl"
+            >
+              {isLoading ? 'Processing...' : 'Proceed'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 };

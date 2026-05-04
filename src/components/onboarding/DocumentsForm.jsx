@@ -17,7 +17,7 @@ export const DocumentsForm = ({
   return (
     <form onSubmit={onSubmit} className="space-y-5">
       <FileUpload
-        label="Upload ID (.jpeg, .png, .jpg)"
+        label="Upload ID Front (.jpeg, .png, .jpg)"
         accept="image/*"
         onFileChange={(file) => onFileChange('idFile', file)}
         required
@@ -25,7 +25,7 @@ export const DocumentsForm = ({
       />
 
       <FileUpload
-        label="Upload Passport Photo"
+        label="ID Back (.jpeg, .png, .jpg)"
         accept="image/*"
         onFileChange={(file) => onFileChange('photoFile', file)}
         required
@@ -59,7 +59,7 @@ export const DocumentsForm = ({
           </div>
         </Button>
          <Button 
-           type="button" 
+          type="submit" 
           className="p-2 h-13 bg-[#8cc63f]  
            text-white rounded-md flex items-center justify-center gap-2" 
           size="lg" 

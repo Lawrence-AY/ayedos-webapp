@@ -107,7 +107,7 @@ export default function Sidebar() {
         border: '1px solid rgba(255, 255, 255, 0.1)',
       }}>
         <p style={{ margin: 0, color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>
-          © 2024 AYEDOS SACCO
+          © 2026 AYEDOS SACCO
         </p>
         <p style={{ margin: '4px 0 0', color: 'rgba(255,255,255,0.3)', fontSize: 10 }}>
           v1.0.0
