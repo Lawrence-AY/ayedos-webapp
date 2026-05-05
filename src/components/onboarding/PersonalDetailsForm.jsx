@@ -68,7 +68,7 @@ const kenyaCounties = {
 export const PersonalDetailsForm = ({
   formData,
   onChange,
-  errors,
+  errors, 
   isLoading,
   onSubmit,
 }) => {
@@ -126,7 +126,7 @@ export const PersonalDetailsForm = ({
         </div>
          <div className="space-y-2">
           <Label htmlFor="secondName">
-            Second Name <span className="text-destructive">*</span>
+            Second Name
           </Label>
           <Input
             id="secondName"
@@ -134,7 +134,7 @@ export const PersonalDetailsForm = ({
             onChange={(e) => onChange('secondName', e.target.value)}
             placeholder="Enter second name"
             disabled={isLoading}
-            required
+        
           />
         </div>
         <div className="space-y-2">
@@ -295,35 +295,37 @@ export const PersonalDetailsForm = ({
       </div>
 
       {/* Terms and Submit */}
-      <div className="flex justify-between items-center">
-        <div className="flex items-center space-x-3 pt-2">
-          <Checkbox
-            id="terms"
-            checked={termsAccepted}
-            onCheckedChange={(checked) => onChange('termsAccepted', checked)}
-            disabled={isLoading}
-            required
-          />
-          <Label htmlFor="terms" className="text-sm cursor-pointer">
-            I confirm that the information provided is accurate and agree to the{' '}
-            <span className="text-primary font-medium">Terms & Conditions</span>
-          </Label>
-        </div>
-        <Button 
-          type="submit" 
-          className="p-2 h-13 bg-[#8cc63f] text-white rounded-md flex items-center justify-center gap-2" 
-          size="lg" 
-          disabled={isLoading}
-        >
-          <div className="flex items-center gap-2">
-            <div className="flex flex-col text-left">
-              <span className="text-xs font-light">Next</span>
-              <span className="font-semibold">Documents</span>
-            </div>
-            <GrLinkNext />
-          </div> 
-        </Button>
-      </div>
+    <div className="flex flex-col md:flex-row items-center justify-between gap-4 mt-6">
+
+  <div className="flex items-center gap-2">
+    <Checkbox
+      id="terms"
+      checked={termsAccepted}
+      onCheckedChange={(checked) => onChange('termsAccepted', checked)}
+      disabled={isLoading}
+      required
+    />
+    <Label htmlFor="terms" className="text-sm cursor-pointer">
+      I confirm that the information provided is accurate and agree to the{' '}
+      <span className="text-primary font-medium">Terms & Conditions</span>
+    </Label>
+  </div>
+  
+  </div>
+  <Button  
+    type="submit" 
+    // Matches your reference: p-2, h-13, same bg, rounded, and flex alignment
+    className="p-2 h-13 w-5 bg-[#8cc63f] text-white rounded-md flex items-center justify-center gap-2"
+     
+    disabled={isLoading || !termsAccepted} // Added terms check for better UX
+  >
+    <div className="flex flex-col text-left">
+      <span className="text-xs font-light">Next</span>
+      <span className="font-semibold leading-tight">Payment</span>
+    </div>
+    <GrLinkNext />
+  </Button>
+  
     </form>
   );
 };

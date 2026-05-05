@@ -2,15 +2,9 @@ import { useContext, useEffect, useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { GrLinkNext } from 'react-icons/gr';
-import { ArrowLeft, Phone, Receipt, Copy, Check, Loader2, XCircle, CircleCheck } from 'lucide-react';
+import { ArrowLeft, Phone, Receipt, Copy, Check, Loader2, XCircle, CircleCheck, Info } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -23,13 +17,7 @@ import { Progress } from '@/components/ui/progress';
 import { apiRequest, unwrapEnvelopeData } from '../../lib/apiClient';
 import { AuthContext } from '../../context/AuthContext.jsx';
 
-export const PaymentForm = ({
-  onBack,
-  onPaymentSuccess,
-  isLoading,
-  setLoading,
-  userData,
-}) => {
+export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, userData }) => {
   const { accessToken } = useContext(AuthContext);
   const [paymentMethod, setPaymentMethod] = useState('stk');
   const [stkPhone, setStkPhone] = useState('');
@@ -37,7 +25,7 @@ export const PaymentForm = ({
   const [error, setError] = useState('');
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [showWaitingDialog, setShowWaitingDialog] = useState(false);
-  const [waitingStatus, setWaitingStatus] = useState('waiting'); // 'waiting', 'success', 'failed'
+  const [waitingStatus, setWaitingStatus] = useState('waiting');
   const [progress, setProgress] = useState(0);
   const [copied, setCopied] = useState(false);
   const [checkoutRequestId, setCheckoutRequestId] = useState(null);
@@ -45,25 +33,32 @@ export const PaymentForm = ({
 
   const REGISTRATION_FEE = 1;
 
-  // Prefill phone from userData
   useEffect(() => {
     if (userData.phone && !stkPhone) {
       setStkPhone(userData.phone);
     }
   }, [userData.phone, stkPhone]);
 
-  // Cleanup polling on unmount
   useEffect(() => {
     return () => {
       if (pollingInterval.current) clearInterval(pollingInterval.current);
     };
   }, []);
 
-  // Build application payload (used for manual payment & backup)
+  // Build full name and address for backend
   const buildApplicationPayload = () => {
-    const fullName = [userData.firstName, userData.surname].filter(Boolean).join(' ').trim();
+    const fullName = [userData.firstName, userData.secondName, userData.surname]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
     const addressParts = [userData.poBox, userData.county, userData.subCounty].filter(Boolean);
     const fullAddress = addressParts.join(', ') || null;
+
+    let membershipType = 'NON_EMPLOYEE';
+    if (userData.occupation === 'Employed') membershipType = 'EMPLOYEE';
+    else if (userData.occupation === 'Self-employed') membershipType = 'SELF_EMPLOYED';
+    else if (userData.occupation === 'Student') membershipType = 'STUDENT';
+    else if (userData.occupation === 'Retired') membershipType = 'RETIRED';
 
     return {
       name: fullName,
@@ -73,17 +68,12 @@ export const PaymentForm = ({
       kraPin: userData.kraPin || null,
       occupation: userData.occupation || null,
       address: fullAddress,
-      poBox: userData.poBox || null,
-      county: userData.county || null,
-      subCounty: userData.subCounty || null,
-      type: userData.occupation === 'Employed' ? 'EMPLOYEE' : 'NON_EMPLOYEE',
+      type: membershipType,
       consentGiven: userData.termsAccepted,
-      idDocumentName: userData.idFile?.name ?? null,
-      passportPhotoName: userData.photoFile?.name ?? null,
     };
   };
 
-  // Create application in backend (common step)
+  // Create application via POST /api/applications
   const createApplication = async () => {
     const payload = buildApplicationPayload();
     const createRes = await apiRequest('/api/applications', {
@@ -97,11 +87,11 @@ export const PaymentForm = ({
     return application.id;
   };
 
-  // Poll STK payment status from your backend (you must implement /api/stk-status)
+  // Poll payment status (STK only)
   const pollPaymentStatus = (appId, checkoutId) => {
     return new Promise((resolve, reject) => {
       let attempts = 0;
-      const maxAttempts = 30; // 30 * 2s = 60s
+      const maxAttempts = 30;
       const interval = setInterval(async () => {
         attempts++;
         try {
@@ -124,7 +114,6 @@ export const PaymentForm = ({
             reject(new Error('Payment timeout. Please check M-PESA and retry.'));
           }
         } catch (err) {
-          // ignore errors, continue polling
           console.warn('Polling error', err);
         }
       }, 2000);
@@ -140,13 +129,11 @@ export const PaymentForm = ({
     setProgress(0);
     setLoading(true);
 
-    // Simulate progress bar
     const progressInterval = setInterval(() => {
-      setProgress(prev => Math.min(prev + 3, 90));
+      setProgress((prev) => Math.min(prev + 3, 90));
     }, 200);
 
     try {
-      // 1. Initiate STK push via worker
       const workerResponse = await fetch('https://kcb-mpesa.simrion.workers.dev/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -155,26 +142,19 @@ export const PaymentForm = ({
           amount: REGISTRATION_FEE.toString(),
         }),
       });
-
       const workerData = await workerResponse.json();
       if (!workerResponse.ok || !workerData.success) {
         throw new Error(workerData.error || 'STK push initiation failed');
       }
-
       const checkoutId = workerData.checkoutRequestId;
       setCheckoutRequestId(checkoutId);
 
-      // 2. Create application in your backend
       const applicationId = await createApplication();
-
-      // 3. Poll for payment completion
       const receipt = await pollPaymentStatus(applicationId, checkoutId);
       clearInterval(progressInterval);
       setProgress(100);
       setWaitingStatus('success');
 
-      // 4. Notify backend that payment is verified (optional – your backend already knows via callback)
-      // We call the existing verify-payment to link the application.
       const verifyRes = await apiRequest(`/api/applications/${applicationId}/verify-payment`, {
         method: 'POST',
         body: {
@@ -187,7 +167,6 @@ export const PaymentForm = ({
       });
       if (!verifyRes.ok) throw new Error('Payment verification failed');
 
-      // 5. Success – close waiting dialog after 1.5s
       setTimeout(() => {
         setShowWaitingDialog(false);
         setLoading(false);
@@ -198,7 +177,6 @@ export const PaymentForm = ({
       setWaitingStatus('failed');
       setError(err.message);
       setLoading(false);
-      // Keep waiting dialog open to show error, close after 3s
       setTimeout(() => setShowWaitingDialog(false), 3000);
     } finally {
       if (pollingInterval.current) clearInterval(pollingInterval.current);
@@ -206,14 +184,14 @@ export const PaymentForm = ({
     }
   };
 
-  // Manual receipt flow (unchanged, calls your existing verify-payment)
-  const handleManualPayment = async () => {
+  // Paybill (manual receipt) flow
+  const handlePaybillPayment = async () => {
     setError('');
     setLoading(true);
     setProgress(30);
 
     const interval = setInterval(() => {
-      setProgress(prev => Math.min(prev + 10, 90));
+      setProgress((prev) => Math.min(prev + 10, 90));
     }, 300);
 
     try {
@@ -245,8 +223,8 @@ export const PaymentForm = ({
       setError('Please enter your M-PESA phone number');
       return;
     }
-    if (paymentMethod === 'manual' && !mpesaReceipt.trim()) {
-      setError('Please enter the receipt number');
+    if (paymentMethod === 'paybill' && !mpesaReceipt.trim()) {
+      setError('Please enter the M-PESA receipt number');
       return;
     }
     setShowConfirmDialog(true);
@@ -257,7 +235,7 @@ export const PaymentForm = ({
     if (paymentMethod === 'stk') {
       handleStkPayment();
     } else {
-      handleManualPayment();
+      handlePaybillPayment();
     }
   };
 
@@ -270,7 +248,7 @@ export const PaymentForm = ({
   return (
     <div className="space-y-6">
       {/* Payment Details Card */}
-      <div className="bg-gradient-to-r from-[#8cc63f]/10 to-transparent border border-[#8cc63f]/20 rounded-xl p-4 space-y-3">
+      <div hidden className="bg-gradient-to-r from-[#8cc63f]/10 to-transparent border border-[#8cc63f]/20 rounded-xl p-4 space-y-3">
         <div className="flex justify-between items-center">
           <span className="text-sm font-semibold text-gray-600">Registration Fee</span>
           <span className="text-2xl font-bold text-[#8cc63f]">KES {REGISTRATION_FEE}</span>
@@ -281,7 +259,10 @@ export const PaymentForm = ({
             <span className="text-sm text-gray-600">Paybill Number:</span>
             <div className="flex items-center gap-2">
               <span className="font-mono font-bold text-gray-800">522533</span>
-              <button onClick={() => copyToClipboard('522533')} className="text-gray-400 hover:text-[#8cc63f] transition">
+              <button
+                onClick={() => copyToClipboard('522533')}
+                className="text-gray-400 hover:text-[#8cc63f] transition"
+              >
                 {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
               </button>
             </div>
@@ -290,44 +271,69 @@ export const PaymentForm = ({
             <span className="text-sm text-gray-600">Account Number:</span>
             <div className="flex items-center gap-2">
               <span className="font-mono font-bold text-gray-800">7929884</span>
-              <button onClick={() => copyToClipboard('7929884')} className="text-gray-400 hover:text-[#8cc63f] transition">
+              <button
+                onClick={() => copyToClipboard('7929884')}
+                className="text-gray-400 hover:text-[#8cc63f] transition"
+              >
                 {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
               </button>
             </div>
           </div>
         </div>
-        <p className="text-xs text-gray-500 mt-2">Use this Paybill and Account number when sending money via M-PESA.</p>
+        <p className="text-xs text-gray-500 mt-2">
+          Use this Paybill and Account number when sending money via M-PESA.
+        </p>
       </div>
 
-      {/* Payment Method Selection */}
+      {/* Payment Method Selection - Radio Buttons */}
       <div className="space-y-3">
-        <Label className="text-gray-700">Payment Method</Label>
-        <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-          <SelectTrigger className="w-full bg-[#f8fafc] border-gray-200 rounded-xl p-3">
-            <SelectValue placeholder="Select payment method" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="stk">
-              <div className="flex items-center gap-2">
-                <Phone className="w-4 h-4 text-[#8cc63f]" />
-                <span>Pay via STK Push (M-PESA)</span>
-              </div>
-            </SelectItem>
-            <SelectItem value="manual">
-              <div className="flex items-center gap-2">
-                <Receipt className="w-4 h-4 text-[#8cc63f]" />
-                <span>I already paid – Enter Receipt Number</span>
-              </div>
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+  <Label className="text-gray-700">Select Payment Method</Label>
+  <RadioGroup
+    value={paymentMethod}
+    onValueChange={setPaymentMethod}
+    className="flex flex-row gap-4"
+  >
+    {/* STK Push Card */}
+    <div
+      className={`flex-1 flex items-center gap-3 p-4 border rounded-xl transition cursor-pointer ${
+        paymentMethod === 'stk'
+          ? 'border-[#8cc63f] bg-[#8cc63f]/5'
+          : 'border-gray-200 hover:bg-gray-50'
+      }`}
+      onClick={() => setPaymentMethod('stk')}
+    >
+      <RadioGroupItem value="stk" id="stk" />
+      <Label htmlFor="stk" className="flex items-center gap-2 cursor-pointer flex-1">
+        <Phone className="w-5 h-5 text-[#8cc63f]" />
+        <span className="font-medium">Pay via STK Push (M-PESA prompt)</span>
+      </Label>
+    </div>
+
+    {/* Paybill Card */}
+    <div
+      className={`flex-1 flex items-center gap-3 p-4 border rounded-xl transition cursor-pointer ${
+        paymentMethod === 'paybill'
+          ? 'border-[#8cc63f] bg-[#8cc63f]/5'
+          : 'border-gray-200 hover:bg-gray-50'
+      }`}
+      onClick={() => setPaymentMethod('paybill')}
+    >
+      <RadioGroupItem value="paybill" id="paybill" />
+      <Label htmlFor="paybill" className="flex items-center gap-2 cursor-pointer flex-1">
+        <Receipt className="w-5 h-5 text-[#8cc63f]" />
+        <span className="font-medium">Use Paybill (I already paid)</span>
+      </Label>
+    </div>
+  </RadioGroup>
+</div>
 
       {/* STK Push Section */}
       {paymentMethod === 'stk' && (
         <div className="space-y-4 bg-gray-50 rounded-xl p-4 border border-gray-100">
           <div className="space-y-2">
-            <Label htmlFor="stkPhone" className="text-gray-700">M-PESA Phone Number</Label>
+            <Label htmlFor="stkPhone" className="text-gray-700">
+              M-PESA Phone Number
+            </Label>
             <Input
               id="stkPhone"
               value={stkPhone}
@@ -336,23 +342,42 @@ export const PaymentForm = ({
               disabled={isLoading}
               className="bg-white border-gray-200 rounded-xl p-3"
             />
-            <p className="text-xs text-gray-500">Ensure this number is registered with M-PESA. You will receive a prompt to enter your PIN.</p>
+            <p className="text-xs text-gray-500">
+              Ensure this number is the one you will receive a prompt to enter your PIN.
+            </p>
           </div>
           <div className="space-y-2">
             <Label className="text-gray-700">Amount (KES)</Label>
             <div className="bg-gray-100 border border-gray-200 rounded-xl p-3 text-gray-800 font-medium">
               {REGISTRATION_FEE} KES
             </div>
-            <p className="text-xs text-gray-500">Fixed registration fee – non-editable</p>
+        
           </div>
         </div>
       )}
 
-      {/* Manual Payment Section */}
-      {paymentMethod === 'manual' && (
-        <div className="space-y-4 bg-gray-50 rounded-xl p-4 border border-gray-100">
-          <div className="space-y-2">
-            <Label htmlFor="receipt" className="text-gray-700">M-PESA Receipt Number</Label>
+      {/* Paybill (Manual) Section with Instructions */}
+      {paymentMethod === 'paybill' && (
+        <div className="space-y-4 bg-gradient-to-r from-[#8cc63f]/10 to-transparent border border-[#8cc63f]/20 rounded-xl p-4    ">
+          <div className="flex items-start gap-2">
+            <Info className="w-5 h-5 text-[#8cc63f] mt-0.5 flex-shrink-0" />
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-[#8cc63f]">How to pay via M-PESA Paybill:</p>
+              <ol className="text-sm text-gray-700 list-decimal list-inside space-y-1 ml-2">
+                <li>Go to your M-PESA menu &rarr; Lipa na M-PESA &rarr; Paybill</li>
+                <li>Enter <strong className="font-mono">522533</strong> as the Business Number</li>
+                <li>Enter <strong className="font-mono">7929884</strong> as the Account Number</li>
+                <li>Enter Amount: <strong>KES {REGISTRATION_FEE}</strong></li>
+                <li>Enter your M-PESA PIN and confirm</li>
+                <li>You will receive a confirmation SMS with a receipt number (10 characters)</li>
+              </ol>
+            </div>
+          </div>
+
+          <div className="space-y-2 mt-2">
+            <Label htmlFor="receipt" className="text-gray-700">
+              M-PESA Receipt Number
+            </Label>
             <Input
               id="receipt"
               value={mpesaReceipt}
@@ -361,7 +386,9 @@ export const PaymentForm = ({
               disabled={isLoading}
               className="bg-white border-gray-200 rounded-xl p-3"
             />
-            <p className="text-xs text-gray-500">Enter the 10‑character receipt number from your M-PESA confirmation message.</p>
+            <p className="text-xs text-gray-500">
+              Enter the 10‑character receipt number from your M-PESA confirmation message.
+            </p>
           </div>
         </div>
       )}
@@ -372,10 +399,10 @@ export const PaymentForm = ({
         </div>
       )}
 
-      {isLoading && paymentMethod === 'manual' && (
+      {isLoading && paymentMethod === 'paybill' && (
         <div className="space-y-2">
           <Progress value={progress} className="w-full h-2" />
-          <p className="text-sm text-gray-500 text-center">Processing payment and registration...</p>
+          <p className="text-sm text-gray-500 text-center">Verifying payment and submitting application...</p>
         </div>
       )}
 
@@ -415,24 +442,37 @@ export const PaymentForm = ({
             <DialogTitle className="text-md">Confirm Payment</DialogTitle>
             <DialogDescription className="text-gray-600">
               {paymentMethod === 'stk' ? (
-                <>You will pay <strong>KES {REGISTRATION_FEE}</strong> via STK push to <strong>{stkPhone}</strong>.</>
+                <>
+                  You will pay <strong>KES {REGISTRATION_FEE}</strong> via STK push to{' '}
+                  <strong>{stkPhone}</strong>.
+                </>
               ) : (
-                <>You have confirmed payment with receipt number <strong>{mpesaReceipt}</strong>.</>
+                <>
+                  You have confirmed payment with receipt number <strong>{mpesaReceipt}</strong>.
+                </>
               )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex gap-3 mt-4">
-            <Button variant="outline" onClick={() => setShowConfirmDialog(false)} className="flex-1 rounded-xl">
+            <Button
+              variant="outline"
+              onClick={() => setShowConfirmDialog(false)}
+              className="flex-1 rounded-xl"
+            >
               Cancel
             </Button>
-            <Button onClick={handleProceed} disabled={isLoading} className="flex-1 bg-[#8cc63f] hover:bg-[#7ab52e] rounded-xl">
+            <Button
+              onClick={handleProceed}
+              disabled={isLoading}
+              className="flex-1 bg-[#8cc63f] hover:bg-[#7ab52e] rounded-xl"
+            >
               {isLoading ? 'Processing...' : 'Proceed'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Waiting Dialog with Animation */}
+      {/* Waiting Dialog for STK Push */}
       <Dialog open={showWaitingDialog} onOpenChange={() => {}}>
         <DialogContent className="rounded-2xl max-w-sm text-center" hideCloseButton>
           <div className="py-6 flex flex-col items-center gap-4">
@@ -456,7 +496,9 @@ export const PaymentForm = ({
                 <XCircle className="w-16 h-16 text-red-500" />
                 <h3 className="text-lg font-semibold text-red-700">Payment Failed</h3>
                 <p className="text-gray-500 text-sm">{error || 'Please try again or use manual receipt.'}</p>
-                <Button onClick={() => setShowWaitingDialog(false)} className="mt-2 bg-[#8cc63f]">Close</Button>
+                <Button onClick={() => setShowWaitingDialog(false)} className="mt-2 bg-[#8cc63f]">
+                  Close
+                </Button>
               </>
             )}
           </div>
