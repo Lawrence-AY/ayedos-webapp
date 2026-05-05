@@ -14,7 +14,9 @@ import {
 } from "../services/api.js";
 import { getSystemStats, getAllUsers } from "../features/admin/adminService.js";
 
+// ======================
 // Overview Card Component
+// ======================
 function OverviewCard({ title, value, accent = false }) {
   return (
     <div
@@ -53,9 +55,10 @@ function OverviewCard({ title, value, accent = false }) {
   );
 }
 
+// ======================
 // Admin Overview
+// ======================
 function AdminOverview({ stats, applications }) {
-  // Filter pending applications
   const pendingApps = (applications || [])
     .filter((app) => app.status === "PENDING")
     .slice(0, 5);
@@ -86,7 +89,6 @@ function AdminOverview({ stats, applications }) {
         />
       </div>
 
-      {/* Pending Applications Preview */}
       {pendingApps.length > 0 && (
         <div className="feature-card" style={{ marginBottom: 24 }}>
           <h3 style={{ marginBottom: 16 }}>Pending Applications</h3>
@@ -105,34 +107,13 @@ function AdminOverview({ stats, applications }) {
                     background: "var(--code-bg)",
                   }}
                 >
-                  <th
-                    style={{
-                      padding: "10px 0",
-                      textAlign: "left",
-                      fontWeight: 600,
-                      color: "var(--color-muted)",
-                    }}
-                  >
+                  <th style={{ padding: "10px 0", textAlign: "left", fontWeight: 600 }}>
                     Name
                   </th>
-                  <th
-                    style={{
-                      padding: "10px 0",
-                      textAlign: "left",
-                      fontWeight: 600,
-                      color: "var(--color-muted)",
-                    }}
-                  >
+                  <th style={{ padding: "10px 0", textAlign: "left", fontWeight: 600 }}>
                     Email
                   </th>
-                  <th
-                    style={{
-                      padding: "10px 0",
-                      textAlign: "left",
-                      fontWeight: 600,
-                      color: "var(--color-muted)",
-                    }}
-                  >
+                  <th style={{ padding: "10px 0", textAlign: "left", fontWeight: 600 }}>
                     Submitted
                   </th>
                 </tr>
@@ -143,22 +124,10 @@ function AdminOverview({ stats, applications }) {
                     key={app.id}
                     style={{ borderBottom: "1px solid rgba(10, 42, 67, 0.06)" }}
                   >
-                    <td
-                      style={{ padding: "10px 0", color: "var(--color-text)" }}
-                    >
-                      {app.applicantName || "N/A"}
-                    </td>
-                    <td
-                      style={{ padding: "10px 0", color: "var(--color-text)" }}
-                    >
-                      {app.applicantEmail || "N/A"}
-                    </td>
-                    <td
-                      style={{ padding: "10px 0", color: "var(--color-text)" }}
-                    >
-                      {app.submittedAt
-                        ? new Date(app.submittedAt).toLocaleDateString()
-                        : "N/A"}
+                    <td style={{ padding: "10px 0" }}>{app.applicantName || "N/A"}</td>
+                    <td style={{ padding: "10px 0" }}>{app.applicantEmail || "N/A"}</td>
+                    <td style={{ padding: "10px 0" }}>
+                      {app.submittedAt ? new Date(app.submittedAt).toLocaleDateString() : "N/A"}
                     </td>
                   </tr>
                 ))}
@@ -191,7 +160,9 @@ function AdminOverview({ stats, applications }) {
   );
 }
 
+// ======================
 // Finance Overview
+// ======================
 function FinanceOverview({ stats }) {
   return (
     <div>
@@ -226,7 +197,9 @@ function FinanceOverview({ stats }) {
   );
 }
 
+// ======================
 // Member Overview
+// ======================
 function MemberOverview({ stats }) {
   return (
     <div>
@@ -252,7 +225,9 @@ function MemberOverview({ stats }) {
   );
 }
 
+// ======================
 // Generic Data Table
+// ======================
 function DataTable({ columns, data, emptyMessage }) {
   if (!data || data.length === 0) {
     return (
@@ -326,6 +301,9 @@ function DataTable({ columns, data, emptyMessage }) {
   );
 }
 
+// ======================
+// Main Dashboard Component
+// ======================
 export default function Dashboard() {
   const location = useLocation();
   const { user, accessToken } = useContext(AuthContext);
@@ -342,6 +320,7 @@ export default function Dashboard() {
     dividends: [],
     applications: [],
     deductions: [],
+    users: [],
   });
 
   const getMemberStats = () => {
@@ -365,11 +344,11 @@ export default function Dashboard() {
     }, 0);
 
     const activeLoans = data.loans.filter((loan) =>
-      ["ACTIVE", "APPROVED"].includes(loan.status),
+      ["ACTIVE", "APPROVED"].includes(loan.status)
     ).length;
     const shares = data.shares.reduce(
       (sum, share) => sum + Number(share?.shares || 0),
-      0,
+      0
     );
 
     return {
@@ -382,6 +361,7 @@ export default function Dashboard() {
     };
   };
 
+  // Data fetching
   useEffect(() => {
     let cancelled = false;
 
@@ -391,83 +371,53 @@ export default function Dashboard() {
       setLoading(true);
       setError(null);
 
-      try {
-        const requests = [
-          getTransactions(accessToken),
-          getLoans(accessToken),
-          getShares(accessToken),
-          getDividends(accessToken),
-        ];
+      // Build dynamic promise list with labels
+      const promises = [
+        getTransactions(accessToken),
+        getLoans(accessToken),
+        getShares(accessToken),
+        getDividends(accessToken),
+      ];
+      const labels = ["transactions", "loans", "shares", "dividends"];
 
-        if (role === "ADMIN" || role === "FINANCE") {
-          requests.push(
-            getApplications(accessToken),
-            getDeductions(accessToken),
-            getSystemStats(accessToken),
-          );
-        }
-
-        if (role === "ADMIN") {
-          requests.push(getAllUsers(accessToken));
-        }
-
-        const opts = { accessToken };
-        const results = await Promise.allSettled([
-          getTransactions(accessToken),
-          getLoans(accessToken),
-          getShares(accessToken),
-          getDividends(accessToken),
-          role === "ADMIN" || role === "FINANCE"
-            ? getApplications(accessToken)
-            : Promise.resolve([]),
-          role === "ADMIN" || role === "FINANCE"
-            ? getDeductions(accessToken)
-            : Promise.resolve([]),
-        ]);
-
-        if (cancelled) return;
-        if (cancelled) return;
-
-        const getData = (r) => (r.status === "fulfilled" ? r.value : []);
-
-        const nextData = {
-          transactions: getData(results[0]),
-          loans: getData(results[1]),
-          shares: getData(results[2]),
-          dividends: getData(results[3]),
-          applications: [],
-          deductions: [],
-          users: [],
-        };
-
-        if (role === "ADMIN" || role === "FINANCE") {
-          nextData.applications = getData(results[4]);
-          nextData.deductions = getData(results[5]);
-          setStats(results[6].status === "fulfilled" ? results[6].value : null);
-        }
-
-        if (role === "ADMIN") {
-          const adminUserIndex =
-            role === "ADMIN" && (role === "ADMIN" || role === "FINANCE")
-              ? 7
-              : 4;
-          nextData.users = getData(results[adminUserIndex]);
-        }
-
-        setData(nextData);
-        setData({
-          transactions: getData(results[0]),
-          loans: getData(results[1]),
-          shares: getData(results[2]),
-          dividends: getData(results[3]),
-          applications: getData(results[4]),
-          deductions: getData(results[5]),
-        });
-      } catch (e) {
-        if (!cancelled) setError(e?.message || "Failed to load data");
-      } finally {
-        if (!cancelled) setLoading(false);
+      if (role === "ADMIN" || role === "FINANCE") {
+        promises.push(getApplications(accessToken));
+        labels.push("applications");
+        promises.push(getDeductions(accessToken));
+        labels.push("deductions");
+        promises.push(getSystemStats(accessToken));
+        labels.push("stats");
       }
+
+      if (role === "ADMIN") {
+        promises.push(getAllUsers(accessToken));
+        labels.push("users");
+      }
+
+      const results = await Promise.allSettled(promises);
+      if (cancelled) return;
+
+      const newData = {
+        transactions: [],
+        loans: [],
+        shares: [],
+        dividends: [],
+        applications: [],
+        deductions: [],
+        users: [],
+      };
+
+      results.forEach((result, idx) => {
+        const label = labels[idx];
+        if (label === "stats") {
+          if (result.status === "fulfilled") setStats(result.value);
+        } else {
+          newData[label] = result.status === "fulfilled" ? result.value : [];
+        }
+      });
+
+      setData(newData);
+      setLoading(false);
     }
 
     load();
@@ -476,29 +426,13 @@ export default function Dashboard() {
     };
   }, [accessToken, role]);
 
-  const path = location.pathname;
-  const dashboardStats =
-    role === "ADMIN" || role === "FINANCE" ? stats || {} : getMemberStats();
-
-  function renderContent() {
+  // Helper: render content based on route
+  const renderContent = () => {
     if (loading) {
       return (
-        <div
-          style={{ padding: 60, textAlign: "center", backgroundColor: "white" }}
-        >
-          <div
-            style={{ display: "inline-flex", alignItems: "center", gap: 12 }}
-          >
-            <div
-              style={{
-                width: 24,
-                height: 24,
-                border: "2px solid rgba(10, 42, 67, 0.1)",
-                borderTopColor: "var(--color-accent)",
-                borderRadius: "50%",
-                animation: "spin 1s linear infinite",
-              }}
-            />
+        <div style={{ padding: 60, textAlign: "center" }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
+            <div className="spinner" />
             <p style={{ color: "var(--color-muted)" }}>Loading dashboard...</p>
           </div>
         </div>
@@ -522,398 +456,334 @@ export default function Dashboard() {
       );
     }
 
-    // Role-based routing
+    const path = location.pathname;
+    const dashboardStats =
+      role === "ADMIN" || role === "FINANCE" ? stats || {} : getMemberStats();
+
+    // Dashboard home
     if (path === "/dashboard" || path === "/dashboard/") {
       if (role === "ADMIN")
-        return (
-          <AdminOverview
-            stats={dashboardStats}
-            applications={data.applications}
-          />
-        );
+        return <AdminOverview stats={dashboardStats} applications={data.applications} />;
       if (role === "FINANCE") return <FinanceOverview stats={dashboardStats} />;
       return <MemberOverview stats={dashboardStats} />;
-      if (path === "/dashboard" || path === "/dashboard/") {
-        if (role === "ADMIN") return <AdminOverview stats={stats} />;
-        if (role === "FINANCE") return <FinanceOverview stats={stats} />;
-        return <MemberOverview stats={stats} />;
-      }
+    }
 
-      if (path.includes("/transactions")) {
-        return (
-          <div>
-            <h2 style={{ marginBottom: 24 }}>Transactions</h2>
-            <div
-              className="feature-card"
-              style={{ padding: 0, overflow: "hidden" }}
-            >
-              <DataTable
-                columns={[
-                  { key: "id", label: "ID" },
-                  { key: "type", label: "Type" },
-                  {
-                    key: "amount",
-                    label: "Amount",
-                    render: (v) => `KSh ${Number(v).toLocaleString()}`,
-                  },
-                  { key: "description", label: "Description" },
-                  {
-                    key: "createdAt",
-                    label: "Date",
-                    render: (v) => new Date(v).toLocaleDateString(),
-                  },
-                ]}
-                data={data.transactions}
-                emptyMessage="No transactions found"
-              />
-            </div>
+    // Transactions
+    if (path.includes("/transactions")) {
+      return (
+        <div>
+          <h2 style={{ marginBottom: 24 }}>Transactions</h2>
+          <div className="feature-card" style={{ padding: 0, overflow: "hidden" }}>
+            <DataTable
+              columns={[
+                { key: "id", label: "ID" },
+                { key: "type", label: "Type" },
+                {
+                  key: "amount",
+                  label: "Amount",
+                  render: (v) => `KSh ${Number(v).toLocaleString()}`,
+                },
+                { key: "description", label: "Description" },
+                {
+                  key: "createdAt",
+                  label: "Date",
+                  render: (v) => new Date(v).toLocaleDateString(),
+                },
+              ]}
+              data={data.transactions}
+              emptyMessage="No transactions found"
+            />
           </div>
-        );
-      }
+        </div>
+      );
+    }
 
-      if (path.includes("/loans")) {
-        return (
-          <div>
-            <h2 style={{ marginBottom: 24 }}>Loans</h2>
-            <div
-              className="feature-card"
-              style={{ padding: 0, overflow: "hidden" }}
-            >
-              <DataTable
-                columns={[
-                  { key: "id", label: "ID" },
-                  { key: "type", label: "Type" },
-                  {
-                    key: "principal",
-                    label: "Principal",
-                    render: (v) => `KSh ${Number(v).toLocaleString()}`,
-                  },
-                  {
-                    key: "balance",
-                    label: "Balance",
-                    render: (v) => `KSh ${Number(v).toLocaleString()}`,
-                  },
-                  { key: "status", label: "Status" },
-                  {
-                    key: "approvedAt",
-                    label: "Approved",
-                    render: (v) => (v ? new Date(v).toLocaleDateString() : "-"),
-                  },
-                ]}
-                data={data.loans}
-                emptyMessage="No loans found"
-              />
-            </div>
+    // Loans
+    if (path.includes("/loans")) {
+      return (
+        <div>
+          <h2 style={{ marginBottom: 24 }}>Loans</h2>
+          <div className="feature-card" style={{ padding: 0, overflow: "hidden" }}>
+            <DataTable
+              columns={[
+                { key: "id", label: "ID" },
+                { key: "type", label: "Type" },
+                {
+                  key: "principal",
+                  label: "Principal",
+                  render: (v) => `KSh ${Number(v).toLocaleString()}`,
+                },
+                {
+                  key: "balance",
+                  label: "Balance",
+                  render: (v) => `KSh ${Number(v).toLocaleString()}`,
+                },
+                { key: "status", label: "Status" },
+                {
+                  key: "approvedAt",
+                  label: "Approved",
+                  render: (v) => (v ? new Date(v).toLocaleDateString() : "-"),
+                },
+              ]}
+              data={data.loans}
+              emptyMessage="No loans found"
+            />
           </div>
-        );
-      }
+        </div>
+      );
+    }
 
-      if (path.includes("/shares")) {
-        return (
-          <div>
-            <h2 style={{ marginBottom: 24 }}>Shares</h2>
-            <div
-              className="feature-card"
-              style={{ padding: 0, overflow: "hidden" }}
-            >
-              <DataTable
-                columns={[
-                  { key: "id", label: "ID" },
-                  {
-                    key: "shares",
-                    label: "Shares",
-                    render: (v) => Number(v).toLocaleString(),
-                  },
-                  {
-                    key: "totalInvested",
-                    label: "Invested",
-                    render: (v) => `KSh ${Number(v).toLocaleString()}`,
-                  },
-                  {
-                    key: "purchaseDate",
-                    label: "Date",
-                    render: (v) => new Date(v).toLocaleDateString(),
-                  },
-                ]}
-                data={data.shares}
-                emptyMessage="No shares found"
-              />
-            </div>
+    // Shares
+    if (path.includes("/shares")) {
+      return (
+        <div>
+          <h2 style={{ marginBottom: 24 }}>Shares</h2>
+          <div className="feature-card" style={{ padding: 0, overflow: "hidden" }}>
+            <DataTable
+              columns={[
+                { key: "id", label: "ID" },
+                {
+                  key: "shares",
+                  label: "Shares",
+                  render: (v) => Number(v).toLocaleString(),
+                },
+                {
+                  key: "totalInvested",
+                  label: "Invested",
+                  render: (v) => `KSh ${Number(v).toLocaleString()}`,
+                },
+                {
+                  key: "purchaseDate",
+                  label: "Date",
+                  render: (v) => new Date(v).toLocaleDateString(),
+                },
+              ]}
+              data={data.shares}
+              emptyMessage="No shares found"
+            />
           </div>
-        );
-      }
+        </div>
+      );
+    }
 
-      if (path.includes("/dividends")) {
-        return (
-          <div>
-            <h2 style={{ marginBottom: 24 }}>Dividends</h2>
-            <div
-              className="feature-card"
-              style={{ padding: 0, overflow: "hidden" }}
-            >
-              <DataTable
-                columns={[
-                  { key: "id", label: "ID" },
-                  {
-                    key: "amount",
-                    label: "Amount",
-                    render: (v) => `KSh ${Number(v).toLocaleString()}`,
-                  },
-                  {
-                    key: "sharePercentage",
-                    label: "%",
-                    render: (v) => `${v}%`,
-                  },
-                  {
-                    key: "declaredAt",
-                    label: "Declared",
-                    render: (v) => new Date(v).toLocaleDateString(),
-                  },
-                  { key: "status", label: "Status" },
-                ]}
-                data={data.dividends}
-                emptyMessage="No dividends found"
-              />
-            </div>
+    // Dividends
+    if (path.includes("/dividends")) {
+      return (
+        <div>
+          <h2 style={{ marginBottom: 24 }}>Dividends</h2>
+          <div className="feature-card" style={{ padding: 0, overflow: "hidden" }}>
+            <DataTable
+              columns={[
+                { key: "id", label: "ID" },
+                {
+                  key: "amount",
+                  label: "Amount",
+                  render: (v) => `KSh ${Number(v).toLocaleString()}`,
+                },
+                {
+                  key: "sharePercentage",
+                  label: "%",
+                  render: (v) => `${v}%`,
+                },
+                {
+                  key: "declaredAt",
+                  label: "Declared",
+                  render: (v) => new Date(v).toLocaleDateString(),
+                },
+                { key: "status", label: "Status" },
+              ]}
+              data={data.dividends}
+              emptyMessage="No dividends found"
+            />
           </div>
-        );
-      }
+        </div>
+      );
+    }
 
-      if (
-        path.includes("/applications") &&
-        (role === "ADMIN" || role === "FINANCE")
-      ) {
-        return (
-          <div>
-            <h2 style={{ marginBottom: 24 }}>Membership Applications</h2>
-            <div
-              className="feature-card"
-              style={{ padding: 0, overflow: "hidden" }}
-            >
-              <DataTable
-                columns={[
-                  { key: "id", label: "ID" },
-                  { key: "applicantName", label: "Applicant" },
-                  { key: "applicantEmail", label: "Email" },
-                  { key: "status", label: "Status" },
-                  {
-                    key: "submittedAt",
-                    label: "Submitted",
-                    render: (v) => new Date(v).toLocaleDateString(),
-                  },
-                ]}
-                data={data.applications}
-                emptyMessage="No applications found"
-              />
-            </div>
+    // Applications (admin/finance)
+    if (path.includes("/applications") && (role === "ADMIN" || role === "FINANCE")) {
+      return (
+        <div>
+          <h2 style={{ marginBottom: 24 }}>Membership Applications</h2>
+          <div className="feature-card" style={{ padding: 0, overflow: "hidden" }}>
+            <DataTable
+              columns={[
+                { key: "id", label: "ID" },
+                { key: "applicantName", label: "Applicant" },
+                { key: "applicantEmail", label: "Email" },
+                { key: "status", label: "Status" },
+                {
+                  key: "submittedAt",
+                  label: "Submitted",
+                  render: (v) => new Date(v).toLocaleDateString(),
+                },
+              ]}
+              data={data.applications}
+              emptyMessage="No applications found"
+            />
           </div>
-        );
-      }
+        </div>
+      );
+    }
 
-      if (
-        path.includes("/deductions") &&
-        (role === "ADMIN" || role === "FINANCE")
-      ) {
-        return (
-          <div>
-            <h2 style={{ marginBottom: 24 }}>Deductions</h2>
-            <div
-              className="feature-card"
-              style={{ padding: 0, overflow: "hidden" }}
-            >
-              <DataTable
-                columns={[
-                  { key: "id", label: "ID" },
-                  { key: "memberName", label: "Member" },
-                  {
-                    key: "amount",
-                    label: "Amount",
-                    render: (v) => `KSh ${Number(v).toLocaleString()}`,
-                  },
-                  { key: "reason", label: "Reason" },
-                  {
-                    key: "date",
-                    label: "Date",
-                    render: (v) => new Date(v).toLocaleDateString(),
-                  },
-                ]}
-                data={data.deductions}
-                emptyMessage="No deductions found"
-              />
-            </div>
+    // Deductions (admin/finance)
+    if (path.includes("/deductions") && (role === "ADMIN" || role === "FINANCE")) {
+      return (
+        <div>
+          <h2 style={{ marginBottom: 24 }}>Deductions</h2>
+          <div className="feature-card" style={{ padding: 0, overflow: "hidden" }}>
+            <DataTable
+              columns={[
+                { key: "id", label: "ID" },
+                { key: "memberName", label: "Member" },
+                {
+                  key: "amount",
+                  label: "Amount",
+                  render: (v) => `KSh ${Number(v).toLocaleString()}`,
+                },
+                { key: "reason", label: "Reason" },
+                {
+                  key: "date",
+                  label: "Date",
+                  render: (v) => new Date(v).toLocaleDateString(),
+                },
+              ]}
+              data={data.deductions}
+              emptyMessage="No deductions found"
+            />
           </div>
-        );
-      }
+        </div>
+      );
+    }
 
-      if (path.includes("/members") && role === "ADMIN") {
-        return (
-          <div>
-            <h2 style={{ marginBottom: 24 }}>Members Management</h2>
-            <div
-              className="feature-card"
-              style={{ padding: 0, overflow: "hidden" }}
-            >
-              <DataTable
-                columns={[
-                  { key: "id", label: "ID" },
-                  { key: "name", label: "Name" },
-                  { key: "email", label: "Email" },
-                  { key: "phone", label: "Phone" },
-                  { key: "role", label: "Role" },
-                  {
-                    key: "active",
-                    label: "Status",
-                    render: (v) => (v ? "Active" : "Inactive"),
-                  },
-                ]}
-                data={data.users}
-                emptyMessage="No members found"
-              />
-            </div>
+    // Members (admin only)
+    if (path.includes("/members") && role === "ADMIN") {
+      return (
+        <div>
+          <h2 style={{ marginBottom: 24 }}>Members Management</h2>
+          <div className="feature-card" style={{ padding: 0, overflow: "hidden" }}>
+            <DataTable
+              columns={[
+                { key: "id", label: "ID" },
+                { key: "name", label: "Name" },
+                { key: "email", label: "Email" },
+                { key: "phone", label: "Phone" },
+                { key: "role", label: "Role" },
+                {
+                  key: "active",
+                  label: "Status",
+                  render: (v) => (v ? "Active" : "Inactive"),
+                },
+              ]}
+              data={data.users}
+              emptyMessage="No members found"
+            />
           </div>
-        );
-      }
+        </div>
+      );
+    }
 
-      if (path.includes("/profile")) {
-        return (
-          <div>
-            <h2 style={{ marginBottom: 24 }}>My Profile</h2>
-            <div className="feature-card" style={{ padding: 24 }}>
-              <div style={{ display: "grid", gap: 16 }}>
-                <div>
-                  <p
-                    style={{
-                      color: "var(--color-primary)",
-                      fontSize: 13,
-                      marginBottom: 4,
-                    }}
-                  >
-                    Name
-                  </p>
-                  <p style={{ fontWeight: 600, fontSize: 16 }}>
-                    {user?.name || "N/A"}
-                  </p>
-                </div>
-                <div>
-                  <p
-                    style={{
-                      color: "var(--color-primary)",
-                      fontSize: 13,
-                      marginBottom: 4,
-                    }}
-                  >
-                    Email
-                  </p>
-                  <p style={{ fontWeight: 600, fontSize: 16 }}>
-                    {user?.email || "N/A"}
-                  </p>
-                </div>
-                <div>
-                  <p
-                    style={{
-                      color: "var(--color-primary)",
-                      fontSize: 13,
-                      marginBottom: 4,
-                    }}
-                  >
-                    Phone
-                  </p>
-                  <p style={{ fontWeight: 600, fontSize: 16 }}>
-                    {user?.phone || "N/A"}
-                  </p>
-                </div>
-                <div>
-                  <p
-                    style={{
-                      color: "var(--color-primary)",
-                      fontSize: 13,
-                      marginBottom: 4,
-                    }}
-                  >
-                    Role
-                  </p>
-                  <p style={{ fontWeight: 600, fontSize: 16 }}>
-                    {user?.role || "MEMBER"}
-                  </p>
-                </div>
+    // Profile
+    if (path.includes("/profile")) {
+      return (
+        <div>
+          <h2 style={{ marginBottom: 24 }}>My Profile</h2>
+          <div className="feature-card" style={{ padding: 24 }}>
+            <div style={{ display: "grid", gap: 16 }}>
+              <div>
+                <p style={{ color: "var(--color-primary)", fontSize: 13, marginBottom: 4 }}>
+                  Name
+                </p>
+                <p style={{ fontWeight: 600, fontSize: 16 }}>{user?.name || "N/A"}</p>
+              </div>
+              <div>
+                <p style={{ color: "var(--color-primary)", fontSize: 13, marginBottom: 4 }}>
+                  Email
+                </p>
+                <p style={{ fontWeight: 600, fontSize: 16 }}>{user?.email || "N/A"}</p>
+              </div>
+              <div>
+                <p style={{ color: "var(--color-primary)", fontSize: 13, marginBottom: 4 }}>
+                  Phone
+                </p>
+                <p style={{ fontWeight: 600, fontSize: 16 }}>{user?.phone || "N/A"}</p>
+              </div>
+              <div>
+                <p style={{ color: "var(--color-primary)", fontSize: 13, marginBottom: 4 }}>
+                  Role
+                </p>
+                <p style={{ fontWeight: 600, fontSize: 16 }}>{user?.role || "MEMBER"}</p>
               </div>
             </div>
           </div>
-        );
-      }
-
-      // Access Denied for restricted sections
-      if (
-        (path.includes("/applications") ||
-          path.includes("/deductions") ||
-          path.includes("/members")) &&
-        role !== "ADMIN" &&
-        role !== "FINANCE"
-      ) {
-        return (
-          <div style={{ paddingTop: 40, textAlign: "center" }}>
-            <h2 style={{ marginBottom: 24, color: "#ef4444" }}>
-              Access Denied
-            </h2>
-            <p
-              style={{
-                color: "var(--color-muted)",
-                marginBottom: 24,
-                fontSize: 16,
-              }}
-            >
-              You don't have permission to access this section. Only
-              administrators and finance officers can view this content.
-            </p>
-            <a
-              href="/dashboard"
-              className="button button-primary"
-              style={{ display: "inline-block", padding: "12px 24px" }}
-            >
-              Back to Dashboard
-            </a>
-          </div>
-        );
-      }
-
-      return <MemberOverview stats={dashboardStats} />;
-      return <MemberOverview stats={stats} />;
+        </div>
+      );
     }
 
-    return (
+    // Access Denied for restricted sections
+    if (
+      (path.includes("/applications") ||
+        path.includes("/deductions") ||
+        path.includes("/members")) &&
+      role !== "ADMIN" &&
+      role !== "FINANCE"
+    ) {
+      return (
+        <div style={{ paddingTop: 40, textAlign: "center" }}>
+          <h2 style={{ marginBottom: 24, color: "#ef4444" }}>Access Denied</h2>
+          <p
+            style={{
+              color: "var(--color-muted)",
+              marginBottom: 24,
+              fontSize: 16,
+            }}
+          >
+            You don't have permission to access this section. Only administrators and
+            finance officers can view this content.
+          </p>
+          <a
+            href="/dashboard"
+            className="button button-primary"
+            style={{ display: "inline-block", padding: "12px 24px" }}
+          >
+            Back to Dashboard
+          </a>
+        </div>
+      );
+    }
+
+    // Fallback (should not occur)
+    return <MemberOverview stats={dashboardStats} />;
+  };
+
+  // Main layout
+  return (
+    <div style={{ display: "flex", minHeight: "100vh", background: "white" }}>
       <div
         style={{
-          display: "flex",
-          minHeight: "100vh",
-          background: "white",
+          visibility: sidebarOpen ? "visible" : "hidden",
+          position: "fixed",
+          inset: "0 auto 0 0",
+          width: 280,
+          zIndex: 20,
         }}
       >
-        <div
-          style={{
-            visibility: sidebarOpen ? "visible" : "hidden",
-            position: "fixed",
-            inset: "0 auto 0 0",
-            width: 280,
-            zIndex: 20,
-          }}
-        >
-          <Sidebar />
-        </div>
-        <main
-          style={{
-            flex: 1,
-            minWidth: 0,
-            marginLeft: sidebarOpen ? 280 : 0,
-            transition: "margin-left 200ms ease",
-          }}
-        >
-          <TopNavbar
-            sidebarOpen={sidebarOpen}
-            onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-          />
-          <div style={{ padding: "36px" }}>{renderContent()}</div>
-        </main>
+        <Sidebar />
       </div>
-    );
-  }
+      <main
+        style={{
+          flex: 1,
+          minWidth: 0,
+          marginLeft: sidebarOpen ? 280 : 0,
+          transition: "margin-left 200ms ease",
+        }}
+      >
+        <TopNavbar
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+        />
+        <div style={{ padding: "36px" }}>{renderContent()}</div>
+      </main>
+    </div>
+  );
 }

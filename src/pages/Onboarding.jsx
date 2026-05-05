@@ -1,6 +1,6 @@
 // Onboarding.jsx
 import { useState, useEffect } from 'react';
-import { useState, useEffect } from 'react';
+
 import { Toaster, toast } from 'sonner';
 import {
   Card,
