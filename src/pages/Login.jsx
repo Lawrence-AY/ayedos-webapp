@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext.jsx";
 import logo from "../assets/logo-light.png";
 import DotSwarmCanvas from "../components/landing/DotTextCanvas.jsx";
+import { Eye, EyeOff } from "lucide-react";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -11,6 +12,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [formError, setFormError] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -37,11 +39,10 @@ export default function Login() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-       
+
         overflowX: "hidden",
       }}
     >
-      
       <div
         style={{
           position: "fixed",
@@ -50,14 +51,10 @@ export default function Login() {
           width: "100vw",
           height: "100vh",
           zIndex: 0,
-          pointerEvents: "none",  
+          pointerEvents: "none",
         }}
       >
-        <DotSwarmCanvas
-          textLine1="AYEDOS"
-          textLine2="SACCO"
-          color="#88cc63"
-        />
+        <DotSwarmCanvas textLine1="AYEDOS" textLine2="SACCO" color="#88cc63" />
       </div>
 
       {/* Content Layer */}
@@ -73,16 +70,22 @@ export default function Login() {
       >
         <div
           style={{
-            background: "rgba(255, 255, 255, 0.95)", 
-            backdropFilter: "blur(4px)",  
+            background: "rgba(255, 255, 255, 0.95)",
+            backdropFilter: "blur(4px)",
             borderRadius: 20,
             padding: "48px 40px",
-            boxShadow: "0 20px 40px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0,0,0,0.02)",
+            boxShadow:
+              "0 20px 40px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0,0,0,0.02)",
             border: "1px solid rgba(226, 232, 240, 0.8)",
           }}
         >
-        
-          <div style={{ display: "flex", justifyContent: "center", marginBottom: 32 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              marginBottom: 32,
+            }}
+          >
             <img
               src={logo}
               alt="Logo"
@@ -109,7 +112,9 @@ export default function Login() {
 
           <form onSubmit={onSubmit}>
             <div style={{ marginBottom: 20 }}>
-              <label htmlFor="email" style={labelStyle}>Email Address</label>
+              <label htmlFor="email" style={labelStyle}>
+                Email Address
+              </label>
               <input
                 id="email"
                 type="email"
@@ -123,17 +128,56 @@ export default function Login() {
             </div>
 
             <div style={{ marginBottom: 28 }}>
-              <label htmlFor="password" style={labelStyle}>Password</label>
-              <input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                style={inputStyle}
-                placeholder="••••••••"
-                required
-              />
+              <label htmlFor="password" style={labelStyle}>
+                Password
+              </label>
+
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 12,
+                  background: "#f8fafc",
+                  paddingRight: 12,
+                }}
+              >
+                <input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  style={{
+                    flex: 1,
+                    padding: "14px 16px",
+                    border: "none",
+                    outline: "none",
+                    background: "transparent",
+                    fontSize: 15,
+                    color: "#1e293b",
+                  }}
+                />
+
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: 6,
+                    color: "black",
+                  }}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
 
             {(formError || authError) && (
@@ -156,7 +200,9 @@ export default function Login() {
 
             <div style={mutedTextStyle}>
               Don't have an account?{" "}
-              <Link to="/register" style={linkStyle}>Create account</Link>
+              <a href="/register" style={linkStyle}>
+                Create account
+              </a>
             </div>
 
             <div style={{ marginTop: 20, textAlign: "center" }}>
@@ -170,7 +216,7 @@ export default function Login() {
     </div>
   );
 }
- 
+
 const labelStyle = {
   display: "block",
   marginBottom: 8,

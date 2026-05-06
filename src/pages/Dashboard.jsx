@@ -107,13 +107,31 @@ function AdminOverview({ stats, applications }) {
                     background: "var(--code-bg)",
                   }}
                 >
-                  <th style={{ padding: "10px 0", textAlign: "left", fontWeight: 600 }}>
+                  <th
+                    style={{
+                      padding: "10px 0",
+                      textAlign: "left",
+                      fontWeight: 600,
+                    }}
+                  >
                     Name
                   </th>
-                  <th style={{ padding: "10px 0", textAlign: "left", fontWeight: 600 }}>
+                  <th
+                    style={{
+                      padding: "10px 0",
+                      textAlign: "left",
+                      fontWeight: 600,
+                    }}
+                  >
                     Email
                   </th>
-                  <th style={{ padding: "10px 0", textAlign: "left", fontWeight: 600 }}>
+                  <th
+                    style={{
+                      padding: "10px 0",
+                      textAlign: "left",
+                      fontWeight: 600,
+                    }}
+                  >
                     Submitted
                   </th>
                 </tr>
@@ -124,10 +142,16 @@ function AdminOverview({ stats, applications }) {
                     key={app.id}
                     style={{ borderBottom: "1px solid rgba(10, 42, 67, 0.06)" }}
                   >
-                    <td style={{ padding: "10px 0" }}>{app.applicantName || "N/A"}</td>
-                    <td style={{ padding: "10px 0" }}>{app.applicantEmail || "N/A"}</td>
                     <td style={{ padding: "10px 0" }}>
-                      {app.submittedAt ? new Date(app.submittedAt).toLocaleDateString() : "N/A"}
+                      {app.applicantName || "N/A"}
+                    </td>
+                    <td style={{ padding: "10px 0" }}>
+                      {app.applicantEmail || "N/A"}
+                    </td>
+                    <td style={{ padding: "10px 0" }}>
+                      {app.submittedAt
+                        ? new Date(app.submittedAt).toLocaleDateString()
+                        : "N/A"}
                     </td>
                   </tr>
                 ))}
@@ -344,11 +368,11 @@ export default function Dashboard() {
     }, 0);
 
     const activeLoans = data.loans.filter((loan) =>
-      ["ACTIVE", "APPROVED"].includes(loan.status)
+      ["ACTIVE", "APPROVED"].includes(loan.status),
     ).length;
     const shares = data.shares.reduce(
       (sum, share) => sum + Number(share?.shares || 0),
-      0
+      0,
     );
 
     return {
@@ -431,7 +455,9 @@ export default function Dashboard() {
     if (loading) {
       return (
         <div style={{ padding: 60, textAlign: "center" }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
+          <div
+            style={{ display: "inline-flex", alignItems: "center", gap: 12 }}
+          >
             <div className="spinner" />
             <p style={{ color: "var(--color-muted)" }}>Loading dashboard...</p>
           </div>
@@ -463,7 +489,12 @@ export default function Dashboard() {
     // Dashboard home
     if (path === "/dashboard" || path === "/dashboard/") {
       if (role === "ADMIN")
-        return <AdminOverview stats={dashboardStats} applications={data.applications} />;
+        return (
+          <AdminOverview
+            stats={dashboardStats}
+            applications={data.applications}
+          />
+        );
       if (role === "FINANCE") return <FinanceOverview stats={dashboardStats} />;
       return <MemberOverview stats={dashboardStats} />;
     }
@@ -473,7 +504,10 @@ export default function Dashboard() {
       return (
         <div>
           <h2 style={{ marginBottom: 24 }}>Transactions</h2>
-          <div className="feature-card" style={{ padding: 0, overflow: "hidden" }}>
+          <div
+            className="feature-card"
+            style={{ padding: 0, overflow: "hidden" }}
+          >
             <DataTable
               columns={[
                 { key: "id", label: "ID" },
@@ -498,12 +532,114 @@ export default function Dashboard() {
       );
     }
 
-    // Loans
+    // Loans (Member view)
+    if (path.includes("/loans") && role === "MEMBER") {
+      const pendingLoans = data.loans.filter((loan) =>
+        ["ACTIVE", "APPROVED"].includes(loan.status),
+      );
+
+      return (
+        <div>
+          <h2 style={{ marginBottom: 24 }}>My Loans</h2>
+
+          {/* Pending Payments */}
+          <div className="feature-card" style={{ marginBottom: 24 }}>
+            <h3 style={{ marginTop: 0, marginBottom: 16 }}>Pending Payments</h3>
+            <DataTable
+              columns={[
+                { key: "id", label: "Loan ID" },
+                {
+                  key: "principal",
+                  label: "Amount",
+                  render: (v) => `KSh ${Number(v).toLocaleString()}`,
+                },
+                {
+                  key: "balance",
+                  label: "Balance",
+                  render: (v) => `KSh ${Number(v).toLocaleString()}`,
+                },
+                { key: "status", label: "Status" },
+                {
+                  key: "approvedAt",
+                  label: "Approved",
+                  render: (v) => (v ? new Date(v).toLocaleDateString() : "-"),
+                },
+              ]}
+              data={pendingLoans}
+              emptyMessage="No pending loan payments"
+            />
+          </div>
+
+          {/* Action Buttons */}
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+            <button
+              onClick={() => {
+                // TODO: Open request loan modal
+                console.log("Request Loan clicked");
+              }}
+              style={{
+                padding: "14px 28px",
+                borderRadius: 14,
+                background: "var(--color-accent)",
+                color: "var(--color-white)",
+                border: "none",
+                fontSize: 15,
+                fontWeight: 500,
+                cursor: "pointer",
+                transition: "all 150ms ease",
+                boxShadow: "var(--shadow-soft)",
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = "var(--color-primary)";
+                e.target.style.boxShadow = "var(--shadow-md)";
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = "var(--color-accent)";
+                e.target.style.boxShadow = "var(--shadow-soft)";
+              }}
+            >
+              Request Loan
+            </button>
+            <button
+              onClick={() => {
+                // TODO: Open repay loan modal
+                console.log("Repay Loan clicked");
+              }}
+              style={{
+                padding: "14px 28px",
+                borderRadius: 14,
+                background: "transparent",
+                color: "var(--color-accent)",
+                border: "2px solid var(--color-accent)",
+                fontSize: 15,
+                fontWeight: 500,
+                cursor: "pointer",
+                transition: "all 150ms ease",
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background =
+                  "rgba(var(--color-accent-rgb), 0.1)";
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = "transparent";
+              }}
+            >
+              Repay Loan
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Loans (admin/finance view)
     if (path.includes("/loans")) {
       return (
         <div>
           <h2 style={{ marginBottom: 24 }}>Loans</h2>
-          <div className="feature-card" style={{ padding: 0, overflow: "hidden" }}>
+          <div
+            className="feature-card"
+            style={{ padding: 0, overflow: "hidden" }}
+          >
             <DataTable
               columns={[
                 { key: "id", label: "ID" },
@@ -538,7 +674,10 @@ export default function Dashboard() {
       return (
         <div>
           <h2 style={{ marginBottom: 24 }}>Shares</h2>
-          <div className="feature-card" style={{ padding: 0, overflow: "hidden" }}>
+          <div
+            className="feature-card"
+            style={{ padding: 0, overflow: "hidden" }}
+          >
             <DataTable
               columns={[
                 { key: "id", label: "ID" },
@@ -571,7 +710,10 @@ export default function Dashboard() {
       return (
         <div>
           <h2 style={{ marginBottom: 24 }}>Dividends</h2>
-          <div className="feature-card" style={{ padding: 0, overflow: "hidden" }}>
+          <div
+            className="feature-card"
+            style={{ padding: 0, overflow: "hidden" }}
+          >
             <DataTable
               columns={[
                 { key: "id", label: "ID" },
@@ -601,11 +743,17 @@ export default function Dashboard() {
     }
 
     // Applications (admin/finance)
-    if (path.includes("/applications") && (role === "ADMIN" || role === "FINANCE")) {
+    if (
+      path.includes("/applications") &&
+      (role === "ADMIN" || role === "FINANCE")
+    ) {
       return (
         <div>
           <h2 style={{ marginBottom: 24 }}>Membership Applications</h2>
-          <div className="feature-card" style={{ padding: 0, overflow: "hidden" }}>
+          <div
+            className="feature-card"
+            style={{ padding: 0, overflow: "hidden" }}
+          >
             <DataTable
               columns={[
                 { key: "id", label: "ID" },
@@ -627,11 +775,17 @@ export default function Dashboard() {
     }
 
     // Deductions (admin/finance)
-    if (path.includes("/deductions") && (role === "ADMIN" || role === "FINANCE")) {
+    if (
+      path.includes("/deductions") &&
+      (role === "ADMIN" || role === "FINANCE")
+    ) {
       return (
         <div>
           <h2 style={{ marginBottom: 24 }}>Deductions</h2>
-          <div className="feature-card" style={{ padding: 0, overflow: "hidden" }}>
+          <div
+            className="feature-card"
+            style={{ padding: 0, overflow: "hidden" }}
+          >
             <DataTable
               columns={[
                 { key: "id", label: "ID" },
@@ -661,7 +815,10 @@ export default function Dashboard() {
       return (
         <div>
           <h2 style={{ marginBottom: 24 }}>Members Management</h2>
-          <div className="feature-card" style={{ padding: 0, overflow: "hidden" }}>
+          <div
+            className="feature-card"
+            style={{ padding: 0, overflow: "hidden" }}
+          >
             <DataTable
               columns={[
                // { key: "id", label: "ID" },
@@ -691,28 +848,60 @@ export default function Dashboard() {
           <div className="feature-card" style={{ padding: 24 }}>
             <div style={{ display: "grid", gap: 16 }}>
               <div>
-                <p style={{ color: "var(--color-primary)", fontSize: 13, marginBottom: 4 }}>
+                <p
+                  style={{
+                    color: "var(--color-primary)",
+                    fontSize: 13,
+                    marginBottom: 4,
+                  }}
+                >
                   Name
                 </p>
-                <p style={{ fontWeight: 600, fontSize: 16 }}>{user?.name || "N/A"}</p>
+                <p style={{ fontWeight: 600, fontSize: 16 }}>
+                  {user?.name || "N/A"}
+                </p>
               </div>
               <div>
-                <p style={{ color: "var(--color-primary)", fontSize: 13, marginBottom: 4 }}>
+                <p
+                  style={{
+                    color: "var(--color-primary)",
+                    fontSize: 13,
+                    marginBottom: 4,
+                  }}
+                >
                   Email
                 </p>
-                <p style={{ fontWeight: 600, fontSize: 16 }}>{user?.email || "N/A"}</p>
+                <p style={{ fontWeight: 600, fontSize: 16 }}>
+                  {user?.email || "N/A"}
+                </p>
               </div>
               <div>
-                <p style={{ color: "var(--color-primary)", fontSize: 13, marginBottom: 4 }}>
+                <p
+                  style={{
+                    color: "var(--color-primary)",
+                    fontSize: 13,
+                    marginBottom: 4,
+                  }}
+                >
                   Phone
                 </p>
-                <p style={{ fontWeight: 600, fontSize: 16 }}>{user?.phone || "N/A"}</p>
+                <p style={{ fontWeight: 600, fontSize: 16 }}>
+                  {user?.phone || "N/A"}
+                </p>
               </div>
               <div>
-                <p style={{ color: "var(--color-primary)", fontSize: 13, marginBottom: 4 }}>
+                <p
+                  style={{
+                    color: "var(--color-primary)",
+                    fontSize: 13,
+                    marginBottom: 4,
+                  }}
+                >
                   Role
                 </p>
-                <p style={{ fontWeight: 600, fontSize: 16 }}>{user?.role || "MEMBER"}</p>
+                <p style={{ fontWeight: 600, fontSize: 16 }}>
+                  {user?.role || "MEMBER"}
+                </p>
               </div>
             </div>
           </div>
@@ -738,8 +927,8 @@ export default function Dashboard() {
               fontSize: 16,
             }}
           >
-            You don't have permission to access this section. Only administrators and
-            finance officers can view this content.
+            You don't have permission to access this section. Only
+            administrators and finance officers can view this content.
           </p>
           <a
             href="/dashboard"
