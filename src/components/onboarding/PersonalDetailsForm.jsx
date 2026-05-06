@@ -68,7 +68,7 @@ const kenyaCounties = {
 export const PersonalDetailsForm = ({
   formData,
   onChange,
-  errors, 
+  errors,
   isLoading,
   onSubmit,
 }) => {
@@ -124,7 +124,7 @@ export const PersonalDetailsForm = ({
             required
           />
         </div>
-         <div className="space-y-2">
+        <div className="space-y-2">
           <Label htmlFor="secondName">
             Second Name
           </Label>
@@ -134,7 +134,6 @@ export const PersonalDetailsForm = ({
             onChange={(e) => onChange('secondName', e.target.value)}
             placeholder="Enter second name"
             disabled={isLoading}
-        
           />
         </div>
         <div className="space-y-2">
@@ -153,11 +152,12 @@ export const PersonalDetailsForm = ({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="space-y-2">
+        <div className="space-y-2"  >
           <Label htmlFor="email">
             Email <span className="text-destructive">*</span>
           </Label>
           <Input
+          
             id="email"
             type="email"
             value={email}
@@ -165,6 +165,7 @@ export const PersonalDetailsForm = ({
             placeholder="you@example.com"
             disabled={isLoading}
             required
+             
           />
         </div>
         <div className="space-y-2">
@@ -232,22 +233,21 @@ export const PersonalDetailsForm = ({
             </SelectContent>
           </Select>
         </div>
-      {/* PO Box Field */}
-      <div className="space-y-2">
-        <Label htmlFor="poBox">
-          Physical Address (PO Box) <span className="text-destructive">*</span>
-        </Label>
-        <Input
-          id="poBox"
-          value={poBox}
-          onChange={(e) => onChange('poBox', e.target.value)}
-          placeholder="e.g., P.O. Box 12345-00100"
-          disabled={isLoading}
-          required
-        />
+        {/* PO Box Field */}
+        <div className="space-y-2">
+          <Label htmlFor="poBox">
+            Physical Address (PO Box) <span className="text-destructive">*</span>
+          </Label>
+          <Input
+            id="poBox"
+            value={poBox}
+            onChange={(e) => onChange('poBox', e.target.value)}
+            placeholder="e.g., P.O. Box 12345-00100"
+            disabled={isLoading}
+            required
+          />
+        </div>
       </div>
-      </div>
-
 
       {/* County and Sub-County */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -273,9 +273,9 @@ export const PersonalDetailsForm = ({
           <Label htmlFor="subCounty">
             Sub-County <span className="text-destructive">*</span>
           </Label>
-          <Select 
-            value={subCounty} 
-            onValueChange={(value) => onChange('subCounty', value)} 
+          <Select
+            value={subCounty}
+            onValueChange={(value) => onChange('subCounty', value)}
             disabled={!county}
             required
           >
@@ -295,37 +295,32 @@ export const PersonalDetailsForm = ({
       </div>
 
       {/* Terms and Submit */}
-    <div className="flex flex-col md:flex-row items-center justify-between gap-4 mt-6">
-
-  <div className="flex items-center gap-2">
-    <Checkbox
-      id="terms"
-      checked={termsAccepted}
-      onCheckedChange={(checked) => onChange('termsAccepted', checked)}
-      disabled={isLoading}
-      required
-    />
-    <Label htmlFor="terms" className="text-sm cursor-pointer">
-      I confirm that the information provided is accurate and agree to the{' '}
-      <span className="text-primary font-medium">Terms & Conditions</span>
-    </Label>
-  </div>
-  
-  </div>
-  <Button  
-    type="submit" 
-    // Matches your reference: p-2, h-13, same bg, rounded, and flex alignment
-    className="p-2 h-13 w-5 bg-[#8cc63f] text-white rounded-md flex items-center justify-center gap-2"
-     
-    disabled={isLoading || !termsAccepted} // Added terms check for better UX
-  >
-    <div className="flex flex-col text-left">
-      <span className="text-xs font-light">Next</span>
-      <span className="font-semibold leading-tight">Payment</span>
-    </div>
-    <GrLinkNext />
-  </Button>
-  
+      <div className="flex flex-col md:flex-row items-center justify-between gap-4 mt-6">
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="terms"
+            checked={termsAccepted}
+            onCheckedChange={(checked) => onChange('termsAccepted', checked)}
+            disabled={isLoading}
+            required
+          />
+          <Label htmlFor="terms" className="text-sm cursor-pointer">
+            I confirm that the information provided is accurate and agree to the{' '}
+            <span className="text-primary font-medium">Terms & Conditions</span>
+          </Label>
+        </div>
+      </div>
+      <Button
+        type="submit"
+        className="p-2 h-13 w-5 bg-[#8cc63f] text-white rounded-md flex items-center justify-center gap-2"
+        disabled={isLoading || !termsAccepted}
+      >
+        <div className="flex flex-col text-left">
+          <span className="text-xs font-light">Next</span>
+          <span className="font-semibold leading-tight">Payment</span>
+        </div>
+        <GrLinkNext />
+      </Button>
     </form>
   );
 };

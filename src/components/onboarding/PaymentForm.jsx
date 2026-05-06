@@ -14,11 +14,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
+import { toast } from 'sonner';
 import { apiRequest, unwrapEnvelopeData } from '../../lib/apiClient';
 import { AuthContext } from '../../context/AuthContext.jsx';
 
 export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, userData }) => {
   const { accessToken } = useContext(AuthContext);
+
   const [paymentMethod, setPaymentMethod] = useState('stk');
   const [stkPhone, setStkPhone] = useState('');
   const [mpesaReceipt, setMpesaReceipt] = useState('');
@@ -28,32 +30,40 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
   const [waitingStatus, setWaitingStatus] = useState('waiting');
   const [progress, setProgress] = useState(0);
   const [copied, setCopied] = useState(false);
-  const [checkoutRequestId, setCheckoutRequestId] = useState(null);
   const pollingInterval = useRef(null);
 
   const REGISTRATION_FEE = 1;
 
+  // Helper: format phone to 254XXXXXXXXX
+  const formatPhoneForBackend = (phone) => {
+    let p = phone.replace(/\D/g, '');
+    if (p.startsWith('0')) p = '254' + p.slice(1);
+    if (!p.startsWith('254')) p = '254' + p;
+    return p;
+  };
+
+  // Pre‑fill phone from userData
   useEffect(() => {
     if (userData.phone && !stkPhone) {
       setStkPhone(userData.phone);
     }
   }, [userData.phone, stkPhone]);
 
+  // Clean up polling on unmount
   useEffect(() => {
     return () => {
       if (pollingInterval.current) clearInterval(pollingInterval.current);
     };
   }, []);
 
-  // Build full name and address for backend
+  // Build application payload for POST /api/applications
   const buildApplicationPayload = () => {
     const fullName = [userData.firstName, userData.secondName, userData.surname]
       .filter(Boolean)
       .join(' ')
       .trim();
-    const addressParts = [userData.poBox, userData.county, userData.subCounty].filter(Boolean);
-    const fullAddress = addressParts.join(', ') || null;
 
+    // Map occupation to membershipType (must match PostgreSQL enum)
     let membershipType = 'NON_EMPLOYEE';
     if (userData.occupation === 'Employed') membershipType = 'EMPLOYEE';
     else if (userData.occupation === 'Self-employed') membershipType = 'SELF_EMPLOYED';
@@ -63,63 +73,83 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
     return {
       name: fullName,
       email: userData.email,
-      phone: userData.phone,
+      phone: formatPhoneForBackend(userData.phone),
       nationalId: userData.nationalId,
       kraPin: userData.kraPin || null,
       occupation: userData.occupation || null,
-      address: fullAddress,
+      address: userData.poBox ? `${userData.poBox}, ${userData.county}, ${userData.subCounty}` : null,
       type: membershipType,
       consentGiven: userData.termsAccepted,
     };
   };
 
-  // Create application via POST /api/applications
   const createApplication = async () => {
-    const payload = buildApplicationPayload();
-    const createRes = await apiRequest('/api/applications', {
+    const res = await apiRequest('/api/applications', {
       method: 'POST',
-      body: payload,
+      body: buildApplicationPayload(),
       accessToken,
     });
-    if (!createRes.ok) throw new Error(createRes.json?.message || 'Application creation failed');
-    const application = unwrapEnvelopeData(createRes.json);
-    if (!application?.id) throw new Error('Application ID is missing');
-    return application.id;
+    if (!res.ok) throw new Error(res.json?.message || 'Application creation failed');
+    const app = unwrapEnvelopeData(res.json);
+    if (!app?.id) throw new Error('Application ID missing');
+    return app.id;
   };
 
-  // Poll payment status (STK only)
-  const pollPaymentStatus = (appId, checkoutId) => {
-    return new Promise((resolve, reject) => {
-      let attempts = 0;
-      const maxAttempts = 30;
-      const interval = setInterval(async () => {
-        attempts++;
-        try {
-          const statusRes = await apiRequest(`/api/stk-status?checkoutRequestId=${checkoutId}`, {
-            method: 'GET',
-            accessToken,
-          });
-          if (statusRes.ok && statusRes.json) {
-            const data = statusRes.json;
-            if (data.status === 'paid') {
-              clearInterval(interval);
-              resolve(data.mpesaReceipt);
-            } else if (data.status === 'failed') {
-              clearInterval(interval);
-              reject(new Error(data.resultDesc || 'Payment failed'));
-            }
-          }
-          if (attempts >= maxAttempts) {
-            clearInterval(interval);
-            reject(new Error('Payment timeout. Please check M-PESA and retry.'));
-          }
-        } catch (err) {
-          console.warn('Polling error', err);
+  // Poll STK status and verify payment when paid
+  const startPolling = (checkoutId, appId, rawPhone) => {
+  if (pollingInterval.current) clearInterval(pollingInterval.current);
+  const formattedPhone = formatPhoneForBackend(rawPhone);
+
+  pollingInterval.current = setInterval(async () => {
+    try {
+      const res = await fetch(`/api/stk-status?checkoutRequestId=${checkoutId}`);
+      const result = await res.json();
+      const { data } = result;
+
+      // Ensure data exists and status is paid
+      if (data && data.status === 'paid') {
+        clearInterval(pollingInterval.current);
+        pollingInterval.current = null;
+
+        // Ensure we actually have a receipt number before calling verify
+        const receipt = data.mpesaReceipt;
+        if (!receipt) {
+           console.log("Waiting for receipt number to populate...");
+           return; 
         }
-      }, 2000);
-      pollingInterval.current = interval;
-    });
-  };
+
+        const payload = {
+          paymentReference: receipt,
+          phone: formattedPhone,
+          checkoutRequestId: checkoutId // Added for the updated backend logic
+        };
+
+        const verifyRes = await apiRequest(`/api/applications/${appId}/verify-payment`, {
+          method: 'POST',
+          body: payload,
+          accessToken,
+        });
+
+        if (verifyRes.ok) {
+          setProgress(100);
+          setWaitingStatus('success');
+          setTimeout(() => {
+            setShowWaitingDialog(false);
+            setLoading(false);
+            onPaymentSuccess();
+          }, 1500);
+        } else {
+          throw new Error('Verification failed on server');
+        }
+      } else if (data && data.status === 'failed') {
+        // ... handle failure
+      }
+    } catch (err) {
+      console.error('Polling check failed:', err);
+      // Don't necessarily clear interval on a single network glitch
+    }
+  }, 3000); // 3 seconds is safer than 2
+};
 
   // STK Push flow
   const handleStkPayment = async () => {
@@ -134,44 +164,20 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
     }, 200);
 
     try {
-      const workerResponse = await fetch('https://kcb-mpesa.simrion.workers.dev/register', {
+      const phone = formatPhoneForBackend(stkPhone);
+      const workerRes = await fetch('https://kcb-mpesa.simrion.workers.dev/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone: stkPhone,
-          amount: REGISTRATION_FEE.toString(),
-        }),
+        body: JSON.stringify({ phone, amount: REGISTRATION_FEE.toString() }),
       });
-      const workerData = await workerResponse.json();
-      if (!workerResponse.ok || !workerData.success) {
+      const workerData = await workerRes.json();
+      if (!workerRes.ok || !workerData.success) {
         throw new Error(workerData.error || 'STK push initiation failed');
       }
       const checkoutId = workerData.checkoutRequestId;
-      setCheckoutRequestId(checkoutId);
 
-      const applicationId = await createApplication();
-      const receipt = await pollPaymentStatus(applicationId, checkoutId);
-      clearInterval(progressInterval);
-      setProgress(100);
-      setWaitingStatus('success');
-
-      const verifyRes = await apiRequest(`/api/applications/${applicationId}/verify-payment`, {
-        method: 'POST',
-        body: {
-          paymentReference: receipt,
-          paymentPhone: stkPhone,
-          paymentMethod: 'stk',
-          amount: REGISTRATION_FEE,
-        },
-        accessToken,
-      });
-      if (!verifyRes.ok) throw new Error('Payment verification failed');
-
-      setTimeout(() => {
-        setShowWaitingDialog(false);
-        setLoading(false);
-        onPaymentSuccess();
-      }, 1500);
+      const appId = await createApplication();
+      startPolling(checkoutId, appId, stkPhone);
     } catch (err) {
       clearInterval(progressInterval);
       setWaitingStatus('failed');
@@ -179,12 +185,11 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
       setLoading(false);
       setTimeout(() => setShowWaitingDialog(false), 3000);
     } finally {
-      if (pollingInterval.current) clearInterval(pollingInterval.current);
       clearInterval(progressInterval);
     }
   };
 
-  // Paybill (manual receipt) flow
+  // Manual Paybill flow (already paid)
   const handlePaybillPayment = async () => {
     setError('');
     setLoading(true);
@@ -195,15 +200,14 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
     }, 300);
 
     try {
-      const applicationId = await createApplication();
-      const verifyRes = await apiRequest(`/api/applications/${applicationId}/verify-payment`, {
+      const appId = await createApplication();
+      const payload = {
+        paymentReference: mpesaReceipt.trim(),
+        phone: formatPhoneForBackend(userData.phone),
+      };
+      const verifyRes = await apiRequest(`/api/applications/${appId}/verify-payment`, {
         method: 'POST',
-        body: {
-          paymentReference: mpesaReceipt.trim(),
-          paymentPhone: userData.phone,
-          paymentMethod: 'manual',
-          amount: REGISTRATION_FEE,
-        },
+        body: payload,
         accessToken,
       });
       if (!verifyRes.ok) throw new Error(verifyRes.json?.message || 'Payment verification failed');
@@ -220,11 +224,11 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
   const openConfirmDialog = () => {
     setError('');
     if (paymentMethod === 'stk' && !stkPhone.trim()) {
-      setError('Please enter your M-PESA phone number');
+      toast.error('Please enter your M-PESA phone number');
       return;
     }
     if (paymentMethod === 'paybill' && !mpesaReceipt.trim()) {
-      setError('Please enter the M-PESA receipt number');
+      toast.error('Please enter the M-PESA receipt number');
       return;
     }
     setShowConfirmDialog(true);
@@ -247,85 +251,50 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
 
   return (
     <div className="space-y-6">
-      {/* Payment Details Card */}
-      <div hidden className="bg-gradient-to-r from-[#8cc63f]/10 to-transparent border border-[#8cc63f]/20 rounded-xl p-4 space-y-3">
-        <div className="flex justify-between items-center">
-          <span className="text-sm font-semibold text-gray-600">Registration Fee</span>
-          <span className="text-2xl font-bold text-[#8cc63f]">KES {REGISTRATION_FEE}</span>
-        </div>
-        <div className="border-t border-gray-200 my-2" />
-        <div className="space-y-2">
-          <div className="flex justify-between items-center">
-            <span className="text-sm text-gray-600">Paybill Number:</span>
-            <div className="flex items-center gap-2">
-              <span className="font-mono font-bold text-gray-800">522533</span>
-              <button
-                onClick={() => copyToClipboard('522533')}
-                className="text-gray-400 hover:text-[#8cc63f] transition"
-              >
-                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-sm text-gray-600">Account Number:</span>
-            <div className="flex items-center gap-2">
-              <span className="font-mono font-bold text-gray-800">7929884</span>
-              <button
-                onClick={() => copyToClipboard('7929884')}
-                className="text-gray-400 hover:text-[#8cc63f] transition"
-              >
-                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-        </div>
-        <p className="text-xs text-gray-500 mt-2">
-          Use this Paybill and Account number when sending money via M-PESA.
-        </p>
-      </div>
+   
+      
+        
+      
 
-      {/* Payment Method Selection - Radio Buttons */}
+      {/* Payment Method Selection */}
       <div className="space-y-3">
-  <Label className="text-gray-700">Select Payment Method</Label>
-  <RadioGroup
-    value={paymentMethod}
-    onValueChange={setPaymentMethod}
-    className="flex flex-row gap-4"
-  >
-    {/* STK Push Card */}
-    <div
-      className={`flex-1 flex items-center gap-3 p-4 border rounded-xl transition cursor-pointer ${
-        paymentMethod === 'stk'
-          ? 'border-[#8cc63f] bg-[#8cc63f]/5'
-          : 'border-gray-200 hover:bg-gray-50'
-      }`}
-      onClick={() => setPaymentMethod('stk')}
-    >
-      <RadioGroupItem value="stk" id="stk" />
-      <Label htmlFor="stk" className="flex items-center gap-2 cursor-pointer flex-1">
-        <Phone className="w-5 h-5 text-[#8cc63f]" />
-        <span className="font-medium">Pay via STK Push (M-PESA prompt)</span>
-      </Label>
-    </div>
+        <Label className="text-gray-700">Select Payment Method</Label>
+        <RadioGroup
+          value={paymentMethod}
+          onValueChange={setPaymentMethod}
+          className="flex flex-row gap-4"
+        >
+          <div
+            className={`flex-1 flex items-center gap-3 p-4 border rounded-xl transition cursor-pointer ${
+              paymentMethod === 'stk'
+                ? 'border-[#8cc63f] bg-[#8cc63f]/5'
+                : 'border-gray-200 hover:bg-gray-50'
+            }`}
+            onClick={() => setPaymentMethod('stk')}
+          >
+            <RadioGroupItem value="stk" id="stk" />
+            <Label htmlFor="stk" className="flex items-center gap-2 cursor-pointer flex-1">
+              <Phone className="w-5 h-5 text-[#8cc63f]" />
+              <span className="font-medium">Pay via STK Push (M-PESA prompt)</span>
+            </Label>
+          </div>
 
-    {/* Paybill Card */}
-    <div
-      className={`flex-1 flex items-center gap-3 p-4 border rounded-xl transition cursor-pointer ${
-        paymentMethod === 'paybill'
-          ? 'border-[#8cc63f] bg-[#8cc63f]/5'
-          : 'border-gray-200 hover:bg-gray-50'
-      }`}
-      onClick={() => setPaymentMethod('paybill')}
-    >
-      <RadioGroupItem value="paybill" id="paybill" />
-      <Label htmlFor="paybill" className="flex items-center gap-2 cursor-pointer flex-1">
-        <Receipt className="w-5 h-5 text-[#8cc63f]" />
-        <span className="font-medium">Use Paybill (I already paid)</span>
-      </Label>
-    </div>
-  </RadioGroup>
-</div>
+          <div
+            className={`flex-1 flex items-center gap-3 p-4 border rounded-xl transition cursor-pointer ${
+              paymentMethod === 'paybill'
+                ? 'border-[#8cc63f] bg-[#8cc63f]/5'
+                : 'border-gray-200 hover:bg-gray-50'
+            }`}
+            onClick={() => setPaymentMethod('paybill')}
+          >
+            <RadioGroupItem value="paybill" id="paybill" />
+            <Label htmlFor="paybill" className="flex items-center gap-2 cursor-pointer flex-1">
+              <Receipt className="w-5 h-5 text-[#8cc63f]" />
+              <span className="font-medium">Use Paybill (I already paid)</span>
+            </Label>
+          </div>
+        </RadioGroup>
+      </div>
 
       {/* STK Push Section */}
       {paymentMethod === 'stk' && (
@@ -351,20 +320,19 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
             <div className="bg-gray-100 border border-gray-200 rounded-xl p-3 text-gray-800 font-medium">
               {REGISTRATION_FEE} KES
             </div>
-        
           </div>
         </div>
       )}
 
-      {/* Paybill (Manual) Section with Instructions */}
+      {/* Paybill (Manual) Section */}
       {paymentMethod === 'paybill' && (
-        <div className="space-y-4 bg-gradient-to-r from-[#8cc63f]/10 to-transparent border border-[#8cc63f]/20 rounded-xl p-4    ">
+        <div className="space-y-4 bg-gradient-to-r from-[#8cc63f]/10 to-transparent border border-[#8cc63f]/20 rounded-xl p-4">
           <div className="flex items-start gap-2">
             <Info className="w-5 h-5 text-[#8cc63f] mt-0.5 flex-shrink-0" />
             <div className="space-y-2">
               <p className="text-sm font-semibold text-[#8cc63f]">How to pay via M-PESA Paybill:</p>
               <ol className="text-sm text-gray-700 list-decimal list-inside space-y-1 ml-2">
-                <li>Go to your M-PESA menu &rarr; Lipa na M-PESA &rarr; Paybill</li>
+                <li>Go to your M-PESA menu → Lipa na M-PESA → Paybill</li>
                 <li>Enter <strong className="font-mono">522533</strong> as the Business Number</li>
                 <li>Enter <strong className="font-mono">7929884</strong> as the Account Number</li>
                 <li>Enter Amount: <strong>KES {REGISTRATION_FEE}</strong></li>
