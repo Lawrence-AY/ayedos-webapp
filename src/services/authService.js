@@ -135,7 +135,10 @@ export async function forgotPassword(email) {
     throw new Error(error)
   }
 
-  return unwrapEnvelopeData(res.json)
+  return {
+    message: res.json?.message || 'If an account with that email exists, a reset link will be sent shortly.',
+    data: unwrapEnvelopeData(res.json),
+  }
 }
 
 /**
@@ -152,5 +155,8 @@ export async function resetPassword({ token, newPassword }) {
     throw new Error(error)
   }
 
-  return unwrapEnvelopeData(res.json)
+  return {
+    message: res.json?.message || 'Password reset successful',
+    data: unwrapEnvelopeData(res.json),
+  }
 }

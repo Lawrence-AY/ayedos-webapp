@@ -1,5 +1,5 @@
 import { useContext, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext.jsx";
 import logo from "../assets/logo-light.png";
 import DotSwarmCanvas from "../components/landing/DotTextCanvas.jsx";
@@ -156,13 +156,13 @@ export default function Login() {
 
             <div style={mutedTextStyle}>
               Don't have an account?{" "}
-              <a href="/register" style={linkStyle}>Create account</a>
+              <Link to="/register" style={linkStyle}>Create account</Link>
             </div>
 
             <div style={{ marginTop: 20, textAlign: "center" }}>
-              <a href="/forgot-password" style={forgotPasswordStyle}>
+              <Link to="/forgot-password" style={forgotPasswordStyle}>
                 Forgot your password?
-              </a>
+              </Link>
             </div>
           </form>
         </div>
