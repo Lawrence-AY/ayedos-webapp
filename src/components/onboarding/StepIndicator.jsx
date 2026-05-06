@@ -4,9 +4,9 @@ import { CheckCircle2 } from 'lucide-react';
 export const StepIndicator = ({ currentStep }) => {
   const steps = [
     { number: 1, title: 'Personal Details' },
-    
-    { number: 2, title: 'Payment' },
-    { number: 3, title: 'Confirmation' },
+    { number: 2, title: 'Documents' },
+    { number: 3, title: 'Payment' },
+    { number: 4, title: 'Confirmation' },
   ];
 
   return (

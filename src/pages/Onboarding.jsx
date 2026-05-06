@@ -1,6 +1,5 @@
 // Onboarding.jsx
 import { useState, useEffect } from 'react';
-
 import { Toaster, toast } from 'sonner';
 import {
   Card,
@@ -11,15 +10,23 @@ import {
 } from '@/components/ui/card';
 import { StepIndicator } from '../components/onboarding/StepIndicator';
 import { PersonalDetailsForm } from '../components/onboarding/PersonalDetailsForm';
- 
+import { DocumentsForm } from '../components/onboarding/DocumentsForm'; // new import
 import { PaymentForm } from '../components/onboarding/PaymentForm';
 import { ConfirmationStep } from '../components/onboarding/ConfirmationStep';
-import { CiUser } from "react-icons/ci";
- 
-import { CiMail } from "react-icons/ci";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { CiUser } from 'react-icons/ci';
+import { CiMail } from 'react-icons/ci';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import DotSwarmCanvas from '../components/landing/DotTextCanvas';
-import logo from "../assets/logo-light.png";
+import logo from '../assets/logo-light.png';
 
 function Onboarding() {
   const [currentStep, setCurrentStep] = useState(1);
@@ -36,50 +43,106 @@ function Onboarding() {
     poBox: '',
     county: '',
     subCounty: '',
-    idFile: null,
-    photoFile: null,
     termsAccepted: false,
+  });
+  const [documents, setDocuments] = useState({
+    idFile: null,    // ID front image file
+    photoFile: null, // ID back image file
   });
   const [errors, setErrors] = useState({});
   const [showResetDialog, setShowResetDialog] = useState(false);
 
-  // Load registration data from sessionStorage and pre-populate form
+  // Load registration data from localStorage and pre-populate form
   useEffect(() => {
-    const registrationData = sessionStorage.getItem('registrationData');
-    if (registrationData) {
+    const rawData = localStorage.getItem('ayedos_user');
+    console.log('🔍 Raw localStorage data:', rawData);
+
+    if (rawData) {
       try {
-        const data = JSON.parse(registrationData);
+        const data = JSON.parse(rawData);
+        console.log('✅ Parsed user data:', data);
+
+        let firstName = '';
+        let secondName = '';
+        let surname = '';
+
+        if (data.firstName && typeof data.firstName === 'string') {
+          firstName = data.firstName;
+        }
+        if (data.lastName && typeof data.lastName === 'string') {
+          surname = data.lastName;
+        }
+
+        if ((!firstName || !surname) && data.name && typeof data.name === 'string') {
+          const nameParts = data.name.trim().split(/\s+/);
+          if (nameParts.length === 1) {
+            firstName = nameParts[0];
+            surname = '';
+          } else if (nameParts.length === 2) {
+            firstName = nameParts[0];
+            surname = nameParts[1];
+          } else {
+            firstName = nameParts[0];
+            secondName = nameParts.slice(1, -1).join(' ');
+            surname = nameParts[nameParts.length - 1];
+          }
+        }
+
+        if (data.surname && typeof data.surname === 'string' && !surname) {
+          surname = data.surname;
+        }
+
         setFormData((prev) => ({
           ...prev,
-          firstName: data.firstName || '',
-          surname: data.surname || '',
-          email: data.email || '',
-          phone: data.phone || '',
+          firstName: firstName || prev.firstName,
+          secondName: secondName || prev.secondName,
+          surname: surname || prev.surname,
+          email: data.email || prev.email,
+          phone: data.phone || prev.phone,
         }));
-        toast.info('Your registration details have been pre-filled');
+
+        toast.success('Your saved details have been pre-filled');
       } catch (err) {
-        console.error('Failed to load registration data:', err);
+        console.error('❌ Failed to parse localStorage data:', err);
+        toast.error('Could not load saved details');
       }
+    } else {
+      console.log('ℹ️ No saved data found in localStorage');
     }
   }, []);
 
   const updateFormData = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
-    if (errors.step1 || errors.step2) setErrors({});
+    if (errors.step1) setErrors({});
   };
 
+  const updateDocuments = (field, file) => {
+    setDocuments((prev) => ({ ...prev, [field]: file }));
+    if (errors.step2) setErrors({});
+  };
+
+  // Step 1 validation
   const validateStep1 = () => {
-    const errMsg = !formData.firstName ? 'First name is required'
-      : !formData.secondName ? 'Second name is required'
-      : !formData.surname ? 'Surname is required'
-      : !formData.email ? 'Email is required'
-      : !formData.email.includes('@') ? 'Valid email is required'
-      : !formData.nationalId ? 'National ID is required'
-      : !formData.phone ? 'Phone number is required'
-      : !formData.poBox ? 'Physical address (PO Box) is required'
-      : !formData.county ? 'County is required'
-      : !formData.subCounty ? 'Sub-county is required'
-      : !formData.termsAccepted ? 'You must accept the terms and conditions'
+    const errMsg = !formData.firstName
+      ? 'First name is required'
+      : !formData.surname
+      ? 'Surname is required'
+      : !formData.email
+      ? 'Email is required'
+      : !formData.email.includes('@')
+      ? 'Valid email is required'
+      : !formData.nationalId
+      ? 'National ID is required'
+      : !formData.phone
+      ? 'Phone number is required'
+      : !formData.poBox
+      ? 'Physical address (PO Box) is required'
+      : !formData.county
+      ? 'County is required'
+      : !formData.subCounty
+      ? 'Sub-county is required'
+      : !formData.termsAccepted
+      ? 'You must accept the terms and conditions'
       : null;
 
     if (errMsg) {
@@ -91,17 +154,37 @@ function Onboarding() {
     return true;
   };
 
- 
+  // Step 2 validation (documents)
+  const validateStep2 = () => {
+    if (!documents.idFile) {
+      setErrors({ step2: 'Please upload the front side of your ID' });
+      toast.error('ID front is required');
+      return false;
+    }
+    if (!documents.photoFile) {
+      setErrors({ step2: 'Please upload the back side of your ID' });
+      toast.error('ID back is required');
+      return false;
+    }
+    setErrors({});
+    return true;
+  };
 
   const handleStep1Submit = (e) => {
     e.preventDefault();
     if (validateStep1()) {
       setCurrentStep(2);
-      toast.success('Personal details saved. ');
+      toast.success('Personal details saved.');
     }
   };
 
-  
+  const handleStep2Submit = (e) => {
+    e.preventDefault();
+    if (validateStep2()) {
+      setCurrentStep(3);
+      toast.success('Documents uploaded.');
+    }
+  };
 
   const handlePaymentSuccess = () => {
     toast.success('Registration and payment completed successfully!');
@@ -122,9 +205,9 @@ function Onboarding() {
       poBox: '',
       county: '',
       subCounty: '',
-     
       termsAccepted: false,
     });
+    setDocuments({ idFile: null, photoFile: null });
     setCurrentStep(1);
     setErrors({});
     toast.info('Form has been reset. You can start a new registration.');
@@ -136,73 +219,62 @@ function Onboarding() {
       <Toaster position="top-right" richColors />
       <div
         style={{
-          minHeight: "100vh",
-          width: "100%",
-          position: "relative",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          overflowX: "hidden",
-          padding: "2rem 1rem",
+          minHeight: '100vh',
+          width: '100%',
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflowX: 'hidden',
+          padding: '2rem 1rem',
         }}
       >
-        {/* Animated Background Canvas */}
         <div
           style={{
-            position: "fixed",
+            position: 'fixed',
             top: 0,
             left: 0,
-            width: "100vw",
-            height: "100vh",
+            width: '100vw',
+            height: '100vh',
             zIndex: 0,
-            pointerEvents: "none",
+            pointerEvents: 'none',
           }}
         >
-          <DotSwarmCanvas
-            textLine1="AYEDOS"
-            textLine2="SACCO"
-            color="#88cc63"
-          />
+          <DotSwarmCanvas textLine1="AYEDOS" textLine2="SACCO" color="#88cc63" />
         </div>
 
-        {/* Glass Card Container */}
         <div
           style={{
-            position: "relative",
+            position: 'relative',
             zIndex: 1,
-            width: "100%",
+            width: '100%',
             maxWidth: 1280,
-            margin: "0 auto",
+            margin: '0 auto',
           }}
         >
           <div
             className="glass-card"
             style={{
-              background: "rgba(255, 255, 255, 0.95)",
-              backdropFilter: "blur(4px)",
+              background: 'rgba(255, 255, 255, 0.95)',
+              backdropFilter: 'blur(4px)',
               borderRadius: 24,
-              padding: "32px 40px",
-              boxShadow: "0 20px 40px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0,0,0,0.02)",
-              border: "1px solid rgba(226, 232, 240, 0.8)",
+              padding: '32px 40px',
+              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0,0,0,0.02)',
+              border: '1px solid rgba(226, 232, 240, 0.8)',
             }}
           >
-            {/* Logo & Header */}
-            <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
-              <img
-                src={logo}
-                alt="AYEDOS SACCO Logo"
-                style={{ height: 48, width: "auto", objectFit: "contain" }}
-              />
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+              <img src={logo} alt="AYEDOS SACCO Logo" style={{ height: 48, width: 'auto', objectFit: 'contain' }} />
             </div>
 
-            <div style={{ textAlign: "center", marginBottom: 10 }}>
+            <div style={{ textAlign: 'center', marginBottom: 10 }}>
               <div
                 style={{
                   fontSize: 13,
                   fontWeight: 700,
-                  letterSpacing: "0.05em",
-                  color: "#64748b",
-                  textTransform: "uppercase",
+                  letterSpacing: '0.05em',
+                  color: '#64748b',
+                  textTransform: 'uppercase',
                   marginBottom: 2,
                 }}
               >
@@ -210,11 +282,9 @@ function Onboarding() {
               </div>
             </div>
 
-            {/* Main Content Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Form Area */}
               <div className="lg:col-span-2">
-                <StepIndicator currentStep={currentStep} />
+                <StepIndicator currentStep={currentStep} totalSteps={4} /> {/* update totalSteps */}
 
                 {currentStep === 1 && (
                   <PersonalDetailsForm
@@ -226,24 +296,33 @@ function Onboarding() {
                   />
                 )}
 
-               
-
                 {currentStep === 2 && (
+                  <DocumentsForm
+                    formData={documents}
+                    onFileChange={updateDocuments}
+                    errors={errors}
+                    isLoading={isLoading}
+                    onSubmit={handleStep2Submit}
+                    onBack={() => setCurrentStep(1)}
+                  />
+                )}
+
+                {currentStep === 3 && (
                   <PaymentForm
                     onBack={() => setCurrentStep(2)}
                     onPaymentSuccess={handlePaymentSuccess}
                     isLoading={isLoading}
                     setLoading={setIsLoading}
                     userData={formData}
+                    documents={documents} // pass if needed by payment API
                   />
                 )}
 
-                {currentStep === 3 && (
+                {currentStep === 4 && (
                   <ConfirmationStep onReset={() => setShowResetDialog(true)} />
                 )}
               </div>
 
-              {/* Checklist Sidebar */}
               <div className="lg:col-span-1">
                 <Card className="border border-gray-200 bg-white/50 shadow-sm">
                   <CardHeader className="border-b border-gray-100 pb-1">
@@ -257,14 +336,17 @@ function Onboarding() {
                   <CardContent className="pt-1 space-y-3">
                     <div className="flex items-start gap-3">
                       <CiUser className="text-[#8cc63f] w-5 h-5 mt-0.5 flex-shrink-0" />
-                      <span className="text-sm text-gray-600">Name and ID must match your document exactly</span>
+                      <span className="text-sm text-gray-600">
+                        Name and ID must match your document exactly
+                      </span>
                     </div>
                     <div className="flex items-start gap-3">
                       <CiMail className="text-[#8cc63f] w-5 h-5 mt-0.5 flex-shrink-0" />
-                      <span className="text-sm text-gray-600">Use contact details you can verify (OTP, email).</span>
+                      <span className="text-sm text-gray-600">
+                        Use contact details you can verify (OTP, email).
+                      </span>
                     </div>
-                     
-                    <div style={{ fontSize: 10, color: "#64748b", marginTop: 8 }}>
+                    <div style={{ fontSize: 10, color: '#64748b', marginTop: 8 }}>
                       A few steps to verify your identity and meet regulatory requirements
                     </div>
                   </CardContent>
@@ -275,13 +357,12 @@ function Onboarding() {
         </div>
       </div>
 
-      {/* Reset Confirmation Dialog */}
       <AlertDialog open={showResetDialog} onOpenChange={setShowResetDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Reset Registration</AlertDialogTitle>
             <AlertDialogDescription>
-              This will clear all entered data and files. You will lose any unsaved progress.
+              This will clear all entered data. You will lose any unsaved progress.
               Are you sure you want to reset?
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -292,7 +373,6 @@ function Onboarding() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Global style overrides to match Login form inputs/buttons */}
       <style>{`
         .glass-card input,
         .glass-card select,
@@ -350,10 +430,6 @@ function Onboarding() {
         }
         .glass-card .secondary-button:hover {
           background: #f1f5f9;
-        }
-        .glass-card input[type="file"] {
-          padding: 10px;
-          background: white;
         }
         .glass-card .form-group,
         .glass-card .space-y-4 > div {
