@@ -4,6 +4,8 @@ import { AuthProvider } from './context/AuthContext.jsx'
 import Login from './pages/Login.jsx'
 import Register from './pages/Register.jsx'
 import SetPassword from './pages/SetPassword.jsx'
+import ForgotPassword from './pages/ForgotPassword.jsx'
+import ResetPassword from './pages/ResetPassword.jsx'
 import Onboarding from './pages/Onboarding.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import ProtectedRoute from './routes/ProtectedRoute.jsx'
@@ -16,9 +18,10 @@ export default function App() {
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/onboarding" element={<ProtectedRoute element={<Onboarding />} />} />
           <Route path="/set-password" element={<SetPassword />} />
-          <Route path="/forgot-password" element={<Login />} />
           <Route
             path="/dashboard/*"
             element={<ProtectedRoute element={<Dashboard />} />}

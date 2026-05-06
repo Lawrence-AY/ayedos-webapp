@@ -664,7 +664,7 @@ export default function Dashboard() {
           <div className="feature-card" style={{ padding: 0, overflow: "hidden" }}>
             <DataTable
               columns={[
-                { key: "id", label: "ID" },
+               // { key: "id", label: "ID" },
                 { key: "name", label: "Name" },
                 { key: "email", label: "Email" },
                 { key: "phone", label: "Phone" },
