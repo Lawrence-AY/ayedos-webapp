@@ -13,6 +13,22 @@ import {
   getDeductions,
 } from "../services/api.js";
 import { getSystemStats, getAllUsers } from "../features/admin/adminService.js";
+import { Button } from "@/components/ui/button"
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+ import { Progress } from "@/components/ui/progress";
+ import { ArrowUpRight, ArrowDownRight, Wallet, CreditCard, PiggyBank, TrendingUp } from "lucide-react";
+
+
 
 // ======================
 // Overview Card Component
@@ -224,31 +240,209 @@ function FinanceOverview({ stats }) {
 // ======================
 // Member Overview
 // ======================
-function MemberOverview({ stats }) {
+
+
+function MemberOverview({ stats, memberName = "Member" }) {
+  const MIN_SHARE_CAPITAL = 25000;
+  const currentShares = stats.shares || 0;
+  const remaining = Math.max(MIN_SHARE_CAPITAL - currentShares, 0);
+  const progressPercent = Math.min((currentShares / MIN_SHARE_CAPITAL) * 100, 100);
+
+  const hour = new Date().getHours();
+  const greeting =
+    hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+
   return (
-    <div>
-      <h2 style={{ marginBottom: 24 }}>Member Dashboard</h2>
+    <div className="space-y-6">
+      
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <div className="text-md font-bold">
+            {greeting} 
+          </div>
+          
+        </div>
+
+        {/* Quick Actions */}
+        <div className="flex gap-2">
+          <Button size="sm">Deposit</Button>
+        
+          <Button size="sm" variant="secondary">Apply Loan</Button>
+        </div>
+      </div>
+
+      {/* Main Stats */}
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        
+        {/* Balance */}
+        <Card className="hover:shadow-md transition">
+          <CardContent className="p-5 flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">My Balance</p>
+              <div className="text-xl font-bold text-blue-600">
+                KSh {(stats.balance || 0).toLocaleString()}
+              </div>
+               
+            </div>
+            
+          </CardContent>
+        </Card>
+
+        {/* Loans */}
+        <Card className="hover:shadow-md transition">
+          <CardContent className="p-5 flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Active Loans</p>
+              <div className="text-2xl font-bold">
+                {stats.activeLoans || 0}
+              </div>
+              
+            </div>
+       
+          </CardContent>
+        </Card>
+
+        {/* Share Capital */}
+        <Card className="hover:shadow-md transition">
+          <CardContent className="p-5">
+            <div className="flex justify-between items-center">
+              <p className="text-sm text-muted-foreground">Share Capital</p>
+            
+            </div>
+
+            <div className="text-2xl font-bold mt-1">
+              KSh {currentShares.toLocaleString()}
+            </div>
+
+            <div className="mt-3 space-y-2">
+              <Progress value={progressPercent} className="h-2" />
+
+              <p className="text-xs text-muted-foreground">
+                {remaining === 0 ? (
+                  <span className="text-green-600">
+                    ✓ Requirement met
+                  </span>
+                ) : (
+                  `KES ${remaining.toLocaleString()} remaining`
+                )}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Insights */}
+      <div>
+        <div className="text-lg font-semibold mb-3">Insights</div>
+
+        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+          
+          {/* Loan Eligibility */}
+        <Card>
+  <CardContent className="p-5 space-y-4">
+    <p className="text-sm text-muted-foreground font-medium">
+      Loan Eligibility
+    </p>
+
+    {[
+      {
+        name: "Emergency Loan",
+        eligible: true,
+        rule: " ",
+      },
+      {
+        name: "Education Loan",
+        eligible: currentShares >= 25000,
+        rule: "100% minimum share capital paid",
+      },
+      {
+        name: "Welfare Loan",
+        eligible: currentShares >= 25000,
+        rule: "100% minimum share capital paid",
+      },
+      {
+        name: "Development Loan",
+        eligible: currentShares >= 25000,
+        rule: "100% minimum share capital paid",
+      },
+    ].map((loan, i) => (
       <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(2, 1fr)",
-          gap: 18,
-          marginBottom: 32,
-        }}
+        key={i}
+        className="flex items-center justify-between border-b pb-2 last:border-none"
       >
-        <OverviewCard
-          title="My Balance"
-          value={`KSh ${(stats.balance || 0).toLocaleString()}`}
-          accent
-        />
-        <OverviewCard title="Active Loans" value={stats.activeLoans || 0} />
-        <OverviewCard title="Share Capital" value={stats.shares || 0} />
-        <OverviewCard title="Member Since" value={stats.memberSince || "N/A"} />
+        <div>
+          <p className="text-sm font-medium">{loan.name}</p>
+          <p className="text-xs text-muted-foreground">
+            {loan.rule}
+          </p>
+        </div>
+
+        <span
+          className={`text-xs font-medium px-2 py-1 rounded-full ${
+            loan.eligible
+              ? "bg-green-100 text-green-700"
+              : "bg-gray-100 text-gray-500"
+          }`}
+        >
+          {loan.eligible ? "Eligible" : "Not yet"}
+        </span>
+      </div>
+    ))}
+  </CardContent>
+</Card>
+
+          {/* Next Payment */}
+          <Card>
+            <CardContent className="p-5">
+              <p className="text-sm text-muted-foreground">
+                Next Payment
+              </p>
+              <div className="text-lg font-semibold">
+                {stats.nextPayment || "No loans"}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Savings */}
+          <Card>
+            <CardContent className="p-5">
+              <p className="text-sm text-muted-foreground">
+                Total Savings
+              </p>
+              <div className="text-xl font-bold text-green-600">
+                KSh {(stats.totalSavings || 0).toLocaleString()}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Recent Activity (NEW 🔥) */}
+      <div>
+        <div className="text-lg font-semibold mb-3">Recent Activity</div>
+
+        <Card>
+          <CardContent className="p-5 space-y-3 text-sm">
+            {(stats.recent || []).length === 0 ? (
+              <p className="text-muted-foreground">No recent transactions</p>
+            ) : (
+              stats.recent.map((item, i) => (
+                <div key={i} className="flex justify-between">
+                  <span>{item.label}</span>
+                  <span className="font-medium">
+                    KSh {item.amount.toLocaleString()}
+                  </span>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
 }
-
+ 
 // ======================
 // Generic Data Table
 // ======================
@@ -533,104 +727,284 @@ export default function Dashboard() {
     }
 
     // Loans (Member view)
-    if (path.includes("/loans") && role === "MEMBER") {
-      const pendingLoans = data.loans.filter((loan) =>
-        ["ACTIVE", "APPROVED"].includes(loan.status),
-      );
+   if (path.includes("/loans") && role === "MEMBER") {
+  const pendingLoans = data.loans.filter((loan) =>
+    ["ACTIVE", "APPROVED"].includes(loan.status),
+  );
 
-      return (
-        <div>
-          <h2 style={{ marginBottom: 24 }}>My Loans</h2>
+  const loanProducts = [
+    {
+      name: "Emergency Loan",
+      max: 50000,
+      interest: 1,
+      fee: 0,
+      period: 12,
+      eligibility: "All members",
+      guarantors: "Not required",
+    },
+    {
+      name: "Education Loan",
+      max: 100000,
+      interest: 1,
+      fee: 0.5,
+      period: 12,
+      eligibility: "100% share capital paid",
+      guarantors: 2,
+    },
+    {
+      name: "Welfare Loan",
+      max: 100000,
+      interest: 1.5,
+      fee: 1,
+      period: 24,
+      eligibility: "100% share capital paid",
+      guarantors: 2,
+    },
+    {
+      name: "Development Loan",
+      max: 250000,
+      interest: 2,
+      fee: 1,
+      period: 72,
+      eligibility: "100% share capital paid",
+      guarantors: 3,
+    },
+  ];
 
-          {/* Pending Payments */}
-          <div className="feature-card" style={{ marginBottom: 24 }}>
-            <h3 style={{ marginTop: 0, marginBottom: 16 }}>Pending Payments</h3>
-            <DataTable
-              columns={[
-                { key: "id", label: "Loan ID" },
-                {
-                  key: "principal",
-                  label: "Amount",
-                  render: (v) => `KSh ${Number(v).toLocaleString()}`,
-                },
-                {
-                  key: "balance",
-                  label: "Balance",
-                  render: (v) => `KSh ${Number(v).toLocaleString()}`,
-                },
-                { key: "status", label: "Status" },
-                {
-                  key: "approvedAt",
-                  label: "Approved",
-                  render: (v) => (v ? new Date(v).toLocaleDateString() : "-"),
-                },
-              ]}
-              data={pendingLoans}
-              emptyMessage="No pending loan payments"
-            />
+  return (
+    <div>
+      <div style={{ marginBottom: 24,fontSize:18 }}>My Loans</div>
+
+      {/* ALL-IN-ONE SECTION */}
+      <div
+        className="feature-card"
+        style={{
+          marginBottom: 10,
+          padding: 24,
+          borderRadius: 24,
+        }}
+      >
+        {/* Top Summary */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
+            gap: 16,
+            marginBottom: 28,
+          }}
+        >
+          <div
+            style={{
+              padding: 20,
+              borderRadius: 18,
+              background: "rgba(var(--color-accent-rgb),0.08)",
+            }}
+          >
+            <div style={{ fontSize: 14, opacity: 0.7 }}>
+              Active Loans
+            </div>
+
+            <div
+              style={{
+                fontSize: 28,
+                fontWeight: 700,
+                marginTop: 6,
+              }}
+            >
+              {pendingLoans.length}
+            </div>
           </div>
 
-          {/* Action Buttons */}
-          <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-            <button
-              onClick={() => {
-                // TODO: Open request loan modal
-                console.log("Request Loan clicked");
-              }}
+          <div
+            style={{
+              padding: 20,
+              borderRadius: 18,
+              background: "rgba(34,197,94,0.08)",
+            }}
+          >
+            <div style={{ fontSize: 14, opacity: 0.7 }}>
+              Outstanding Balance
+            </div>
+
+            <div
               style={{
-                padding: "14px 28px",
-                borderRadius: 14,
-                background: "var(--color-accent)",
-                color: "var(--color-white)",
-                border: "none",
-                fontSize: 15,
-                fontWeight: 500,
-                cursor: "pointer",
-                transition: "all 150ms ease",
-                boxShadow: "var(--shadow-soft)",
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.background = "var(--color-primary)";
-                e.target.style.boxShadow = "var(--shadow-md)";
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = "var(--color-accent)";
-                e.target.style.boxShadow = "var(--shadow-soft)";
+                fontSize: 28,
+                fontWeight: 700,
+                marginTop: 6,
               }}
             >
-              Request Loan
-            </button>
-            <button
-              onClick={() => {
-                // TODO: Open repay loan modal
-                console.log("Repay Loan clicked");
-              }}
-              style={{
-                padding: "14px 28px",
-                borderRadius: 14,
-                background: "transparent",
-                color: "var(--color-accent)",
-                border: "2px solid var(--color-accent)",
-                fontSize: 15,
-                fontWeight: 500,
-                cursor: "pointer",
-                transition: "all 150ms ease",
-              }}
-              onMouseEnter={(e) => {
-                e.target.style.background =
-                  "rgba(var(--color-accent-rgb), 0.1)";
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.background = "transparent";
-              }}
-            >
-              Repay Loan
-            </button>
+              KSh{" "}
+              {pendingLoans
+                .reduce((acc, loan) => acc + Number(loan.balance || 0), 0)
+                .toLocaleString()}
+            </div>
           </div>
         </div>
-      );
-    }
 
+        {/* Pending Payments */}
+        <div style={{ marginBottom: 28 }}>
+          <h3 style={{ marginTop: 0, marginBottom: 16 }}>
+            Pending Payments
+          </h3>
+
+          <DataTable
+            columns={[
+              { key: "id", label: "Loan ID" },
+              {
+                key: "principal",
+                label: "Amount",
+                render: (v) =>
+                  `KSh ${Number(v).toLocaleString()}`,
+              },
+              {
+                key: "balance",
+                label: "Balance",
+                render: (v) =>
+                  `KSh ${Number(v).toLocaleString()}`,
+              },
+              { key: "status", label: "Status" },
+              {
+                key: "approvedAt",
+                label: "Approved",
+                render: (v) =>
+                  v
+                    ? new Date(v).toLocaleDateString()
+                    : "-",
+              },
+            ]}
+            data={pendingLoans}
+            emptyMessage="No pending loan payments"
+          />
+        </div>
+
+        {/* Loan Products */}
+        <div style={{ marginBottom: 28 }}>
+          <h3 style={{ marginBottom: 18 }}>
+            Available Loan Products
+          </h3>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns:
+                "repeat(auto-fit,minmax(250px,1fr))",
+              gap: 16,
+            }}
+          >
+            {loanProducts.map((loan) => (
+              <div
+                key={loan.name}
+                style={{
+                  border: "1px solid var(--color-border)",
+                  borderRadius: 18,
+                  padding: 18,
+                  background: "var(--color-surface)",
+                }}
+              >
+                <h4
+                  style={{
+                    marginTop: 0,
+                    marginBottom: 14,
+                  }}
+                >
+                  {loan.name}
+                </h4>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gap: 8,
+                    fontSize: 14,
+                  }}
+                >
+                  <div>
+                    <strong>Maximum:</strong> KSh{" "}
+                    {loan.max.toLocaleString()}
+                  </div>
+
+                  <div>
+                    <strong>Interest:</strong>{" "}
+                    {loan.interest}% / month
+                  </div>
+
+                  <div>
+                    <strong>Processing Fee:</strong>{" "}
+                    {loan.fee}%
+                  </div>
+
+                  <div>
+                    <strong>Repayment:</strong>{" "}
+                    {loan.period} months
+                  </div>
+
+                  <div>
+                    <strong>Eligibility:</strong>{" "}
+                    {loan.eligibility}
+                  </div>
+
+                  <div>
+                    <strong>Guarantors:</strong>{" "}
+                    {loan.guarantors}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+      
+
+        {/* Action Buttons */}
+        <div
+          style={{
+            display: "flex",
+            gap: 16,
+            flexWrap: "wrap",
+          }}
+        >
+          <button
+            onClick={() => {
+              console.log("Request Loan clicked");
+            }}
+            style={{
+              padding: "14px 28px",
+              borderRadius: 14,
+              background: "var(--color-accent)",
+              color: "var(--color-white)",
+              border: "none",
+              fontSize: 15,
+              fontWeight: 500,
+              cursor: "pointer",
+              transition: "all 150ms ease",
+              boxShadow: "var(--shadow-soft)",
+            }}
+          >
+            Request Loan
+          </button>
+
+          <button
+            onClick={() => {
+              console.log("Repay Loan clicked");
+            }}
+            style={{
+              padding: "14px 28px",
+              borderRadius: 14,
+              background: "transparent",
+              color: "var(--color-accent)",
+              border: "2px solid var(--color-accent)",
+              fontSize: 15,
+              fontWeight: 500,
+              cursor: "pointer",
+              transition: "all 150ms ease",
+            }}
+          >
+            Repay Loan
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
     // Loans (admin/finance view)
     if (path.includes("/loans")) {
       return (
@@ -947,7 +1321,7 @@ export default function Dashboard() {
 
   // Main layout
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: "white" }}>
+    <div style={{ display: "flex", minHeight: "100vh",  }}>
       <div
         style={{
           visibility: sidebarOpen ? "visible" : "hidden",

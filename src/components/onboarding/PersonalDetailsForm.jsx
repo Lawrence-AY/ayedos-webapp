@@ -163,7 +163,7 @@ export const PersonalDetailsForm = ({
             value={email}
             onChange={(e) => onChange('email', e.target.value)}
             placeholder="you@example.com"
-            disabled={isLoading}
+            disabled 
             required
              
           />
@@ -317,7 +317,7 @@ export const PersonalDetailsForm = ({
       >
         <div className="flex flex-col text-left">
           <span className="text-xs font-light">Next</span>
-          <span className="font-semibold leading-tight">Payment</span>
+          <span className="font-semibold leading-tight">Upload Documents</span>
         </div>
         <GrLinkNext />
       </Button>

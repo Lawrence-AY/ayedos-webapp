@@ -290,7 +290,7 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
             <RadioGroupItem value="paybill" id="paybill" />
             <Label htmlFor="paybill" className="flex items-center gap-2 cursor-pointer flex-1">
               <Receipt className="w-5 h-5 text-[#8cc63f]" />
-              <span className="font-medium">Use Paybill (I already paid)</span>
+              <span className="font-medium">Use Paybill </span>
             </Label>
           </div>
         </RadioGroup>

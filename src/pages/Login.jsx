@@ -206,9 +206,9 @@ export default function Login() {
             </div>
 
             <div style={{ marginTop: 20, textAlign: "center" }}>
-              <Link to="/forgot-password" style={forgotPasswordStyle}>
+              <a href="/forgot-password" style={forgotPasswordStyle}>
                 Forgot your password?
-              </Link>
+              </a>
             </div>
           </form>
         </div>
