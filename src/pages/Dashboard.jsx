@@ -28,6 +28,291 @@ import { Label } from "@/components/ui/label"
  import { Progress } from "@/components/ui/progress";
  import { ArrowUpRight, ArrowDownRight, Wallet, CreditCard, PiggyBank, TrendingUp } from "lucide-react";
 
+const MEMBER_LOAN_PRODUCTS = [
+  {
+    name: "Emergency Loan",
+    max: 50000,
+    interest: 1,
+    fee: 0,
+    period: 12,
+    eligibility: "All members",
+    guarantors: "Not required",
+  },
+  {
+    name: "Education Loan",
+    max: 100000,
+    interest: 1,
+    fee: 0.5,
+    period: 12,
+    eligibility: "100% share capital paid",
+    guarantors: 2,
+  },
+  {
+    name: "Welfare Loan",
+    max: 100000,
+    interest: 1.5,
+    fee: 1,
+    period: 24,
+    eligibility: "100% share capital paid",
+    guarantors: 2,
+  },
+  {
+    name: "Development Loan",
+    max: 250000,
+    interest: 2,
+    fee: 1,
+    period: 72,
+    eligibility: "100% share capital paid",
+    guarantors: 3,
+  },
+];
+
+function formatCurrency(value) {
+  return `KSh ${Math.round(Number(value || 0)).toLocaleString()}`;
+}
+
+function LoanCalculator({ products }) {
+  const [selectedProductName, setSelectedProductName] = useState(
+    products[0]?.name || "",
+  );
+  const [amount, setAmount] = useState(25000);
+  const [months, setMonths] = useState(12);
+
+  const selectedProduct =
+    products.find((product) => product.name === selectedProductName) ||
+    products[0];
+
+  if (!selectedProduct) return null;
+
+  const maxAmount = selectedProduct.max;
+  const maxMonths = selectedProduct.period;
+  const loanAmount = Math.min(Math.max(Number(amount) || 1000, 1000), maxAmount);
+  const loanTerm = Math.min(Math.max(Number(months) || 1, 1), maxMonths);
+  const monthlyRate = selectedProduct.interest / 100;
+  const processingFee = loanAmount * (selectedProduct.fee / 100);
+  const totalInterest = loanAmount * monthlyRate * loanTerm;
+  const repayableAmount = loanAmount + totalInterest;
+  const monthlyRepayment = repayableAmount / loanTerm;
+  const totalCost = repayableAmount + processingFee;
+
+  const handleProductChange = (event) => {
+    const nextProduct = products.find(
+      (product) => product.name === event.target.value,
+    );
+
+    if (!nextProduct) return;
+
+    setSelectedProductName(nextProduct.name);
+    setAmount((currentAmount) =>
+      Math.min(Math.max(Number(currentAmount) || 1000, 1000), nextProduct.max),
+    );
+    setMonths((currentMonths) =>
+      Math.min(Math.max(Number(currentMonths) || 1, 1), nextProduct.period),
+    );
+  };
+
+  const updateAmount = (value) => {
+    setAmount(Math.min(Math.max(Number(value) || 1000, 1000), maxAmount));
+  };
+
+  const updateMonths = (value) => {
+    setMonths(Math.min(Math.max(Number(value) || 1, 1), maxMonths));
+  };
+
+  return (
+    <section style={{ marginBottom: 28 }}>
+      <h3 style={{ marginBottom: 18 }}>Loan Calculator</h3>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+          gap: 18,
+          alignItems: "stretch",
+        }}
+      >
+        <div
+          style={{
+            display: "grid",
+            gap: 18,
+            padding: 18,
+            border: "1px solid rgba(10, 42, 67, 0.08)",
+            borderRadius: 18,
+            background: "rgba(248, 250, 252, 0.78)",
+          }}
+        >
+          <div className="field" style={{ marginBottom: 0 }}>
+            <Label className="label" htmlFor="loan-product">
+              Loan product
+            </Label>
+            <select
+              id="loan-product"
+              value={selectedProductName}
+              onChange={handleProductChange}
+              className="input"
+            >
+              {products.map((product) => (
+                <option key={product.name} value={product.name}>
+                  {product.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="field" style={{ marginBottom: 0 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+                marginBottom: 8,
+              }}
+            >
+              <Label className="label" htmlFor="loan-amount" style={{ margin: 0 }}>
+                Amount
+              </Label>
+              <span style={{ color: "var(--color-muted)", fontSize: 13 }}>
+                Max {formatCurrency(maxAmount)}
+              </span>
+            </div>
+            <Input
+              id="loan-amount"
+              type="number"
+              min="1000"
+              max={maxAmount}
+              step="1000"
+              value={loanAmount}
+              onChange={(event) => updateAmount(event.target.value)}
+              className="input"
+            />
+            <input
+              type="range"
+              min="1000"
+              max={maxAmount}
+              step="1000"
+              value={loanAmount}
+              onChange={(event) => updateAmount(event.target.value)}
+              style={{ width: "100%", accentColor: "var(--color-accent)" }}
+              aria-label="Loan amount"
+            />
+          </div>
+
+          <div className="field" style={{ marginBottom: 0 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+                marginBottom: 8,
+              }}
+            >
+              <Label className="label" htmlFor="loan-term" style={{ margin: 0 }}>
+                Repayment period
+              </Label>
+              <span style={{ color: "var(--color-muted)", fontSize: 13 }}>
+                Max {maxMonths} months
+              </span>
+            </div>
+            <Input
+              id="loan-term"
+              type="number"
+              min="1"
+              max={maxMonths}
+              value={loanTerm}
+              onChange={(event) => updateMonths(event.target.value)}
+              className="input"
+            />
+            <input
+              type="range"
+              min="1"
+              max={maxMonths}
+              value={loanTerm}
+              onChange={(event) => updateMonths(event.target.value)}
+              style={{ width: "100%", accentColor: "var(--color-accent)" }}
+              aria-label="Repayment period"
+            />
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gap: 14,
+            padding: 18,
+            borderRadius: 18,
+            background:
+              "linear-gradient(135deg, rgba(0, 58, 22, 0.96), rgba(13, 53, 84, 0.94))",
+            color: "var(--color-white)",
+            minHeight: 280,
+          }}
+        >
+          <div>
+            <p
+              style={{
+                color: "rgba(255, 255, 255, 0.72)",
+                fontSize: 13,
+                fontWeight: 700,
+                letterSpacing: 0.08,
+                textTransform: "uppercase",
+              }}
+            >
+              Estimated monthly repayment
+            </p>
+            <div
+              style={{
+                fontSize: "clamp(1.75rem, 4vw, 2.5rem)",
+                fontWeight: 800,
+                marginTop: 8,
+                lineHeight: 1,
+              }}
+            >
+              {formatCurrency(monthlyRepayment)}
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+              gap: 10,
+            }}
+          >
+            {[
+              ["Interest rate", `${selectedProduct.interest}% / month`],
+              ["Loan amount", formatCurrency(loanAmount)],
+              ["Total interest", formatCurrency(totalInterest)],
+              ["Processing fee", formatCurrency(processingFee)],
+              ["Repayable amount", formatCurrency(repayableAmount)],
+              ["Total cost", formatCurrency(totalCost)],
+            ].map(([label, value]) => (
+              <div
+                key={label}
+                style={{
+                  padding: 12,
+                  borderRadius: 14,
+                  background: "rgba(255, 255, 255, 0.1)",
+                  border: "1px solid rgba(255, 255, 255, 0.12)",
+                }}
+              >
+                <div
+                  style={{
+                    color: "rgba(255, 255, 255, 0.68)",
+                    fontSize: 12,
+                    marginBottom: 4,
+                  }}
+                >
+                  {label}
+                </div>
+                <strong style={{ fontSize: 15 }}>{value}</strong>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 
 
 // ======================
@@ -732,45 +1017,6 @@ export default function Dashboard() {
     ["ACTIVE", "APPROVED"].includes(loan.status),
   );
 
-  const loanProducts = [
-    {
-      name: "Emergency Loan",
-      max: 50000,
-      interest: 1,
-      fee: 0,
-      period: 12,
-      eligibility: "All members",
-      guarantors: "Not required",
-    },
-    {
-      name: "Education Loan",
-      max: 100000,
-      interest: 1,
-      fee: 0.5,
-      period: 12,
-      eligibility: "100% share capital paid",
-      guarantors: 2,
-    },
-    {
-      name: "Welfare Loan",
-      max: 100000,
-      interest: 1.5,
-      fee: 1,
-      period: 24,
-      eligibility: "100% share capital paid",
-      guarantors: 2,
-    },
-    {
-      name: "Development Loan",
-      max: 250000,
-      interest: 2,
-      fee: 1,
-      period: 72,
-      eligibility: "100% share capital paid",
-      guarantors: 3,
-    },
-  ];
-
   return (
     <div>
       <div style={{ marginBottom: 24,fontSize:18 }}>My Loans</div>
@@ -877,6 +1123,8 @@ export default function Dashboard() {
           />
         </div>
 
+        <LoanCalculator products={MEMBER_LOAN_PRODUCTS} />
+
         {/* Loan Products */}
         <div style={{ marginBottom: 28 }}>
           <h3 style={{ marginBottom: 18 }}>
@@ -891,7 +1139,7 @@ export default function Dashboard() {
               gap: 16,
             }}
           >
-            {loanProducts.map((loan) => (
+            {MEMBER_LOAN_PRODUCTS.map((loan) => (
               <div
                 key={loan.name}
                 style={{
