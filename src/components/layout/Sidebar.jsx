@@ -64,6 +64,12 @@ function NavLinkItem({ to, label, exact = false }) {
 // =====================================
 function MemberSidebar() {
   const [balancesOpen, setBalancesOpen] = useState(false);
+  const { logout } = useContext(AuthContext);
+
+  async function handleLogout() {
+    await logout();
+    window.location.href = "/login";
+  }
 
   return (
     <aside
@@ -167,6 +173,38 @@ function MemberSidebar() {
       {/* Settings at Bottom */}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <NavLinkItem to="/dashboard/settings" label="Settings" />
+        <button
+          type="button"
+          onClick={handleLogout}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            padding: "14px 16px",
+            borderRadius: 14,
+            color: "rgba(255, 255, 255, 0.82)",
+            background: "transparent",
+            border: "none",
+            fontWeight: 400,
+            fontSize: 15,
+            cursor: "pointer",
+            transition: "all 180ms ease",
+            borderLeft: "3px solid transparent",
+            paddingLeft: 16,
+            width: "100%",
+            textAlign: "left",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "rgba(255, 255, 255, 0.1)";
+            e.currentTarget.style.color = "var(--color-white)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "transparent";
+            e.currentTarget.style.color = "rgba(255, 255, 255, 0.82)";
+          }}
+        >
+          Log out
+        </button>
         <div
           style={{
             marginTop: 12,
@@ -200,6 +238,13 @@ function MemberSidebar() {
 // Default Sidebar for Admin/Finance
 // =====================================
 function DefaultSidebar({ role, items }) {
+  const { logout } = useContext(AuthContext);
+
+  async function handleLogout() {
+    await logout();
+    window.location.href = "/login";
+  }
+
   return (
     <aside
       className="sidebar"
@@ -283,6 +328,39 @@ function DefaultSidebar({ role, items }) {
           border: "1px solid rgba(255, 255, 255, 0.1)",
         }}
       >
+        <button
+          type="button"
+          onClick={handleLogout}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            padding: "14px 16px",
+            borderRadius: 14,
+            color: "rgba(255, 255, 255, 0.82)",
+            background: "transparent",
+            border: "none",
+            fontWeight: 400,
+            fontSize: 15,
+            cursor: "pointer",
+            transition: "all 180ms ease",
+            borderLeft: "3px solid transparent",
+            paddingLeft: 16,
+            width: "100%",
+            textAlign: "left",
+            marginBottom: 12,
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "rgba(255, 255, 255, 0.1)";
+            e.currentTarget.style.color = "var(--color-white)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "transparent";
+            e.currentTarget.style.color = "rgba(255, 255, 255, 0.82)";
+          }}
+        >
+          Log out
+        </button>
         <p style={{ margin: 0, color: "rgba(255,255,255,0.4)", fontSize: 11 }}>
           © 2026 AYEDOS SACCO
         </p>
