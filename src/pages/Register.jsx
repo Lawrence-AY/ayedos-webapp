@@ -94,11 +94,13 @@ export default function Register() {
       });
 
       if (!res.ok) {
-        throw new Error(res.json?.message || `OTP verification failed (status ${res.status})`);
+        throw new Error(
+          res.json?.message || `OTP verification failed (status ${res.status})`,
+        );
       }
 
       await login({ email: pendingEmail, password: pendingPassword });
-      
+
       // Store registration data in sessionStorage for onboarding pre-population
       const registrationData = {
         firstName,
@@ -106,8 +108,11 @@ export default function Register() {
         email: pendingEmail,
         phone,
       };
-      sessionStorage.setItem('registrationData', JSON.stringify(registrationData));
-      
+      sessionStorage.setItem(
+        "registrationData",
+        JSON.stringify(registrationData),
+      );
+
       setOtpDialogOpen(false);
       navigate("/onboarding", { replace: true });
     } catch (err) {
@@ -130,7 +135,6 @@ export default function Register() {
         overflowX: "hidden",
       }}
     >
- 
       <div
         style={{
           position: "fixed",
@@ -290,8 +294,9 @@ export default function Register() {
                 <AlertDialogTitle>Verify your email</AlertDialogTitle>
               </AlertDialogHeader>
               <div className="space-y-4">
-                <p style={{ margin: 0, color: '#475569' }}>
-                  Enter the code sent to <strong>{pendingEmail}</strong> to continue.
+                <p style={{ margin: 0, color: "#475569" }}>
+                  Enter the code sent to <strong>{pendingEmail}</strong> to
+                  continue.
                 </p>
                 <InputOTP
                   maxLength={8}
@@ -305,8 +310,8 @@ export default function Register() {
                     <InputOTPSlot index={3} />
                     <InputOTPSlot index={4} />
                     <InputOTPSlot index={5} />
-                      <InputOTPSlot index={6} />
-                        <InputOTPSlot index={7} />
+                    <InputOTPSlot index={6} />
+                    <InputOTPSlot index={7} />
                   </InputOTPGroup>
                 </InputOTP>
                 {(otpError || authError) && (

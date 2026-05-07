@@ -1,13 +1,9 @@
 import { useContext } from "react";
 import { AuthContext } from "../../context/AuthContext.jsx";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export default function TopNavbar({ sidebarOpen, onToggleSidebar }) {
-  const { user, logout } = useContext(AuthContext);
-
-  async function handleLogout() {
-    await logout();
-    window.location.href = "/login";
-  }
+  const { user } = useContext(AuthContext);
 
   return (
     <header
@@ -87,7 +83,7 @@ export default function TopNavbar({ sidebarOpen, onToggleSidebar }) {
         <div style={{ textAlign: "right", marginRight: 8 }}>
           <p
             style={{
-              fontWeight: 600,
+              fontWeight: 800,
               color: "var(--color-text)",
               margin: 0,
               fontSize: 15,
@@ -99,23 +95,14 @@ export default function TopNavbar({ sidebarOpen, onToggleSidebar }) {
             {user?.email || ""}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleLogout}
-          style={{
-            padding: "10px 20px",
-            borderRadius: 14,
-            border: 0,
-            background: "var(--color-secondary)",
-            color: "var(--color-white)",
-            fontWeight: 700,
-            fontSize: 14,
-            cursor: "pointer",
-            transition: "all 300ms ease",
-          }}
-        >
-          Log out
-        </button>
+        <Avatar>
+          <AvatarImage
+            src="https://plus.unsplash.com/premium_vector-1682269284255-8209b981c625?w=352&dpr=2&h=367&auto=format&fit=crop&q=60&ixlib=rb-4.1.0"
+            alt="@shadcn"
+            className="grayscale"
+          />
+          <AvatarFallback>CN</AvatarFallback>
+        </Avatar>
       </div>
     </header>
   );
