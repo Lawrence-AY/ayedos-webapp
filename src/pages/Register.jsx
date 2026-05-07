@@ -77,8 +77,8 @@ export default function Register() {
   async function handleVerifyOtp() {
     setOtpError(null);
 
-    if (!otp.trim() || otp.trim().length !== 6) {
-      setOtpError("Please enter the 6-digit OTP sent to your email");
+    if (!otp.trim() || otp.trim().length !== 8) {
+      setOtpError("Please enter the OTP sent to your email");
       return;
     }
 
@@ -130,7 +130,7 @@ export default function Register() {
         overflowX: "hidden",
       }}
     >
-      {/* Background Layer - Fixed to prevent gaps during scroll */}
+ 
       <div
         style={{
           position: "fixed",
@@ -291,10 +291,10 @@ export default function Register() {
               </AlertDialogHeader>
               <div className="space-y-4">
                 <p style={{ margin: 0, color: '#475569' }}>
-                  Enter the 6-digit code sent to <strong>{pendingEmail}</strong> to continue.
+                  Enter the code sent to <strong>{pendingEmail}</strong> to continue.
                 </p>
                 <InputOTP
-                  maxLength={6}
+                  maxLength={8}
                   value={otp}
                   onChange={(value) => setOtp(value)}
                 >
@@ -305,6 +305,8 @@ export default function Register() {
                     <InputOTPSlot index={3} />
                     <InputOTPSlot index={4} />
                     <InputOTPSlot index={5} />
+                      <InputOTPSlot index={6} />
+                        <InputOTPSlot index={7} />
                   </InputOTPGroup>
                 </InputOTP>
                 {(otpError || authError) && (
