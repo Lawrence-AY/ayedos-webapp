@@ -12,7 +12,7 @@ import ProtectedRoute from './routes/ProtectedRoute.jsx'
 
 export default function App() {
   return (
-    <AuthProvider>
+    <AuthProvider> 
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
