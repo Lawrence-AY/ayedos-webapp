@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "./fonts.css"
 
 @custom-variant dark (&:is(.dark *));
 
@@ -28,8 +29,8 @@
   --accent-gradient: linear-gradient(135deg, #8cc63f, #b9e86d);
   --shadow-soft: 0 18px 45px rgba(15, 34, 58, 0.08);
   --shadow-elevated: 0 24px 60px rgba(15, 34, 58, 0.14);
-  --font-body: Aptos, "Segoe UI Variable", "Segoe UI", Tahoma, sans-serif;
-  --font-heading: Aptos Display, Aptos, "Trebuchet MS", sans-serif;
+    --font-body:"Gotham Regular";
+  --font-heading: "Gotham Bold";
 
   font-family: var(--font-body);
   line-height: 1.5;
@@ -256,3 +257,15 @@ a {
     @apply bg-background text-foreground;}
   html {
     @apply font-sans;}}
+.font-gotham-bold {
+  font-family: "Gotham Bold";
+}
+.font-gotham-regular {
+  font-family: "Gotham Regular";
+}
+.font-gotham-medium {
+  font-family: "Gotham Medium";
+}
+.font-pirulen {
+  font-family: "Pirulen";
+}
