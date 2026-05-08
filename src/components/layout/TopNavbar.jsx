@@ -2,7 +2,13 @@ import { useContext } from "react";
 import { AuthContext } from "../../context/AuthContext.jsx";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-export default function TopNavbar({ sidebarOpen, onToggleSidebar }) {
+export default //  component
+function TopNavbar({ 
+  sidebarOpen, 
+  onToggleSidebar, 
+  unreadCount = 0,           // ← 
+  onNotificationClick        // ← 
+}) {
   const { user } = useContext(AuthContext);
 
   return (
@@ -15,6 +21,7 @@ export default function TopNavbar({ sidebarOpen, onToggleSidebar }) {
         gap: 20,
         padding: "28px 36px 20px",
       }}
+      
     >
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
         {onToggleSidebar && (
@@ -78,7 +85,52 @@ export default function TopNavbar({ sidebarOpen, onToggleSidebar }) {
           </p>
         </div>
       </div>
+<div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "16px" }}>
+  
+  {/* ==================== NOTIFICATION BELL ==================== */}
+  <div
+    onClick={onNotificationClick}
+    style={{
+      position: "relative",
+      cursor: "pointer",
+      padding: "8px",
+      borderRadius: "50%",
+      transition: "background 0.2s",
+    }}
+    onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.08)")}
+    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+  >
+    <span style={{ fontSize: "1.6rem" }}>🛎️</span>
+    {unreadCount > 0 && (
+      <div
+        style={{
+          position: "absolute",
+          top: "4px",
+          right: "4px",
+          background: "#ef4444",
+          color: "white",
+          fontSize: "10px",
+          fontWeight: "bold",
+          minWidth: "17px",
+          height: "17px",
+          borderRadius: "50%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          border: "2px solid white",
+          textcolor: "var(--color-black)",
 
+        }}
+      >
+        {unreadCount}
+      </div>
+    )}
+  </div>
+  {/* ======================================================== */}
+
+  
+  
+</div>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <div style={{ textAlign: "right", marginRight: 8 }}>
           <p

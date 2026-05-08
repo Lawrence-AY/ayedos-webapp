@@ -805,6 +805,57 @@ function DataTable({ columns, data, emptyMessage }) {
 }
 
 // ======================
+// Notification Panel
+// ======================
+function NotificationPanel({ notifications, onClose }) {
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: "75px",
+        right: "30px",
+        width: "360px",
+        background: "var(--color-white)",
+        borderRadius: "16px",
+        boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
+        border: "1px solid rgba(10,42,67,0.1)",
+        zIndex: 100,
+        maxHeight: "65vh",
+        overflow: "auto",
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div style={{ padding: "18px 20px", borderBottom: "1px solid var(--border)" }}>
+        <h3 style={{ margin: 0 , textcolor: "var(--color-text)", fontWeight: "bold" }}>System Updates</h3>
+      </div>
+
+      {notifications.length === 0 ? (
+        <div style={{ padding: "40px", textAlign: "center", color: "var(--color-text)" }}>
+          No new updates
+        </div>
+      ) : (
+        notifications.map((notif) => (
+          <div
+            key={notif.id}
+            style={{
+              padding: "16px 20px",
+              borderBottom: "1px solid var(--border)",
+              textcolor: "var(--color-text)",
+            }}
+          >
+            <div style={{ fontWeight: 600, color: "var(--color-text)" }}>{notif.title}</div>
+            <div style={{ marginTop: 6, fontSize: "14.5px", color: "var(--color-text)" }}>{notif.message}</div>
+            <div style={{ marginTop: 8, fontSize: "12px", color: "var(--color-text)" }}>
+              {notif.date}
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+// ======================
 // Main Dashboard Component
 // ======================
 export default function Dashboard() {
@@ -816,7 +867,37 @@ export default function Dashboard() {
   const [error, setError] = useState(null);
   const [stats, setStats] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-        
+     
+    // ==================== NOTIFICATION STATE ====================
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const unreadCount = notifications.filter(n => n.unread).length;
+
+  // Sample notifications - replace later with API
+  useEffect(() => {
+    setNotifications([
+      {
+        id: 1,
+        title: "New Feature Released",
+        message: "Loan approval process has been improved.",
+        date: "2026-05-06",
+        unread: true
+      },
+      {
+        id: 2,
+        title: "System Maintenance",
+        message: "Scheduled update on May 10th from 2:00 AM to 4:00 AM.",
+        date: "2026-05-05",
+        unread: false
+      }
+    ]);
+  }, []);
+
+  const toggleNotifications = () => {
+    setShowNotifications(!showNotifications);
+  };
+  // ===========================================================
+
   const [data, setData] = useState({
     transactions: [],
     loans: [],
@@ -1590,11 +1671,34 @@ export default function Dashboard() {
           transition: "margin-left 200ms ease",
         }}
       >
-        <TopNavbar
+                <TopNavbar
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+          unreadCount={unreadCount}
+          onNotificationClick={toggleNotifications}
         />
-        <div style={{ padding: "36px" }}>{renderContent()}</div>
+               <div style={{ padding: "36px" }}>{renderContent()}</div>
+
+        {/* ==================== NOTIFICATION PANEL ==================== */}
+        {showNotifications && (
+          <>
+            {/* Backdrop */}
+            <div
+              style={{
+                position: "fixed",
+                inset: 0,
+                backgroundColor: "rgba(0, 0, 0, 0.4)",
+                zIndex: 99,
+              }}
+              onClick={() => setShowNotifications(false)}
+            />
+            {/* Panel */}
+            <NotificationPanel
+              notifications={notifications}
+              onClose={() => setShowNotifications(false)}
+            />
+          </>
+        )}
       </main>
     </div>
   );
