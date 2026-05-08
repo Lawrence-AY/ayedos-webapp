@@ -1,7 +1,7 @@
 import { useContext, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext.jsx";
-import { apiRequest } from "../lib/apiClient";
+import { resendOtp, verifyOtp } from "../services/authService.js";
 import logo from "../assets/logo-light.png";
 import DotSwarmCanvas from "../components/landing/DotTextCanvas.jsx";
 import * as React from "react";
@@ -14,11 +14,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  InputOTP,
-  InputOTPGroup,
-  InputOTPSlot,
-} from "@/components/ui/input-otp";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -28,7 +23,9 @@ export default function Register() {
   const [pendingEmail, setPendingEmail] = useState("");
   const [pendingPassword, setPendingPassword] = useState("");
   const [otpError, setOtpError] = useState(null);
+  const [otpMessage, setOtpMessage] = useState("");
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [isResendingOtp, setIsResendingOtp] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -42,13 +39,12 @@ export default function Register() {
     e.preventDefault();
     setFormError(null);
     setOtpError(null);
+    setOtpMessage("");
 
     if (!firstName.trim()) return setFormError("First name is required");
     if (!lastName.trim()) return setFormError("Last name is required");
     if (!email.trim()) return setFormError("Email is required");
     if (!phone.trim()) return setFormError("Phone number is required");
-    if (password.length < 8)
-      return setFormError("Password must be at least 8 characters");
     if (password !== confirmPassword)
       return setFormError("Passwords do not match");
 
@@ -76,8 +72,9 @@ export default function Register() {
 
   async function handleVerifyOtp() {
     setOtpError(null);
+    setOtpMessage("");
 
-    if (!otp.trim() || otp.trim().length !== 8) {
+    if (!otp.trim()) {
       setOtpError("Please enter the OTP sent to your email");
       return;
     }
@@ -85,19 +82,7 @@ export default function Register() {
     setIsVerifyingOtp(true);
 
     try {
-      const res = await apiRequest("/api/auth/verify-otp", {
-        method: "POST",
-        body: {
-          email: pendingEmail,
-          otp: otp.trim(),
-        },
-      });
-
-      if (!res.ok) {
-        throw new Error(
-          res.json?.message || `OTP verification failed (status ${res.status})`,
-        );
-      }
+      await verifyOtp({ email: pendingEmail, otp: otp.trim() });
 
       await login({ email: pendingEmail, password: pendingPassword });
 
@@ -119,6 +104,28 @@ export default function Register() {
       setOtpError(err?.message || "OTP verification failed");
     } finally {
       setIsVerifyingOtp(false);
+    }
+  }
+
+  async function handleResendOtp() {
+    setOtpError(null);
+    setOtpMessage("");
+
+    if (!pendingEmail) {
+      setOtpError("Please create your account again to request a new OTP");
+      return;
+    }
+
+    setIsResendingOtp(true);
+
+    try {
+      const response = await resendOtp(pendingEmail);
+      setOtp("");
+      setOtpMessage(response?.message || "A new OTP has been sent to your email");
+    } catch (err) {
+      setOtpError(err?.message || "Unable to resend OTP");
+    } finally {
+      setIsResendingOtp(false);
     }
   }
 
@@ -298,22 +305,20 @@ export default function Register() {
                   Enter the code sent to <strong>{pendingEmail}</strong> to
                   continue.
                 </p>
-                <InputOTP
-                  maxLength={8}
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="Enter verification code"
                   value={otp}
-                  onChange={(value) => setOtp(value)}
-                >
-                  <InputOTPGroup>
-                    <InputOTPSlot index={0} />
-                    <InputOTPSlot index={1} />
-                    <InputOTPSlot index={2} />
-                    <InputOTPSlot index={3} />
-                    <InputOTPSlot index={4} />
-                    <InputOTPSlot index={5} />
-                    <InputOTPSlot index={6} />
-                    <InputOTPSlot index={7} />
-                  </InputOTPGroup>
-                </InputOTP>
+                  onChange={(event) => setOtp(event.target.value)}
+                  style={inputStyle}
+                />
+                {otpMessage && (
+                  <div role="status" style={successStyle}>
+                    {otpMessage}
+                  </div>
+                )}
                 {(otpError || authError) && (
                   <div role="alert" style={errorStyle}>
                     {otpError || authError}
@@ -324,8 +329,16 @@ export default function Register() {
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 <Button
                   type="button"
+                  variant="secondary"
+                  onClick={handleResendOtp}
+                  disabled={isResendingOtp || isVerifyingOtp}
+                >
+                  {isResendingOtp ? "Sending..." : "Resend OTP"}
+                </Button>
+                <Button
+                  type="button"
                   onClick={handleVerifyOtp}
-                  disabled={isVerifyingOtp}
+                  disabled={isVerifyingOtp || isResendingOtp}
                 >
                   {isVerifyingOtp ? "Verifying..." : "Verify OTP"}
                 </Button>
@@ -334,9 +347,9 @@ export default function Register() {
           </AlertDialog>
           <div style={mutedTextStyle}>
             Already have an account?{" "}
-            <a href="/login" style={linkStyle}>
+            <Link to="/login" style={linkStyle}>
               Sign in
-            </a>
+            </Link>
           </div>
         </div>
       </div>
@@ -375,6 +388,17 @@ const errorStyle = {
   background: "#fef2f2",
   border: "1px solid #fee2e2",
   color: "#b91c1c",
+  fontWeight: 500,
+  fontSize: 14,
+};
+
+const successStyle = {
+  marginBottom: 20,
+  padding: 14,
+  borderRadius: 12,
+  background: "#f0fdf4",
+  border: "1px solid #bbf7d0",
+  color: "#166534",
   fontWeight: 500,
   fontSize: 14,
 };

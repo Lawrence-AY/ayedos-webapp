@@ -1,30 +1,44 @@
 import { useContext, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext.jsx";
+import { getDashboardPath } from "../utils/dashboardRoutes.js";
 import logo from "../assets/logo-light.png";
 import DotSwarmCanvas from "../components/landing/DotTextCanvas.jsx";
 import { Eye, EyeOff } from "lucide-react";
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login, authError, isLoading } = useContext(AuthContext);
+  const { login, completeLoginOtp, authError, isLoading } = useContext(AuthContext);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [formError, setFormError] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [otpRequired, setOtpRequired] = useState(false);
 
   async function onSubmit(e) {
     e.preventDefault();
     setFormError(null);
 
     if (!email.trim()) return setFormError("Email is required");
-    if (password.length < 6)
-      return setFormError("Password must be at least 6 characters");
+    if (!password) return setFormError("Password is required");
 
     try {
-      await login({ email: email.trim(), password });
-      navigate("/dashboard", { replace: true });
+      if (otpRequired) {
+        if (!otp.trim()) return setFormError("OTP is required");
+        const verifiedUser = await completeLoginOtp({ email: email.trim(), otp: otp.trim() });
+        navigate(getDashboardPath(verifiedUser?.role), { replace: true });
+        return;
+      }
+
+      const loggedInUser = await login({ email: email.trim(), password });
+      if (loggedInUser?.requiresOtp) {
+        setOtpRequired(true);
+        setFormError("Enter the OTP sent to your email to continue.");
+        return;
+      }
+      navigate(getDashboardPath(loggedInUser?.role), { replace: true });
     } catch (err) {
       setFormError(err?.message || "Login failed");
     }
@@ -127,6 +141,7 @@ export default function Login() {
               />
             </div>
 
+            {!otpRequired ? (
             <div style={{ marginBottom: 28 }}>
               <label htmlFor="password" style={labelStyle}>
                 Password
@@ -179,6 +194,24 @@ export default function Login() {
                 </button>
               </div>
             </div>
+            ) : (
+              <div style={{ marginBottom: 28 }}>
+                <label htmlFor="otp" style={labelStyle}>
+                  Email OTP
+                </label>
+                <input
+                  id="otp"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value)}
+                  style={inputStyle}
+                  placeholder="Enter verification code"
+                  required
+                />
+              </div>
+            )}
 
             {(formError || authError) && (
               <div role="alert" style={errorStyle}>
@@ -195,20 +228,20 @@ export default function Login() {
                 opacity: isLoading ? 0.7 : 1,
               }}
             >
-              {isLoading ? "Signing in..." : "Sign in"}
+              {isLoading ? "Signing in..." : otpRequired ? "Verify OTP" : "Sign in"}
             </button>
 
             <div style={mutedTextStyle}>
               Don't have an account?{" "}
-              <a href="/register" style={linkStyle}>
+              <Link to="/register" style={linkStyle}>
                 Create account
-              </a>
+              </Link>
             </div>
 
             <div style={{ marginTop: 20, textAlign: "center" }}>
-              <a href="/forgot-password" style={forgotPasswordStyle}>
+              <Link to="/forgot-password" style={forgotPasswordStyle}>
                 Forgot your password?
-              </a>
+              </Link>
             </div>
           </form>
         </div>

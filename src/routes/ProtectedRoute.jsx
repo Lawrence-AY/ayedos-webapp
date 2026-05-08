@@ -2,7 +2,7 @@ import { Navigate } from 'react-router-dom'
 import { useContext } from 'react'
 import { AuthContext } from '../context/AuthContext.jsx'
 
-export default function ProtectedRoute({ element }) {
+export default function ProtectedRoute({ element, allowedRoles }) {
   const { user, accessToken, isLoading } = useContext(AuthContext)
 
   if (isLoading) {
@@ -37,6 +37,10 @@ export default function ProtectedRoute({ element }) {
 
   if (!accessToken || !user) {
     return <Navigate to="/login" replace />
+  }
+
+  if (allowedRoles?.length && !allowedRoles.includes(user.role)) {
+    return <Navigate to="/dashboard" replace />
   }
 
   return element

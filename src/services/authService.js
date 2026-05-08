@@ -3,13 +3,57 @@ import { apiRequest, unwrapEnvelopeData } from '../lib/apiClient'
 
 const AUTH_ENDPOINTS = {
   LOGIN: '/api/auth/login',
+  VERIFY_LOGIN_OTP: '/api/auth/login/verify-otp',
   REGISTER: '/api/auth/register',
+  VERIFY_OTP: '/api/auth/verify-otp',
+  RESEND_OTP: '/api/auth/resend-otp',
   LOGOUT: '/api/auth/logout',
   SET_PASSWORD: '/api/auth/set-password',
   REFRESH: '/api/auth/refresh',
   ME: '/api/users/me',
   FORGOT_PASSWORD: '/api/auth/forgot-password',
   RESET_PASSWORD: '/api/auth/reset-password',
+  CHANGE_PASSWORD: '/api/auth/change-password',
+}
+
+/**
+ * Verify an email OTP. Validation, expiry, and account verification live on the backend.
+ */
+export async function verifyOtp({ email, otp }) {
+  const res = await apiRequest(AUTH_ENDPOINTS.VERIFY_OTP, {
+    method: 'POST',
+    body: { email, otp },
+  })
+
+  if (!res.ok) {
+    const error = res.json?.message || `OTP verification failed (status ${res.status})`
+    throw new Error(error)
+  }
+
+  return {
+    message: res.json?.message || 'Email verified successfully',
+    data: unwrapEnvelopeData(res.json),
+  }
+}
+
+/**
+ * Ask the backend to generate and send a fresh OTP.
+ */
+export async function resendOtp(email) {
+  const res = await apiRequest(AUTH_ENDPOINTS.RESEND_OTP, {
+    method: 'POST',
+    body: { email },
+  })
+
+  if (!res.ok) {
+    const error = res.json?.message || `OTP resend failed (status ${res.status})`
+    throw new Error(error)
+  }
+
+  return {
+    message: res.json?.message || 'OTP resent successfully',
+    data: unwrapEnvelopeData(res.json),
+  }
 }
 
 /**
@@ -157,6 +201,41 @@ export async function resetPassword({ token, newPassword }) {
 
   return {
     message: res.json?.message || 'Password reset successful',
+    data: unwrapEnvelopeData(res.json),
+  }
+}
+
+export async function verifyLoginOtp({ email, otp }) {
+  const res = await apiRequest(AUTH_ENDPOINTS.VERIFY_LOGIN_OTP, {
+    method: 'POST',
+    body: { email, otp },
+  })
+
+  if (!res.ok) {
+    const error = res.json?.message || `Login OTP verification failed (status ${res.status})`
+    throw new Error(error)
+  }
+
+  return unwrapEnvelopeData(res.json)
+}
+
+/**
+ * Change password while authenticated.
+ */
+export async function changePassword({ currentPassword, newPassword }, accessToken) {
+  const res = await apiRequest(AUTH_ENDPOINTS.CHANGE_PASSWORD, {
+    method: 'POST',
+    accessToken,
+    body: { currentPassword, newPassword },
+  })
+
+  if (!res.ok) {
+    const error = res.json?.message || `Change password failed (status ${res.status})`
+    throw new Error(error)
+  }
+
+  return {
+    message: res.json?.message || 'Password changed successfully',
     data: unwrapEnvelopeData(res.json),
   }
 }

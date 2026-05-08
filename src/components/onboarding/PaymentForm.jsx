@@ -102,9 +102,11 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
 
   pollingInterval.current = setInterval(async () => {
     try {
-      const res = await fetch(`/api/stk-status?checkoutRequestId=${checkoutId}`);
-      const result = await res.json();
-      const { data } = result;
+      const result = await apiRequest(`/api/stk-status?checkoutRequestId=${encodeURIComponent(checkoutId)}`, {
+        method: 'GET',
+        accessToken,
+      });
+      const data = unwrapEnvelopeData(result.json);
 
       // Ensure data exists and status is paid
       if (data && data.status === 'paid') {

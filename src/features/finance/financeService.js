@@ -30,6 +30,15 @@ export async function voidTransaction(id, reason, accessToken) {
   return unwrapEnvelopeData(res.json)
 }
 
+export async function verifyTransaction(id, accessToken) {
+  const res = await apiRequest(`/api/finance/transactions/${id}/verify`, {
+    method: 'POST',
+    accessToken,
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to verify transaction')
+  return unwrapEnvelopeData(res.json)
+}
+
 // Loans
 export async function getAllLoans(accessToken, filters = {}) {
   const queryParams = new URLSearchParams(filters).toString()

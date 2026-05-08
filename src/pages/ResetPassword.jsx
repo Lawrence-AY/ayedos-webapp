@@ -4,14 +4,6 @@ import logo from '../assets/logo-light.png'
 import DotSwarmCanvas from '../components/landing/DotTextCanvas.jsx'
 import { resetPassword as resetPasswordApi } from '../services/authService'
 
-const PASSWORD_RULES = [
-  'At least 8 characters',
-  'One uppercase letter',
-  'One lowercase letter',
-  'One number',
-  'One special character',
-]
-
 export default function ResetPassword() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -117,10 +109,6 @@ export default function ResetPassword() {
               placeholder="Repeat your new password"
               required
             />
-          </div>
-
-          <div style={helperStyle}>
-            {PASSWORD_RULES.join(' • ')}
           </div>
 
           {error && (
@@ -247,13 +235,6 @@ const inputStyle = {
   background: '#f8fafc',
   color: '#1e293b',
   boxSizing: 'border-box',
-}
-
-const helperStyle = {
-  marginBottom: 20,
-  color: '#64748b',
-  fontSize: 13,
-  lineHeight: 1.6,
 }
 
 const buttonStyle = {

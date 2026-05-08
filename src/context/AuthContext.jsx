@@ -9,6 +9,8 @@ const STORAGE_KEYS = {
   user: 'ayedos_user',
 }
 
+const INACTIVITY_TIMEOUT_MS = 2 * 60 * 1000
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [accessToken, setAccessToken] = useState(null)
@@ -105,6 +107,9 @@ export function AuthProvider({ children }) {
       }
 
       const data = unwrapEnvelopeData(res.json) // expected: { user, tokens }
+      if (data?.requiresOtp) {
+        return data
+      }
       const nextUser = data?.user ?? null
       const tokens = data?.tokens ?? data?.token ?? null
 
@@ -185,6 +190,39 @@ export function AuthProvider({ children }) {
     persistAuth({ user: null, accessToken: null, refreshToken: null })
   }, [accessToken, persistAuth, refreshToken])
 
+  const completeLoginOtp = useCallback(
+    async ({ email, otp }) => {
+      setAuthError(null)
+      const res = await apiRequest('/api/auth/login/verify-otp', {
+        method: 'POST',
+        body: { email, otp },
+      })
+
+      if (!res.ok) {
+        const msg = res.json?.message || `OTP verification failed (status ${res.status})`
+        throw new Error(msg)
+      }
+
+      const data = unwrapEnvelopeData(res.json)
+      const nextUser = data?.user ?? null
+      const tokens = data?.tokens ?? null
+      const nextAccessToken = tokens?.accessToken ?? null
+      const nextRefreshToken = tokens?.refreshToken ?? null
+
+      if (!nextUser || !nextAccessToken || !nextRefreshToken) {
+        throw new Error('OTP verification succeeded but response shape is unexpected')
+      }
+
+      setUser(nextUser)
+      setAccessToken(nextAccessToken)
+      setRefreshToken(nextRefreshToken)
+      persistAuth({ user: nextUser, accessToken: nextAccessToken, refreshToken: nextRefreshToken })
+
+      return nextUser
+    },
+    [persistAuth]
+  )
+
   useEffect(() => {
     let cancelled = false
 
@@ -227,6 +265,27 @@ export function AuthProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  useEffect(() => {
+    if (!accessToken) return undefined
+
+    let timeoutId
+    const resetTimer = () => {
+      window.clearTimeout(timeoutId)
+      timeoutId = window.setTimeout(() => {
+        logout()
+      }, INACTIVITY_TIMEOUT_MS)
+    }
+
+    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll']
+    events.forEach((eventName) => window.addEventListener(eventName, resetTimer, { passive: true }))
+    resetTimer()
+
+    return () => {
+      window.clearTimeout(timeoutId)
+      events.forEach((eventName) => window.removeEventListener(eventName, resetTimer))
+    }
+  }, [accessToken, logout])
+
   const value = useMemo(
     () => ({
       user,
@@ -235,13 +294,14 @@ export function AuthProvider({ children }) {
       isLoading,
       authError,
       login,
+      completeLoginOtp,
       register,
       refresh,
       logout,
       loadCurrentUser,
       apiBaseUrl: getApiBaseUrl(),
     }),
-    [accessToken, authError, isLoading, login, loadCurrentUser, logout, refresh, refreshToken, register, user]
+    [accessToken, authError, completeLoginOtp, isLoading, login, loadCurrentUser, logout, refresh, refreshToken, register, user]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -14,12 +14,16 @@ export function getApiBaseUrl() {
 export function buildApiUrl(path) {
   const baseUrl = getApiBaseUrl();
   const normalizedPath = String(path).startsWith('/') ? path : `/${path}`;
-  return `${baseUrl}${normalizedPath}`;
-}
 
-function toJsonBody(body) {
-  if (body === undefined || body === null) return undefined;
-  return JSON.stringify(body);
+  if (baseUrl === DEFAULT_API_PATH_PREFIX && normalizedPath.startsWith(DEFAULT_API_PATH_PREFIX)) {
+    return normalizedPath;
+  }
+
+  if (baseUrl.endsWith(DEFAULT_API_PATH_PREFIX) && normalizedPath.startsWith(DEFAULT_API_PATH_PREFIX)) {
+    return `${baseUrl}${normalizedPath.slice(DEFAULT_API_PATH_PREFIX.length)}`;
+  }
+
+  return `${baseUrl}${normalizedPath}`;
 }
 
 /**
@@ -53,7 +57,20 @@ export async function apiRequest(path, { method = 'GET', body, accessToken, sign
     fetchOptions.body = JSON.stringify(body);
   }
 
-  const response = await fetch(url, fetchOptions);
+  let response;
+
+  try {
+    response = await fetch(url, fetchOptions);
+  } catch (error) {
+    const normalizedPath = String(path).startsWith('/') ? path : `/${path}`;
+
+    // During local development, fall back to the Vite proxy route if an absolute API host is unavailable.
+    if (url !== normalizedPath && normalizedPath.startsWith(DEFAULT_API_PATH_PREFIX)) {
+      response = await fetch(normalizedPath, fetchOptions);
+    } else {
+      throw error;
+    }
+  }
   const text = await response.text().catch(() => '');
   let json = null;
 

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { setPassword as setPasswordApi } from '../services/authService'
 
 export default function SetPassword() {
@@ -19,11 +19,6 @@ export default function SetPassword() {
 
     if (!token) {
       setError('Invalid or missing token. Please request a new password reset link.')
-      return
-    }
-
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters long')
       return
     }
 
@@ -72,8 +67,8 @@ export default function SetPassword() {
           <p style={{ color: 'var(--color-muted)', marginBottom: 24 }}>
             The password reset link is invalid or has expired.
           </p>
-          <a
-            href="/login"
+          <Link
+            to="/login"
             style={{
               display: 'inline-block',
               padding: '12px 24px',
@@ -85,7 +80,7 @@ export default function SetPassword() {
             }}
           >
             Back to Login
-          </a>
+          </Link>
         </div>
       </div>
     )
@@ -205,7 +200,7 @@ export default function SetPassword() {
           marginBottom: 32,
           fontSize: 15,
         }}>
-          Your password must be at least 8 characters long.
+          Create a password for your approved membership account.
         </p>
 
         <form onSubmit={onSubmit}>
