@@ -1,0 +1,31 @@
+/* fonts.css*/
+@font-face {
+  font-family: "Pirulen";
+  src: url("../assets/fonts/Pirulen/pirulen-rg.otf") format("opentype");
+  font-weight: normal;
+  font-style: normal;
+}
+
+/* Gotham Regular */
+@font-face {
+  font-family: "Gotham Regular";
+  src: url("./assets/fonts/Gotham/gotham_book.otf") format("opentype");
+  font-weight: 100;
+  font-style: normal;
+} 
+
+/* GOTHAM MEDIUM */
+@font-face {
+  font-family: "Gotham Medium";
+  src: url("./assets/fonts/Gotham/gotham_medium.otf") format("opentype");
+  font-weight: 500;
+  font-style: normal;
+}
+
+/* GOTHAM BOLD */
+@font-face {
+  font-family: "Gotham Bold";
+  src: url("./assets/fonts/Gotham/gotham_black.otf") format("opentype");
+  font-weight: 700;
+  font-style: normal;
+}
