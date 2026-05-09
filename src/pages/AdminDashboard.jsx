@@ -116,10 +116,10 @@ function AdminHome({ stats, users, applications, onReviewApplication }) {
   );
 }
 
-function MembersPage({ users, onToggleStatus }) {
+function MembersPage({ users, onToggleStatus, globalSearch = "" }) {
   const [search, setSearch] = useState("");
   const members = users.filter((user) => String(user.role || "MEMBER").toUpperCase() === "MEMBER");
-  const rows = filterRows(members, search, ["memberNumber", "name", "email", "phone", "nationalId"]);
+  const rows = filterRows(filterRows(members, globalSearch, ["memberNumber", "name", "email", "phone", "nationalId"]), search, ["memberNumber", "name", "email", "phone", "nationalId"]);
 
   return (
     <div className="space-y-6">
@@ -156,9 +156,9 @@ function MembersPage({ users, onToggleStatus }) {
   );
 }
 
-function ApplicationsPage({ applications, onReviewApplication }) {
+function ApplicationsPage({ applications, onReviewApplication, globalSearch = "" }) {
   const [search, setSearch] = useState("");
-  const rows = filterRows(applications, search, ["applicantName", "applicantEmail", "status"]);
+  const rows = filterRows(filterRows(applications, globalSearch, ["applicantName", "applicantEmail", "status", "id"]), search, ["applicantName", "applicantEmail", "status", "id"]);
 
   return (
     <div className="space-y-6">
@@ -201,9 +201,9 @@ function NotificationsPage() {
   );
 }
 
-function AdminLoansPage({ loans, onApproveLoan, onRejectLoan, onDisburseLoan }) {
+function AdminLoansPage({ loans, onApproveLoan, onRejectLoan, onDisburseLoan, globalSearch = "" }) {
   const [search, setSearch] = useState("");
-  const rows = filterRows(loans, search, ["id", "type", "status", "memberName"]);
+  const rows = filterRows(filterRows(loans, globalSearch, ["id", "type", "status", "memberName", "memberId"]), search, ["id", "type", "status", "memberName", "memberId"]);
 
   return (
     <div className="space-y-6">
@@ -236,9 +236,9 @@ function AdminLoansPage({ loans, onApproveLoan, onRejectLoan, onDisburseLoan }) 
   );
 }
 
-function AdminTransactionsPage({ transactions, onVerifyTransaction }) {
+function AdminTransactionsPage({ transactions, onVerifyTransaction, globalSearch = "" }) {
   const [search, setSearch] = useState("");
-  const rows = filterRows(transactions, search, ["id", "reference", "type", "status", "description"]);
+  const rows = filterRows(filterRows(transactions, globalSearch, ["id", "reference", "type", "status", "description"]), search, ["id", "reference", "type", "status", "description"]);
 
   return (
     <div className="space-y-6">
@@ -264,9 +264,9 @@ function AdminTransactionsPage({ transactions, onVerifyTransaction }) {
   );
 }
 
-function AdminSimpleDataPage({ eyebrow, title, description, rows, columns, emptyTitle, emptyDescription }) {
+function AdminSimpleDataPage({ eyebrow, title, description, rows, columns, emptyTitle, emptyDescription, globalSearch = "" }) {
   const [search, setSearch] = useState("");
-  const filteredRows = filterRows(rows, search, ["id", "memberName", "status", "reason"]);
+  const filteredRows = filterRows(filterRows(rows, globalSearch, ["id", "memberId", "memberName", "status", "reason"]), search, ["id", "memberId", "memberName", "status", "reason"]);
 
   return (
     <div className="space-y-6">
@@ -302,6 +302,7 @@ export default function AdminDashboard() {
   const dashboardBasePath = getDashboardPath("ADMIN");
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [globalSearch, setGlobalSearch] = useState("");
   const [feedback, setFeedback] = useState(null);
   const [stats, setStats] = useState({});
   const [data, setData] = useState({
@@ -401,12 +402,12 @@ export default function AdminDashboard() {
   const content = (() => {
     if (loading) return <SkeletonDashboard />;
     if (isHome) return <AdminHome stats={stats} users={data.users} applications={data.applications} onReviewApplication={handleReviewApplication} />;
-    if (path.includes("/members")) return <MembersPage users={data.users} onToggleStatus={handleToggleStatus} />;
-    if (path.includes("/applications")) return <ApplicationsPage applications={data.applications} onReviewApplication={handleReviewApplication} />;
+    if (path.includes("/members")) return <MembersPage users={data.users} onToggleStatus={handleToggleStatus} globalSearch={globalSearch} />;
+    if (path.includes("/applications")) return <ApplicationsPage applications={data.applications} onReviewApplication={handleReviewApplication} globalSearch={globalSearch} />;
     if (path.includes("/notifications")) return <NotificationsPage />;
     if (path.includes("/security")) return <AdminSecurityPage />;
-    if (path.includes("/loans")) return <AdminLoansPage loans={data.loans} onApproveLoan={handleApproveLoan} onRejectLoan={handleRejectLoan} onDisburseLoan={handleDisburseLoan} />;
-    if (path.includes("/transactions")) return <AdminTransactionsPage transactions={data.transactions} onVerifyTransaction={handleVerifyTransaction} />;
+    if (path.includes("/loans")) return <AdminLoansPage loans={data.loans} onApproveLoan={handleApproveLoan} onRejectLoan={handleRejectLoan} onDisburseLoan={handleDisburseLoan} globalSearch={globalSearch} />;
+    if (path.includes("/transactions")) return <AdminTransactionsPage transactions={data.transactions} onVerifyTransaction={handleVerifyTransaction} globalSearch={globalSearch} />;
     if (path.includes("/savings") || path.includes("/shares")) {
       return <AdminSimpleDataPage eyebrow="Accounts" title={path.includes("/savings") ? "Savings accounts" : "Share accounts"} description="Contribution records available through finance account services." rows={data.shares} columns={[
         { key: "id", label: "Record ID" },
@@ -414,7 +415,7 @@ export default function AdminDashboard() {
         { key: "shares", label: "Shares", render: (value) => Number(value || 0).toLocaleString() },
         { key: "totalInvested", label: "Invested", render: formatCurrency },
         { key: "purchaseDate", label: "Date", render: formatDate },
-      ]} emptyTitle="No account records" emptyDescription="Savings and share records will appear here." />;
+      ]} emptyTitle="No account records" emptyDescription="Savings and share records will appear here." globalSearch={globalSearch} />;
     }
     if (path.includes("/deductions")) {
       return <AdminSimpleDataPage eyebrow="Salary deductions" title="Salary deductions" description="Payroll deduction records and verification history." rows={data.deductions} columns={[
@@ -423,7 +424,7 @@ export default function AdminDashboard() {
         { key: "amount", label: "Amount", render: formatCurrency },
         { key: "reason", label: "Reason" },
         { key: "date", label: "Date", render: formatDate },
-      ]} emptyTitle="No deductions" emptyDescription="Salary deduction records will appear here." />;
+      ]} emptyTitle="No deductions" emptyDescription="Salary deduction records will appear here." globalSearch={globalSearch} />;
     }
     if (path.includes("/dividends")) {
       return <AdminSimpleDataPage eyebrow="Dividends" title="Dividend management" description="Configure rates, calculate payouts, approve dividends, and generate distribution reports." rows={data.dividends} columns={[
@@ -433,7 +434,7 @@ export default function AdminDashboard() {
         { key: "sharePercentage", label: "Rate", render: (value) => (value ? `${value}%` : "-") },
         { key: "status", label: "Status", render: (value) => <StatusBadge status={value || "Declared"} /> },
         { key: "declaredAt", label: "Declared", render: formatDate },
-      ]} emptyTitle="No dividends" emptyDescription="Dividend records will appear here." />;
+      ]} emptyTitle="No dividends" emptyDescription="Dividend records will appear here." globalSearch={globalSearch} />;
     }
     if (path.includes("/reports")) {
       return <div className="space-y-6"><SectionHeader eyebrow="Reports" title="Reports & analytics" description="Financial and operational analytics generated from live system data." /><div className="grid gap-5 xl:grid-cols-2"><AnalyticsPanel title="Applications" data={getMonthlySeries(data.applications, () => 1)} type="bar" /><AnalyticsPanel title="Members" data={getMonthlySeries(data.users, () => 1)} color="#0369a1" /></div></div>;
@@ -461,6 +462,8 @@ export default function AdminDashboard() {
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen((current) => !current)}
           unreadCount={0}
+          searchValue={globalSearch}
+          onSearchChange={setGlobalSearch}
         />
         <div className="mx-auto w-full max-w-[1500px] px-4 py-5 sm:px-6 lg:px-8">
           {feedback ? (

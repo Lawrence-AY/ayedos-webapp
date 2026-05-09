@@ -1,10 +1,9 @@
 import { useContext, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext.jsx";
-import { resendOtp, verifyOtp } from "../services/authService.js";
+import { resendOtp } from "../services/authService.js";
 import logo from "../assets/logo-light.png";
 import DotSwarmCanvas from "../components/landing/DotTextCanvas.jsx";
-import * as React from "react";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -17,11 +16,10 @@ import { Button } from "@/components/ui/button";
 
 export default function Register() {
   const navigate = useNavigate();
-  const { register, login, authError, isLoading } = useContext(AuthContext);
+  const { register, completeRegistrationOtp, authError, isLoading } = useContext(AuthContext);
   const [otpDialogOpen, setOtpDialogOpen] = useState(false);
   const [otp, setOtp] = useState("");
   const [pendingEmail, setPendingEmail] = useState("");
-  const [pendingPassword, setPendingPassword] = useState("");
   const [otpError, setOtpError] = useState(null);
   const [otpMessage, setOtpMessage] = useState("");
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
@@ -61,7 +59,6 @@ export default function Register() {
       });
 
       setPendingEmail(email.trim());
-      setPendingPassword(password);
       setOtpDialogOpen(true);
     } catch (err) {
       setFormError(err?.message || "Registration failed");
@@ -82,9 +79,7 @@ export default function Register() {
     setIsVerifyingOtp(true);
 
     try {
-      await verifyOtp({ email: pendingEmail, otp: otp.trim() });
-
-      await login({ email: pendingEmail, password: pendingPassword });
+      await completeRegistrationOtp({ email: pendingEmail, otp: otp.trim() });
 
       // Store registration data in sessionStorage for onboarding pre-population
       const registrationData = {

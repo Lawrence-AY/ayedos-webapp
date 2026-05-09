@@ -80,7 +80,7 @@ function getFinanceStats(data) {
   };
 }
 
-function FinanceHome({ data, onVerifyTransaction }) {
+function FinanceHome({ data, onVerifyTransaction, globalSearch = "" }) {
   const stats = getFinanceStats(data);
   const transactionSeries = getMonthlySeries(data.transactions);
   const repaymentSeries = getMonthlySeries(
@@ -120,14 +120,14 @@ function FinanceHome({ data, onVerifyTransaction }) {
         <AnalyticsPanel title="Loan repayment trends" description="Monthly repayment collections" data={repaymentSeries} color="#0369a1" />
       </div>
 
-      <TransactionsPage transactions={data.transactions} embedded onVerifyTransaction={onVerifyTransaction} />
+      <TransactionsPage transactions={data.transactions} embedded onVerifyTransaction={onVerifyTransaction} globalSearch={globalSearch} />
     </div>
   );
 }
 
-function TransactionsPage({ transactions, embedded = false, onVerifyTransaction, onVoidTransaction }) {
+function TransactionsPage({ transactions, embedded = false, onVerifyTransaction, onVoidTransaction, globalSearch = "" }) {
   const [search, setSearch] = useState("");
-  const rows = filterRows(transactions, search, ["id", "type", "description", "status", "reference"]);
+  const rows = filterRows(filterRows(transactions, globalSearch, ["id", "type", "description", "status", "reference"]), search, ["id", "type", "description", "status", "reference"]);
 
   const table = (
     <DataTable
@@ -171,7 +171,7 @@ function TransactionsPage({ transactions, embedded = false, onVerifyTransaction,
   );
 }
 
-function LoansPage({ loans, mode = "all", onApproveLoan, onRejectLoan, onDisburseLoan }) {
+function LoansPage({ loans, mode = "all", onApproveLoan, onRejectLoan, onDisburseLoan, globalSearch = "" }) {
   const [search, setSearch] = useState("");
   const filteredByMode = loans.filter((loan) => {
     const status = String(loan.status || "").toUpperCase();
@@ -179,7 +179,7 @@ function LoansPage({ loans, mode = "all", onApproveLoan, onRejectLoan, onDisburs
     if (mode === "repayments") return ["ACTIVE", "OVERDUE", "DISBURSED"].includes(status);
     return true;
   });
-  const rows = filterRows(filteredByMode, search, ["id", "type", "status", "memberName", "loanType"]);
+  const rows = filterRows(filterRows(filteredByMode, globalSearch, ["id", "type", "status", "memberName", "loanType", "memberId"]), search, ["id", "type", "status", "memberName", "loanType", "memberId"]);
 
   return (
     <div className="space-y-6">
@@ -223,9 +223,9 @@ function LoansPage({ loans, mode = "all", onApproveLoan, onRejectLoan, onDisburs
   );
 }
 
-function SavingsPage({ shares }) {
+function SavingsPage({ shares, globalSearch = "" }) {
   const [search, setSearch] = useState("");
-  const rows = filterRows(shares, search, ["id", "memberName", "status"]);
+  const rows = filterRows(filterRows(shares, globalSearch, ["id", "memberName", "memberId", "status"]), search, ["id", "memberName", "memberId", "status"]);
 
   return (
     <div className="space-y-6">
@@ -255,9 +255,9 @@ function SavingsPage({ shares }) {
   );
 }
 
-function DeductionsPage({ deductions }) {
+function DeductionsPage({ deductions, globalSearch = "" }) {
   const [search, setSearch] = useState("");
-  const rows = filterRows(deductions, search, ["id", "memberName", "reason", "status"]);
+  const rows = filterRows(filterRows(deductions, globalSearch, ["id", "memberName", "memberId", "reason", "status"]), search, ["id", "memberName", "memberId", "reason", "status"]);
 
   return (
     <div className="space-y-6">
@@ -287,9 +287,9 @@ function DeductionsPage({ deductions }) {
   );
 }
 
-function DividendsPage({ dividends }) {
+function DividendsPage({ dividends, globalSearch = "" }) {
   const [search, setSearch] = useState("");
-  const rows = filterRows(dividends, search, ["id", "status"]);
+  const rows = filterRows(filterRows(dividends, globalSearch, ["id", "memberId", "status"]), search, ["id", "memberId", "status"]);
 
   return (
     <div className="space-y-6">
@@ -349,6 +349,7 @@ export default function FinanceDashboard() {
   const dashboardBasePath = getDashboardPath("FINANCE");
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [globalSearch, setGlobalSearch] = useState("");
   const [feedback, setFeedback] = useState(null);
   const [data, setData] = useState({
     transactions: [],
@@ -429,13 +430,13 @@ export default function FinanceDashboard() {
 
   const content = (() => {
     if (loading) return <SkeletonDashboard />;
-    if (isHome) return <FinanceHome data={data} onVerifyTransaction={handleVerifyTransaction} />;
-    if (path.includes("/transactions")) return <TransactionsPage transactions={data.transactions} onVerifyTransaction={handleVerifyTransaction} onVoidTransaction={handleVoidTransaction} />;
-    if (path.includes("/loan-disbursements") || path.includes("/loans")) return <LoansPage loans={data.loans} mode="disbursements" onApproveLoan={handleApproveLoan} onRejectLoan={handleRejectLoan} onDisburseLoan={handleDisburseLoan} />;
-    if (path.includes("/loan-repayments")) return <LoansPage loans={data.loans} mode="repayments" />;
-    if (path.includes("/savings") || path.includes("/shares")) return <SavingsPage shares={data.shares} />;
-    if (path.includes("/deductions")) return <DeductionsPage deductions={data.deductions} />;
-    if (path.includes("/dividends")) return <DividendsPage dividends={data.dividends} />;
+    if (isHome) return <FinanceHome data={data} onVerifyTransaction={handleVerifyTransaction} globalSearch={globalSearch} />;
+    if (path.includes("/transactions")) return <TransactionsPage transactions={data.transactions} onVerifyTransaction={handleVerifyTransaction} onVoidTransaction={handleVoidTransaction} globalSearch={globalSearch} />;
+    if (path.includes("/loan-disbursements") || path.includes("/loans")) return <LoansPage loans={data.loans} mode="disbursements" onApproveLoan={handleApproveLoan} onRejectLoan={handleRejectLoan} onDisburseLoan={handleDisburseLoan} globalSearch={globalSearch} />;
+    if (path.includes("/loan-repayments")) return <LoansPage loans={data.loans} mode="repayments" globalSearch={globalSearch} />;
+    if (path.includes("/savings") || path.includes("/shares")) return <SavingsPage shares={data.shares} globalSearch={globalSearch} />;
+    if (path.includes("/deductions")) return <DeductionsPage deductions={data.deductions} globalSearch={globalSearch} />;
+    if (path.includes("/dividends")) return <DividendsPage dividends={data.dividends} globalSearch={globalSearch} />;
     if (path.includes("/reports")) return <ReportsPage data={data} />;
     if (path.includes("/member-profiles")) {
       return <RoutePlaceholder eyebrow="Member financial profiles" title="Member financial profiles" description="View savings history, share contributions, loan repayment history, salary deductions, and dividend history by member." capabilities={["Savings history", "Share contributions", "Loan repayments", "Salary deductions", "Dividend history"]} />;
@@ -457,6 +458,8 @@ export default function FinanceDashboard() {
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen((current) => !current)}
           unreadCount={0}
+          searchValue={globalSearch}
+          onSearchChange={setGlobalSearch}
         />
         <div className="mx-auto w-full max-w-[1500px] px-4 py-5 sm:px-6 lg:px-8">
           {feedback ? (

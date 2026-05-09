@@ -26,6 +26,22 @@ export function buildApiUrl(path) {
   return `${baseUrl}${normalizedPath}`;
 }
 
+function getOrCreateDeviceId() {
+  const key = 'ayedos_deviceId';
+  let deviceId = localStorage.getItem(key);
+  if (!deviceId) {
+    deviceId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    localStorage.setItem(key, deviceId);
+  }
+  return deviceId;
+}
+
+function getDeviceName() {
+  const platform = navigator.userAgentData?.platform || navigator.platform || 'Unknown platform';
+  const browser = navigator.userAgentData?.brands?.[0]?.brand || navigator.userAgent.split(' ')[0] || 'Browser';
+  return `${browser} on ${platform}`;
+}
+
 /**
  * Generic API request helper
  * @param {string} path - API endpoint path (e.g. '/api/applications')
@@ -36,15 +52,22 @@ export function buildApiUrl(path) {
  * @param {AbortSignal} options.signal - AbortSignal for request cancellation
  * @returns {Promise<{ok: boolean, status: number, json: any}>}
  */
-export async function apiRequest(path, { method = 'GET', body, accessToken, signal } = {}) {
+export async function apiRequest(path, { method = 'GET', body, accessToken, sessionId, signal } = {}) {
   const url = buildApiUrl(path);
 
   const headers = {
     'Content-Type': 'application/json',
+    'X-Device-Id': getOrCreateDeviceId(),
+    'X-Device-Name': getDeviceName(),
   };
 
   if (accessToken) {
     headers.Authorization = `Bearer ${accessToken}`;
+  }
+
+  const storedSessionId = sessionId || localStorage.getItem('ayedos_sessionId');
+  if (storedSessionId) {
+    headers['X-Session-Id'] = storedSessionId;
   }
 
   const fetchOptions = {

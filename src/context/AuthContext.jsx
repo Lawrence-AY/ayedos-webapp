@@ -6,6 +6,7 @@ const AuthContext = createContext(null)
 const STORAGE_KEYS = {
   accessToken: 'ayedos_accessToken',
   refreshToken: 'ayedos_refreshToken',
+  sessionId: 'ayedos_sessionId',
   user: 'ayedos_user',
 }
 
@@ -15,6 +16,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [accessToken, setAccessToken] = useState(null)
   const [refreshToken, setRefreshToken] = useState(null)
+  const [sessionId, setSessionId] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [authError, setAuthError] = useState(null)
 
@@ -22,14 +24,17 @@ export function AuthProvider({ children }) {
     try {
       const storedAccessToken = localStorage.getItem(STORAGE_KEYS.accessToken)
       const storedRefreshToken = localStorage.getItem(STORAGE_KEYS.refreshToken)
+      const storedSessionId = localStorage.getItem(STORAGE_KEYS.sessionId)
       const storedUser = localStorage.getItem(STORAGE_KEYS.user)
 
       setAccessToken(storedAccessToken || null)
       setRefreshToken(storedRefreshToken || null)
+      setSessionId(storedSessionId || null)
       setUser(storedUser ? JSON.parse(storedUser) : null)
     } catch {
       setAccessToken(null)
       setRefreshToken(null)
+      setSessionId(null)
       setUser(null)
     }
   }, [])
@@ -44,6 +49,10 @@ export function AuthProvider({ children }) {
         if (next.refreshToken) localStorage.setItem(STORAGE_KEYS.refreshToken, next.refreshToken)
         else localStorage.removeItem(STORAGE_KEYS.refreshToken)
       }
+      if (typeof next.sessionId !== 'undefined') {
+        if (next.sessionId) localStorage.setItem(STORAGE_KEYS.sessionId, next.sessionId)
+        else localStorage.removeItem(STORAGE_KEYS.sessionId)
+      }
       if (typeof next.user !== 'undefined') {
         if (next.user) localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(next.user))
         else localStorage.removeItem(STORAGE_KEYS.user)
@@ -57,6 +66,7 @@ export function AuthProvider({ children }) {
     const res = await apiRequest('/api/users/me', {
       method: 'GET',
       accessToken: token,
+      sessionId,
     })
 
     if (!res.ok) {
@@ -66,7 +76,7 @@ export function AuthProvider({ children }) {
     const data = unwrapEnvelopeData(res.json)
     setUser(data)
     persistAuth({ user: data })
-  }, [persistAuth])
+  }, [persistAuth, sessionId])
 
   const refresh = useCallback(async () => {
     if (!refreshToken) return
@@ -74,6 +84,7 @@ export function AuthProvider({ children }) {
     const res = await apiRequest('/api/auth/refresh', {
       method: 'POST',
       body: { refreshToken },
+      sessionId,
     })
 
     if (!res.ok) {
@@ -86,12 +97,12 @@ export function AuthProvider({ children }) {
 
     if (!nextAccessToken) throw new Error('Refresh did not return accessToken')
 
-    setAccessToken(nextAccessToken)
-    setRefreshToken(nextRefreshToken)
-    persistAuth({ accessToken: nextAccessToken, refreshToken: nextRefreshToken })
+      setAccessToken(nextAccessToken)
+      setRefreshToken(nextRefreshToken)
+      persistAuth({ accessToken: nextAccessToken, refreshToken: nextRefreshToken })
 
     await loadCurrentUser(nextAccessToken)
-  }, [loadCurrentUser, persistAuth, refreshToken])
+  }, [loadCurrentUser, persistAuth, refreshToken, sessionId])
 
   const login = useCallback(
     async ({ email, password }) => {
@@ -108,6 +119,10 @@ export function AuthProvider({ children }) {
 
       const data = unwrapEnvelopeData(res.json) // expected: { user, tokens }
       if (data?.requiresOtp) {
+        if (data?.sessionId) {
+          setSessionId(data.sessionId)
+          persistAuth({ sessionId: data.sessionId })
+        }
         return data
       }
       const nextUser = data?.user ?? null
@@ -115,6 +130,7 @@ export function AuthProvider({ children }) {
 
       const nextAccessToken = tokens?.accessToken ?? null
       const nextRefreshToken = tokens?.refreshToken ?? null
+      const nextSessionId = data?.sessionId ?? null
 
       if (!nextUser || !nextAccessToken || !nextRefreshToken) {
         throw new Error('Login succeeded but response shape is unexpected')
@@ -123,7 +139,8 @@ export function AuthProvider({ children }) {
       setUser(nextUser)
       setAccessToken(nextAccessToken)
       setRefreshToken(nextRefreshToken)
-      persistAuth({ user: nextUser, accessToken: nextAccessToken, refreshToken: nextRefreshToken })
+      setSessionId(nextSessionId)
+      persistAuth({ user: nextUser, accessToken: nextAccessToken, refreshToken: nextRefreshToken, sessionId: nextSessionId })
 
       return nextUser
     },
@@ -177,8 +194,9 @@ export function AuthProvider({ children }) {
       // backend logout handler likely accepts refreshToken; if it ignores body, it's fine.
       await apiRequest('/api/auth/logout', {
         method: 'POST',
-        body: refreshToken ? { refreshToken } : undefined,
+        body: refreshToken || sessionId ? { refreshToken, sessionId } : undefined,
         accessToken: accessToken || undefined,
+        sessionId: sessionId || undefined,
       })
     } catch {
       // ignore logout failures, still clear local state
@@ -187,13 +205,49 @@ export function AuthProvider({ children }) {
     setUser(null)
     setAccessToken(null)
     setRefreshToken(null)
-    persistAuth({ user: null, accessToken: null, refreshToken: null })
-  }, [accessToken, persistAuth, refreshToken])
+    setSessionId(null)
+    persistAuth({ user: null, accessToken: null, refreshToken: null, sessionId: null })
+  }, [accessToken, persistAuth, refreshToken, sessionId])
 
   const completeLoginOtp = useCallback(
     async ({ email, otp }) => {
       setAuthError(null)
       const res = await apiRequest('/api/auth/login/verify-otp', {
+        method: 'POST',
+        body: { email, otp },
+      })
+
+      if (!res.ok) {
+        const msg = res.json?.message || `OTP verification failed (status ${res.status})`
+        throw new Error(msg)
+      }
+
+      const data = unwrapEnvelopeData(res.json)
+      const nextUser = data?.user ?? null
+      const tokens = data?.tokens ?? null
+      const nextAccessToken = tokens?.accessToken ?? null
+      const nextRefreshToken = tokens?.refreshToken ?? null
+      const nextSessionId = data?.sessionId ?? null
+
+      if (!nextUser || !nextAccessToken || !nextRefreshToken) {
+        throw new Error('OTP verification succeeded but response shape is unexpected')
+      }
+
+      setUser(nextUser)
+      setAccessToken(nextAccessToken)
+      setRefreshToken(nextRefreshToken)
+      setSessionId(nextSessionId)
+      persistAuth({ user: nextUser, accessToken: nextAccessToken, refreshToken: nextRefreshToken, sessionId: nextSessionId })
+
+      return nextUser
+    },
+    [persistAuth]
+  )
+
+  const completeRegistrationOtp = useCallback(
+    async ({ email, otp }) => {
+      setAuthError(null)
+      const res = await apiRequest('/api/auth/verify-otp', {
         method: 'POST',
         body: { email, otp },
       })
@@ -291,17 +345,19 @@ export function AuthProvider({ children }) {
       user,
       accessToken,
       refreshToken,
+      sessionId,
       isLoading,
       authError,
       login,
       completeLoginOtp,
+      completeRegistrationOtp,
       register,
       refresh,
       logout,
       loadCurrentUser,
       apiBaseUrl: getApiBaseUrl(),
     }),
-    [accessToken, authError, completeLoginOtp, isLoading, login, loadCurrentUser, logout, refresh, refreshToken, register, user]
+    [accessToken, authError, completeLoginOtp, completeRegistrationOtp, isLoading, login, loadCurrentUser, logout, refresh, refreshToken, register, sessionId, user]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -52,7 +52,7 @@ import {
   repayLoan,
   depositSavings,
 } from "../features/member/memberService.js";
-import { changePassword } from "../services/authService.js";
+import { changePassword, getAuthSessions } from "../services/authService.js";
 
 const emptyProfile = {
   fullName: "",
@@ -914,7 +914,7 @@ function SecuritySection({ user, accessToken, activeSessions = [], loginHistory 
                   </div>
                 </div>
                 <div className="flex items-center gap-2 sm:flex-col sm:items-end">
-                  <span className="text-sm font-medium text-slate-600">{session.lastActive}</span>
+                  <span className="text-sm font-medium text-slate-600">{session.lastActive ? new Date(session.lastActive).toLocaleString() : "-"}</span>
                   {session.current ? (
                     <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">Current device</span>
                   ) : (
@@ -996,13 +996,14 @@ function SecurityMetric({ icon: Icon, label, value, tone }) {
 
 function LoansPage({ loans, stats, accessToken, onRefresh, search }) {
   const [loanForm, setLoanForm] = useState({ type: "EMERGENCY", amount: "10000", duration: "12" });
-  const [repayLoanId, setRepayLoanId] = useState(activeLoans[0]?.id || "");
   const [repayAmount, setRepayAmount] = useState("");
   const [message, setMessage] = useState(null);
   const activeLoans = loans.filter((loan) => ["ACTIVE", "APPROVED"].includes(String(loan.status || "").toUpperCase()));
+  const [repayLoanId, setRepayLoanId] = useState("");
   const totalBalance = activeLoans.reduce((sum, loan) => sum + Number(loan.balance || loan.principal || 0), 0);
   const rows = loans.filter((loan) => [loan.type, loan.status, loan.id].some((value) => String(value || "").toLowerCase().includes(search.toLowerCase())));
   const selectedProduct = LOAN_PRODUCTS.find((product) => product.type === loanForm.type) || LOAN_PRODUCTS[0];
+  const selectedRepayLoanId = repayLoanId || activeLoans[0]?.id || "";
   const requestedAmount = Math.min(Number(loanForm.amount || 0), selectedProduct.max);
   const requestedDuration = Math.min(Number(loanForm.duration || 1), selectedProduct.duration);
   const totalInterest = requestedAmount * (selectedProduct.interestRate / 100) * requestedDuration;
@@ -1026,7 +1027,7 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search }) {
 
   function submitRepayment(event) {
     event.preventDefault();
-    repayLoan(repayLoanId, repayAmount, accessToken)
+    repayLoan(selectedRepayLoanId, repayAmount, accessToken)
       .then(async () => {
         setMessage({ type: "success", text: "Loan repayment recorded successfully." });
         setRepayAmount("");
@@ -1083,12 +1084,12 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search }) {
           <form onSubmit={submitRepayment} className="mt-4 grid gap-4">
             <label className="text-sm font-semibold text-slate-700">
               Loan
-              <select value={repayLoanId} onChange={(event) => setRepayLoanId(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-200 px-3.5 py-3 text-sm">
+              <select value={selectedRepayLoanId} onChange={(event) => setRepayLoanId(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-200 px-3.5 py-3 text-sm">
                 {activeLoans.length === 0 ? <option value="">No active loans</option> : activeLoans.map((loan) => <option key={loan.id} value={loan.id}>{loan.type} - {formatCurrency(loan.balance || loan.principal)}</option>)}
               </select>
             </label>
             <Field label="Repayment amount" name="repayAmount" type="number" value={repayAmount} onChange={(event) => setRepayAmount(event.target.value)} />
-            <button disabled={!repayLoanId || !repayAmount} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-3 text-sm font-semibold text-emerald-800 disabled:opacity-60">
+            <button disabled={!selectedRepayLoanId || !repayAmount} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-3 text-sm font-semibold text-emerald-800 disabled:opacity-60">
               <CreditCard size={17} />
               Start repayment
             </button>
@@ -1200,7 +1201,7 @@ function SimplePage({ eyebrow, title, description, icon: Icon, children }) {
   );
 }
 
-function PortfolioPage({ stats, transactions, loans, shares, search }) {
+function PortfolioPage({ stats, transactions, loans, shares, search, user }) {
   const filteredTransactions = transactions.filter((transaction) =>
     [transaction.type, transaction.reference, transaction.description].some((value) =>
       String(value || "").toLowerCase().includes(search.toLowerCase()),
@@ -1220,9 +1221,43 @@ function PortfolioPage({ stats, transactions, loans, shares, search }) {
         <StatCard icon={ReceiptText} label="Transactions" value={filteredTransactions.length} trend="Filtered" helper="Matches current search" tone="blue" />
         <StatCard icon={WalletCards} label="Accounts" value={shares.length} trend="Live" helper="Share and savings records" tone="slate" />
       </div>
+      <ReadOnlyPortfolioDetails user={user} />
       <LoansTable loans={loans} />
       <TransactionsTable transactions={filteredTransactions} />
     </div>
+  );
+}
+
+function ReadOnlyPortfolioDetails({ user }) {
+  const details = [
+    ["Member name", user?.name || [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "-"],
+    ["Email", user?.email || "-"],
+    ["Phone", user?.phone || "-"],
+    ["National ID", user?.nationalId || user?.Member?.nationalId || "-"],
+    ["Member number", user?.Member?.memberNumber || "-"],
+    ["Membership type", user?.Member?.type || "Member"],
+  ];
+
+  return (
+    <Surface className="p-5">
+      <div className="mb-5 flex items-center gap-3">
+        <div className="grid h-10 w-10 place-items-center rounded-lg bg-slate-100 text-slate-700">
+          <WalletCards size={20} />
+        </div>
+        <div>
+          <h2 className="text-base font-semibold tracking-normal text-slate-950">Portfolio details</h2>
+          <p className="text-sm text-slate-500">Read-only member details from backend records.</p>
+        </div>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {details.map(([label, value]) => (
+          <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</p>
+            <p className="mt-1 text-sm font-semibold text-slate-950">{value}</p>
+          </div>
+        ))}
+      </div>
+    </Surface>
   );
 }
 
@@ -1344,15 +1379,22 @@ export default function UserDashboard() {
         getMyTransactions(accessToken),
         getMyLoans(accessToken),
         getMyShares(accessToken),
+        getAuthSessions(accessToken),
       ]);
+      const sessions = results[3].status === "fulfilled" && Array.isArray(results[3].value) ? results[3].value : [];
 
       setData({
         transactions: results[0].status === "fulfilled" && Array.isArray(results[0].value) ? results[0].value : [],
         loans: results[1].status === "fulfilled" && Array.isArray(results[1].value) ? results[1].value : [],
         shares: results[2].status === "fulfilled" && Array.isArray(results[2].value) ? results[2].value : [],
         notifications: [],
-        activeSessions: [],
-        loginHistory: [],
+        activeSessions: sessions.filter((session) => String(session.status || "").toUpperCase() === "ACTIVE"),
+        loginHistory: sessions.map((session) => ({
+          date: session.date ? new Date(session.date).toLocaleString() : "-",
+          event: session.event || "Login",
+          device: session.device || session.deviceName || "Unknown device",
+          status: session.isNewDevice ? "New device" : normalizeStatus(session.status),
+        })),
       });
       setLoading(false);
     }
@@ -1454,7 +1496,7 @@ export default function UserDashboard() {
       );
     }
     if (path.includes("/portfolio")) {
-      return <PortfolioPage stats={stats} transactions={data.transactions} loans={data.loans} shares={data.shares} search={search} />;
+      return <PortfolioPage stats={stats} transactions={data.transactions} loans={data.loans} shares={data.shares} search={search} user={user} />;
     }
     if (path.includes("/reports")) {
       return <ReportsPage accessToken={accessToken} />;

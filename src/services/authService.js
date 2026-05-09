@@ -14,6 +14,7 @@ const AUTH_ENDPOINTS = {
   FORGOT_PASSWORD: '/api/auth/forgot-password',
   RESET_PASSWORD: '/api/auth/reset-password',
   CHANGE_PASSWORD: '/api/auth/change-password',
+  SESSIONS: '/api/auth/sessions',
 }
 
 /**
@@ -238,4 +239,18 @@ export async function changePassword({ currentPassword, newPassword }, accessTok
     message: res.json?.message || 'Password changed successfully',
     data: unwrapEnvelopeData(res.json),
   }
+}
+
+export async function getAuthSessions(accessToken) {
+  const res = await apiRequest(AUTH_ENDPOINTS.SESSIONS, {
+    method: 'GET',
+    accessToken,
+  })
+
+  if (!res.ok) {
+    const error = res.json?.message || `Failed to fetch sessions (status ${res.status})`
+    throw new Error(error)
+  }
+
+  return unwrapEnvelopeData(res.json)
 }
