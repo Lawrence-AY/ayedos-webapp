@@ -19,7 +19,7 @@ import { apiRequest, unwrapEnvelopeData } from '../../lib/apiClient';
 import { AuthContext } from '../../context/AuthContext.jsx';
 
 export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, userData }) => {
-  const { accessToken } = useContext(AuthContext);
+  const { accessToken, loadCurrentUser } = useContext(AuthContext);
 
   const [paymentMethod, setPaymentMethod] = useState('stk');
   const [stkPhone, setStkPhone] = useState('');
@@ -95,6 +95,34 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
     return app.id;
   };
 
+  const markOnboardingComplete = async () => {
+    const fullName = [userData.firstName, userData.secondName, userData.surname]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+
+    const res = await apiRequest('/api/member/profile', {
+      method: 'PUT',
+      accessToken,
+      body: {
+        name: fullName,
+        phone: formatPhoneForBackend(userData.phone),
+        nationalId: userData.nationalId,
+        kraPin: userData.kraPin || null,
+        occupation: userData.occupation || null,
+        address: userData.poBox ? `${userData.poBox}, ${userData.county}, ${userData.subCounty}` : null,
+        consentGiven: Boolean(userData.termsAccepted),
+        consentGivenAt: new Date().toISOString(),
+      },
+    });
+
+    if (!res.ok) {
+      throw new Error(res.json?.message || 'Could not finalize onboarding profile');
+    }
+
+    await loadCurrentUser?.(accessToken);
+  };
+
   // Poll STK status and verify payment when paid
   const startPolling = (checkoutId, appId, rawPhone) => {
   if (pollingInterval.current) clearInterval(pollingInterval.current);
@@ -132,6 +160,7 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
         });
 
         if (verifyRes.ok) {
+          await markOnboardingComplete();
           setProgress(100);
           setWaitingStatus('success');
           setTimeout(() => {
@@ -211,6 +240,7 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
         accessToken,
       });
       if (!verifyRes.ok) throw new Error(verifyRes.json?.message || 'Payment verification failed');
+      await markOnboardingComplete();
       clearInterval(interval);
       setProgress(100);
       setTimeout(() => onPaymentSuccess(), 500);

@@ -54,7 +54,7 @@ function Onboarding() {
 
   // Load registration data from localStorage and pre-populate form
   useEffect(() => {
-    const rawData = localStorage.getItem('ayedos_user');
+    const rawData = sessionStorage.getItem('registrationData') || localStorage.getItem('ayedos_user');
 
     if (rawData) {
       try {

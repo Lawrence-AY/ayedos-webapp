@@ -33,12 +33,12 @@ export default function TopNavbar({
   }, [theme]);
 
   return (
-    <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur-xl sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 px-4 py-3 shadow-[0_12px_35px_rgba(15,23,42,0.04)] backdrop-blur-xl transition-colors duration-200 sm:px-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-[1500px] items-center gap-3">
         <button
           type="button"
           onClick={onToggleSidebar}
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 transition duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 hover:shadow-sm"
           aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
         >
           <Menu size={21} />
@@ -60,7 +60,7 @@ export default function TopNavbar({
             value={searchValue}
             onChange={(event) => onSearchChange?.(event.target.value)}
             placeholder="Search transactions, loans, statements..."
-            className="h-11 w-full rounded-lg border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"
+            className="h-11 w-full rounded-lg border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm text-slate-900 outline-none transition duration-200 placeholder:text-slate-400 hover:border-slate-300 hover:bg-white focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"
           />
         </div>
 
@@ -68,7 +68,7 @@ export default function TopNavbar({
           <button
             type="button"
             onClick={onNotificationClick || (() => navigate("/dashboard/user/notifications"))}
-            className="relative grid h-11 w-11 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
+            className="relative grid h-11 w-11 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 transition duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 hover:shadow-sm"
             aria-label="Open notifications"
           >
             <Bell size={19} />
@@ -82,7 +82,7 @@ export default function TopNavbar({
           <button
             type="button"
             onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
-            className="hidden h-11 w-11 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50 sm:grid"
+            className="hidden h-11 w-11 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 transition duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 hover:shadow-sm sm:grid"
             aria-label="Toggle theme"
           >
             {theme === "dark" ? <Sun size={19} /> : <Moon size={19} />}
@@ -92,7 +92,7 @@ export default function TopNavbar({
             <button
               type="button"
               onClick={() => setMenuOpen((current) => !current)}
-              className="flex h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 text-left transition hover:bg-slate-50"
+              className="flex h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 text-left transition duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-slate-50 hover:shadow-sm"
               aria-label="Open profile menu"
             >
               <span className="grid h-8 w-8 place-items-center rounded-lg bg-slate-950 text-xs font-bold text-white">

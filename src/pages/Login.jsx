@@ -1,7 +1,7 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext.jsx";
-import { getDashboardPath } from "../utils/dashboardRoutes.js";
+import { getPostLoginPath } from "../utils/dashboardRoutes.js";
 import logo from "../assets/logo-light.png";
 import DotSwarmCanvas from "../components/landing/DotTextCanvas.jsx";
 import { Eye, EyeOff } from "lucide-react";
@@ -31,7 +31,7 @@ export default function Login() {
       if (otpRequired) {
         if (!otp.trim()) return setFormError("OTP is required");
         const verifiedUser = await completeLoginOtp({ email: email.trim(), otp: otp.trim() });
-        navigate(getDashboardPath(verifiedUser?.role), { replace: true });
+        navigate(getPostLoginPath(verifiedUser), { replace: true });
         return;
       }
 
@@ -41,7 +41,7 @@ export default function Login() {
         setFormError(null);
         return;
       }
-      navigate(getDashboardPath(loggedInUser?.role), { replace: true });
+      navigate(getPostLoginPath(loggedInUser), { replace: true });
     } catch (err) {
       setFormError(err?.message || "Login failed");
     }
@@ -63,7 +63,7 @@ export default function Login() {
       setFormError(null);
       try {
         const verifiedUser = await completeLoginOtp({ email: email.trim(), otp: normalizedOtp });
-        if (!cancelled) navigate(getDashboardPath(verifiedUser?.role), { replace: true });
+        if (!cancelled) navigate(getPostLoginPath(verifiedUser), { replace: true });
       } catch (err) {
         if (!cancelled) setFormError(err?.message || "OTP verification failed");
       } finally {
@@ -302,7 +302,7 @@ export default function Login() {
                   setOtpVerifying(true);
                   try {
                     const verifiedUser = await completeLoginOtp({ email: email.trim(), otp: otp.trim() });
-                    navigate(getDashboardPath(verifiedUser?.role), { replace: true });
+                    navigate(getPostLoginPath(verifiedUser), { replace: true });
                   } catch (err) {
                     setFormError(err?.message || "OTP verification failed");
                   } finally {

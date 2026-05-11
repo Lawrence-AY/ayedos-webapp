@@ -79,15 +79,15 @@ function NavLinkItem({ to, label, icon: Icon, exact = false, onClick, collapsed 
       onClick={onClick}
       className={({ isActive }) =>
         [
-          `flex items-center gap-3 rounded-lg px-3.5 py-3 text-sm font-semibold transition ${collapsed ? "justify-center" : ""}`,
+          `group flex items-center gap-3 rounded-lg px-3.5 py-3 text-sm font-semibold transition-all duration-200 ${collapsed ? "justify-center" : ""}`,
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300",
           isActive
             ? "bg-white text-slate-950 shadow-sm"
-            : "text-slate-300 hover:bg-white/10 hover:text-white",
+            : "text-slate-300 hover:translate-x-1 hover:bg-white/10 hover:text-white",
         ].join(" ")
       }
     >
-      <Icon size={collapsed ? 24 : 18} strokeWidth={collapsed ? 2.4 : 2} />
+      <Icon className="transition duration-200 group-hover:scale-110" size={collapsed ? 24 : 18} strokeWidth={collapsed ? 2.4 : 2} />
       <span className={`truncate ${collapsed ? "sr-only" : ""}`}>{label}</span>
     </NavLink>
   );
@@ -167,9 +167,9 @@ export default function Sidebar({ open = false, onClose, collapsed = false }) {
           <button
             type="button"
             onClick={handleLogout}
-            className="flex w-full items-center gap-3 rounded-lg px-3.5 py-3 text-sm font-semibold text-slate-300 transition hover:bg-rose-500/10 hover:text-rose-100"
+            className="group flex w-full items-center gap-3 rounded-lg px-3.5 py-3 text-sm font-semibold text-slate-300 transition-all duration-200 hover:translate-x-1 hover:bg-rose-500/10 hover:text-rose-100"
           >
-            <LogOut size={collapsed ? 24 : 18} strokeWidth={collapsed ? 2.4 : 2} />
+            <LogOut className="transition duration-200 group-hover:scale-110" size={collapsed ? 24 : 18} strokeWidth={collapsed ? 2.4 : 2} />
             <span className={collapsed ? "lg:sr-only" : ""}>Logout</span>
           </button>
         </div>

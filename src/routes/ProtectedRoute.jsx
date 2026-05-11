@@ -1,9 +1,11 @@
-import { Navigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import { useContext } from 'react'
 import { AuthContext } from '../context/AuthContext.jsx'
+import { isMemberOnboardingComplete } from '../utils/dashboardRoutes.js'
 
 export default function ProtectedRoute({ element, allowedRoles }) {
   const { user, accessToken, isLoading } = useContext(AuthContext)
+  const location = useLocation()
 
   if (isLoading) {
     return (
@@ -41,6 +43,14 @@ export default function ProtectedRoute({ element, allowedRoles }) {
 
   if (allowedRoles?.length && !allowedRoles.includes(user.role)) {
     return <Navigate to="/dashboard" replace />
+  }
+
+  if (
+    String(user.role || '').toUpperCase() === 'MEMBER' &&
+    !isMemberOnboardingComplete(user) &&
+    location.pathname !== '/onboarding'
+  ) {
+    return <Navigate to="/onboarding" replace />
   }
 
   return element

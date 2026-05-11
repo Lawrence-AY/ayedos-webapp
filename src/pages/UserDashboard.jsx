@@ -16,7 +16,6 @@ import {
   CreditCard,
   Download,
   Eye,
-  FileCheck2,
   FileText,
   Fingerprint,
   KeyRound,
@@ -33,7 +32,6 @@ import {
   ShieldCheck,
   Smartphone,
   TrendingUp,
-  Upload,
   UserRound,
   UsersRound,
   WalletCards,
@@ -150,7 +148,7 @@ function SectionHeader({ eyebrow, title, description, action }) {
 function Surface({ children, className = "" }) {
   return (
     <section
-      className={`rounded-lg border border-slate-200 bg-white shadow-[0_14px_40px_rgba(15,23,42,0.06)] ${className}`}
+      className={`rounded-lg border border-slate-200 bg-white shadow-[0_14px_40px_rgba(15,23,42,0.06)] transition-all duration-200 ease-out hover:border-emerald-200 hover:shadow-[0_20px_55px_rgba(15,23,42,0.1)] ${className}`}
     >
       {children}
     </section>
@@ -183,12 +181,12 @@ function StatCard({ icon: Icon, label, value, trend, helper, tone = "emerald" })
   };
 
   return (
-    <Surface className="group p-5 transition duration-200 hover:-translate-y-1 hover:shadow-[0_22px_50px_rgba(15,23,42,0.1)]">
+    <Surface className="group p-5 hover:-translate-y-1">
       <div className="flex items-start justify-between gap-4">
-        <div className={`grid h-11 w-11 place-items-center rounded-lg ${tones[tone]}`}>
+        <div className={`grid h-11 w-11 place-items-center rounded-lg transition duration-200 group-hover:scale-110 ${tones[tone]}`}>
           <Icon size={21} />
         </div>
-        <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+        <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200 transition group-hover:bg-emerald-50 group-hover:text-emerald-700">
           <TrendingUp size={13} />
           {trend}
         </span>
@@ -245,8 +243,8 @@ function QuickActions() {
 
 function ProfileCompletion({ user }) {
   const checks = [
-    { label: "Upload ID", complete: Boolean(user?.nationalIdDocument || user?.nationalIdUrl), icon: Upload },
-    { label: "Verify phone number", complete: Boolean(user?.phoneVerified || user?.isPhoneVerified), icon: Smartphone },
+    { label: "Identity details", complete: Boolean(user?.nationalId || user?.Member?.nationalId), icon: BadgeCheck },
+    { label: "Verify phone number", complete: Boolean(user?.phoneVerified || user?.isPhoneVerified || user?.phone), icon: Smartphone },
     { label: "Add next of kin", complete: Boolean(user?.nextOfKinName || user?.nextOfKin?.name), icon: UsersRound },
   ];
   const completed = checks.filter((item) => item.complete).length;
@@ -729,8 +727,6 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
           <Field label="Phone Number" name="nextOfKinPhone" value={form.nextOfKinPhone} onChange={update} />
         </EditableSection>
 
-        <DocumentUploads />
-
         <div className="flex justify-end">
           <button
             type="submit"
@@ -756,35 +752,6 @@ function EditableSection({ title, icon: Icon, children }) {
         <h2 className="text-base font-semibold tracking-normal text-slate-950">{title}</h2>
       </div>
       <div className="grid gap-4 md:grid-cols-2">{children}</div>
-    </Surface>
-  );
-}
-
-function DocumentUploads() {
-  const documents = ["Profile Picture", "National ID", "Payslip", "KRA PIN"];
-  return (
-    <Surface className="p-5">
-      <div className="mb-5 flex items-center gap-3">
-        <div className="grid h-10 w-10 place-items-center rounded-lg bg-slate-100 text-slate-700">
-          <FileCheck2 size={20} />
-        </div>
-        <h2 className="text-base font-semibold tracking-normal text-slate-950">Document uploads</h2>
-      </div>
-      <div className="grid gap-3 md:grid-cols-2">
-        {documents.map((document) => (
-          <label
-            key={document}
-            className="flex cursor-pointer items-center justify-between gap-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm transition hover:border-emerald-300 hover:bg-emerald-50"
-          >
-            <span className="flex items-center gap-3 font-semibold text-slate-800">
-              <Upload size={17} />
-              {document}
-            </span>
-            <span className="text-xs font-medium text-slate-500">PDF, JPG, PNG</span>
-            <input type="file" className="sr-only" />
-          </label>
-        ))}
-      </div>
     </Surface>
   );
 }
