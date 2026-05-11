@@ -52,7 +52,7 @@ import {
   repayLoan,
   depositSavings,
 } from "../features/member/memberService.js";
-import { changePassword, getAuthSessions } from "../services/authService.js";
+import { changePassword, getAuthSessions, revokeAuthSession } from "../services/authService.js";
 
 const emptyProfile = {
   fullName: "",
@@ -100,6 +100,28 @@ function getStatusClass(status) {
     return "bg-rose-50 text-rose-700 ring-1 ring-rose-200";
   }
   return "bg-slate-100 text-slate-700 ring-1 ring-slate-200";
+}
+
+function searchTextFrom(value, seen = new WeakSet()) {
+  if (value === null || typeof value === "undefined") return "";
+  if (["string", "number", "boolean"].includes(typeof value)) return String(value);
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) return value.map((item) => searchTextFrom(item, seen)).join(" ");
+  if (typeof value === "object") {
+    if (seen.has(value)) return "";
+    seen.add(value);
+    return Object.entries(value)
+      .filter(([key]) => !["password", "otp", "token", "refreshToken", "accessToken"].some((secret) => key.toLowerCase().includes(secret.toLowerCase())))
+      .map(([, item]) => searchTextFrom(item, seen))
+      .join(" ");
+  }
+  return "";
+}
+
+function matchesSearch(value, search) {
+  const term = search.trim().toLowerCase();
+  if (!term) return true;
+  return searchTextFrom(value).toLowerCase().includes(term);
 }
 
 function SectionHeader({ eyebrow, title, description, action }) {
@@ -767,7 +789,7 @@ function DocumentUploads() {
   );
 }
 
-function SecuritySection({ user, accessToken, activeSessions = [], loginHistory = [] }) {
+function SecuritySection({ user, accessToken, activeSessions = [], loginHistory = [], onRefresh }) {
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: "",
     newPassword: "",
@@ -799,6 +821,17 @@ function SecuritySection({ user, accessToken, activeSessions = [], loginHistory 
       setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
     } catch (error) {
       setMessage({ type: "error", text: error?.message || "Failed to change password." });
+    }
+  }
+
+  async function handleRevokeSession(sessionId) {
+    setMessage(null);
+    try {
+      await revokeAuthSession(sessionId, accessToken);
+      setMessage({ type: "success", text: "Session revoked successfully." });
+      await onRefresh?.();
+    } catch (error) {
+      setMessage({ type: "error", text: error?.message || "Failed to revoke session." });
     }
   }
 
@@ -894,12 +927,12 @@ function SecuritySection({ user, accessToken, activeSessions = [], loginHistory 
             <EmptyState
               icon={MonitorSmartphone}
               title="No active sessions"
-              description="Trusted devices will appear here after the backend starts returning session activity."
+              description="Trusted devices will appear here after successful sign in."
             />
           ) : (
           <div className="divide-y divide-slate-100">
             {activeSessions.map((session) => (
-              <div key={`${session.device}-${session.ip}`} className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div key={session.id || `${session.device}-${session.ip}`} className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-start gap-3">
                   <div className="grid h-10 w-10 place-items-center rounded-lg bg-slate-100 text-slate-600">
                     <MonitorSmartphone size={19} />
@@ -918,7 +951,13 @@ function SecuritySection({ user, accessToken, activeSessions = [], loginHistory 
                   {session.current ? (
                     <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">Current device</span>
                   ) : (
-                    <button className="text-xs font-semibold text-rose-700 hover:text-rose-800">Revoke</button>
+                    <button
+                      type="button"
+                      onClick={() => handleRevokeSession(session.id)}
+                      className="text-xs font-semibold text-rose-700 hover:text-rose-800"
+                    >
+                      Revoke
+                    </button>
                   )}
                 </div>
               </div>
@@ -946,6 +985,8 @@ function SecuritySection({ user, accessToken, activeSessions = [], loginHistory 
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Date</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Event</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Device</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Location</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">IP</th>
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Status</th>
                 </tr>
               </thead>
@@ -955,6 +996,8 @@ function SecuritySection({ user, accessToken, activeSessions = [], loginHistory 
                     <td className="px-5 py-4 text-sm text-slate-600">{item.date}</td>
                     <td className="px-5 py-4 text-sm font-semibold text-slate-900">{item.event}</td>
                     <td className="px-5 py-4 text-sm text-slate-600">{item.device}</td>
+                    <td className="px-5 py-4 text-sm text-slate-600">{item.location}</td>
+                    <td className="px-5 py-4 text-sm text-slate-600">{item.ip}</td>
                     <td className="px-5 py-4">
                       <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClass(item.status)}`}>
                         {item.status}
@@ -1001,7 +1044,7 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search }) {
   const activeLoans = loans.filter((loan) => ["ACTIVE", "APPROVED"].includes(String(loan.status || "").toUpperCase()));
   const [repayLoanId, setRepayLoanId] = useState("");
   const totalBalance = activeLoans.reduce((sum, loan) => sum + Number(loan.balance || loan.principal || 0), 0);
-  const rows = loans.filter((loan) => [loan.type, loan.status, loan.id].some((value) => String(value || "").toLowerCase().includes(search.toLowerCase())));
+  const rows = loans.filter((loan) => matchesSearch(loan, search));
   const selectedProduct = LOAN_PRODUCTS.find((product) => product.type === loanForm.type) || LOAN_PRODUCTS[0];
   const selectedRepayLoanId = repayLoanId || activeLoans[0]?.id || "";
   const requestedAmount = Math.min(Number(loanForm.amount || 0), selectedProduct.max);
@@ -1201,12 +1244,8 @@ function SimplePage({ eyebrow, title, description, icon: Icon, children }) {
   );
 }
 
-function PortfolioPage({ stats, transactions, loans, shares, search, user }) {
-  const filteredTransactions = transactions.filter((transaction) =>
-    [transaction.type, transaction.reference, transaction.description].some((value) =>
-      String(value || "").toLowerCase().includes(search.toLowerCase()),
-    ),
-  );
+function PortfolioPage({ stats, transactions, shares, search, user }) {
+  const filteredTransactions = transactions.filter((transaction) => matchesSearch(transaction, search));
 
   return (
     <div className="space-y-6">
@@ -1222,7 +1261,6 @@ function PortfolioPage({ stats, transactions, loans, shares, search, user }) {
         <StatCard icon={WalletCards} label="Accounts" value={shares.length} trend="Live" helper="Share and savings records" tone="slate" />
       </div>
       <ReadOnlyPortfolioDetails user={user} />
-      <LoansTable loans={loans} />
       <TransactionsTable transactions={filteredTransactions} />
     </div>
   );
@@ -1258,6 +1296,93 @@ function ReadOnlyPortfolioDetails({ user }) {
         ))}
       </div>
     </Surface>
+  );
+}
+
+function SearchResultsPage({ search, data, stats, user }) {
+  const resultGroups = [
+    {
+      title: "Transactions",
+      icon: ReceiptText,
+      items: data.transactions.filter((item) => matchesSearch(item, search)),
+      render: (item) => `${normalizeStatus(item.type || item.transactionType || "Transaction")} - ${formatCurrency(item.amount)} - ${item.reference || item.status || item.id || ""}`,
+      to: "transactions",
+    },
+    {
+      title: "Loans",
+      icon: FileText,
+      items: data.loans.filter((item) => matchesSearch(item, search)),
+      render: (item) => `${normalizeStatus(item.type || "Loan")} - ${formatCurrency(item.balance || item.principal)} - ${normalizeStatus(item.status)}`,
+      to: "loans",
+    },
+    {
+      title: "Shares and Savings",
+      icon: PiggyBank,
+      items: data.shares.filter((item) => matchesSearch(item, search)),
+      render: (item) => `${item.type || "Share record"} - ${formatCurrency(item.totalInvested || item.shares || item.amount)} - ${item.status || ""}`,
+      to: "savings",
+    },
+    {
+      title: "Security Sessions",
+      icon: MonitorSmartphone,
+      items: [...data.activeSessions, ...data.loginHistory].filter((item) => matchesSearch(item, search)),
+      render: (item) => `${item.device || item.deviceName || "Device"} - ${item.location || ""} ${item.ip || ""} - ${item.status || item.event || ""}`,
+      to: "security",
+    },
+    {
+      title: "Profile",
+      icon: UserRound,
+      items: matchesSearch(user, search) ? [user] : [],
+      render: () => `${user?.name || [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Member"} - ${user?.email || ""} - ${user?.phone || ""}`,
+      to: "settings",
+    },
+  ];
+
+  const totalResults = resultGroups.reduce((sum, group) => sum + group.items.length, 0);
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader
+        eyebrow="Search"
+        title={`Search results for "${search}"`}
+        description={`${totalResults} result${totalResults === 1 ? "" : "s"} found across dashboard data, records, profile, and security events.`}
+      />
+      <div className="grid gap-4 md:grid-cols-3">
+        <StatCard icon={Search} label="Matches" value={totalResults} trend="Live" helper="Updates as data refreshes" tone="blue" />
+        <StatCard icon={WalletCards} label="Balance" value={formatCurrency(stats.balance)} trend="Context" helper="Current account context" tone="emerald" />
+        <StatCard icon={MonitorSmartphone} label="Sessions" value={data.activeSessions.length} trend="Protected" helper="Only one active device is allowed" tone="slate" />
+      </div>
+      <div className="grid gap-5 xl:grid-cols-2">
+        {resultGroups.map((group) => (
+          <Surface key={group.title} className="overflow-hidden">
+            <div className="flex items-center gap-3 border-b border-slate-200 p-5">
+              <div className="grid h-10 w-10 place-items-center rounded-lg bg-slate-100 text-slate-700">
+                <group.icon size={20} />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold tracking-normal text-slate-950">{group.title}</h2>
+                <p className="text-sm text-slate-500">{group.items.length} matching record{group.items.length === 1 ? "" : "s"}</p>
+              </div>
+            </div>
+            {group.items.length === 0 ? (
+              <EmptyState icon={group.icon} title="No matches" description="Try a name, status, amount, reference, device, IP, location, or page term." />
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {group.items.slice(0, 8).map((item, index) => (
+                  <Link
+                    key={item?.id || `${group.title}-${index}`}
+                    to={getDashboardPath("MEMBER", group.to)}
+                    className="block px-5 py-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                  >
+                    {group.render(item)}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </Surface>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -1393,6 +1518,8 @@ export default function UserDashboard() {
           date: session.date ? new Date(session.date).toLocaleString() : "-",
           event: session.event || "Login",
           device: session.device || session.deviceName || "Unknown device",
+          ip: session.ip || "-",
+          location: session.location || "Location unavailable",
           status: session.isNewDevice ? "New device" : normalizeStatus(session.status),
         })),
       });
@@ -1401,6 +1528,7 @@ export default function UserDashboard() {
 
   useEffect(() => {
     let cancelled = false;
+    let intervalId;
 
     async function load() {
       await loadDashboardData();
@@ -1408,8 +1536,14 @@ export default function UserDashboard() {
     }
 
     load();
+    if (accessToken) {
+      intervalId = window.setInterval(() => {
+        loadDashboardData({ showLoading: false });
+      }, 30000);
+    }
     return () => {
       cancelled = true;
+      if (intervalId) window.clearInterval(intervalId);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
@@ -1452,11 +1586,14 @@ export default function UserDashboard() {
 
   function renderContent() {
     if (loading) return <SkeletonDashboard />;
+    if (search.trim()) {
+      return <SearchResultsPage search={search.trim()} data={data} stats={stats} user={user} />;
+    }
     if (isDashboardHome) {
       return (
         <DashboardOverview
           stats={stats}
-          transactions={data.transactions.filter((transaction) => [transaction.type, transaction.reference, transaction.description, transaction.status].some((value) => String(value || "").toLowerCase().includes(search.toLowerCase())))}
+          transactions={data.transactions.filter((transaction) => matchesSearch(transaction, search))}
           memberName={memberName}
           user={user}
           notifications={data.notifications}
@@ -1467,11 +1604,11 @@ export default function UserDashboard() {
       return (
         <div className="space-y-6">
           <SectionHeader eyebrow="Transactions" title="Transaction history" description="Track deposits, transfers, repayments, dividends, references, and statuses." />
-          <TransactionsTable transactions={data.transactions.filter((transaction) => [transaction.type, transaction.reference, transaction.description, transaction.status].some((value) => String(value || "").toLowerCase().includes(search.toLowerCase())))} />
+          <TransactionsTable transactions={data.transactions.filter((transaction) => matchesSearch(transaction, search))} />
         </div>
       );
     }
-    if (path.includes("/loans") || path.includes("/applications")) {
+    if (path.includes("/loans")) {
       return <LoansPage loans={data.loans} stats={stats} accessToken={accessToken} onRefresh={() => loadDashboardData({ showLoading: false })} search={search} />;
     }
     if (path.includes("/security")) {
@@ -1481,6 +1618,7 @@ export default function UserDashboard() {
           accessToken={accessToken}
           activeSessions={data.activeSessions}
           loginHistory={data.loginHistory}
+          onRefresh={() => loadDashboardData({ showLoading: false })}
         />
       );
     }
@@ -1496,7 +1634,7 @@ export default function UserDashboard() {
       );
     }
     if (path.includes("/portfolio")) {
-      return <PortfolioPage stats={stats} transactions={data.transactions} loans={data.loans} shares={data.shares} search={search} user={user} />;
+      return <PortfolioPage stats={stats} transactions={data.transactions} shares={data.shares} search={search} user={user} />;
     }
     if (path.includes("/reports")) {
       return <ReportsPage accessToken={accessToken} />;

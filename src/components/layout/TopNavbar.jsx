@@ -23,13 +23,14 @@ export default function TopNavbar({
   const { user } = useContext(AuthContext);
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [darkPreview, setDarkPreview] = useState(false);
+  const [theme, setTheme] = useState(() => localStorage.getItem("ayedos_theme") || "light");
   const name = user?.name || "AYEDOS Member";
 
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", darkPreview);
-    return () => document.documentElement.classList.remove("dark");
-  }, [darkPreview]);
+    const isDark = theme === "dark";
+    document.documentElement.classList.toggle("dark", isDark);
+    localStorage.setItem("ayedos_theme", theme);
+  }, [theme]);
 
   return (
     <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur-xl sm:px-6 lg:px-8">
@@ -80,11 +81,11 @@ export default function TopNavbar({
 
           <button
             type="button"
-            onClick={() => setDarkPreview((current) => !current)}
+            onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
             className="hidden h-11 w-11 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50 sm:grid"
             aria-label="Toggle theme"
           >
-            {darkPreview ? <Sun size={19} /> : <Moon size={19} />}
+            {theme === "dark" ? <Sun size={19} /> : <Moon size={19} />}
           </button>
 
           <div className="relative">

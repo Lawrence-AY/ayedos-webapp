@@ -24,7 +24,6 @@ const memberNavItems = [
   { label: "Savings", suffix: "savings", icon: BriefcaseBusiness },
   { label: "Transactions", suffix: "transactions", icon: ReceiptText },
   { label: "Loans", suffix: "loans", icon: FileText },
-  { label: "Applications", suffix: "applications", icon: FileText },
   { label: "Portfolio", suffix: "portfolio", icon: PieChart },
   { label: "Reports", suffix: "reports", icon: ReceiptText },
   { label: "Notifications", suffix: "notifications", icon: Bell },
@@ -88,7 +87,7 @@ function NavLinkItem({ to, label, icon: Icon, exact = false, onClick, collapsed 
         ].join(" ")
       }
     >
-      <Icon size={18} />
+      <Icon size={collapsed ? 24 : 18} strokeWidth={collapsed ? 2.4 : 2} />
       <span className={`truncate ${collapsed ? "sr-only" : ""}`}>{label}</span>
     </NavLink>
   );
@@ -162,7 +161,7 @@ export default function Sidebar({ open = false, onClose, collapsed = false }) {
               Account security
             </p>
             <p className="mt-2 text-sm leading-5 text-slate-200">
-              2 active sessions. Review new logins regularly.
+              One active device is allowed. Review new logins regularly.
             </p>
           </div>
           <button
@@ -170,7 +169,7 @@ export default function Sidebar({ open = false, onClose, collapsed = false }) {
             onClick={handleLogout}
             className="flex w-full items-center gap-3 rounded-lg px-3.5 py-3 text-sm font-semibold text-slate-300 transition hover:bg-rose-500/10 hover:text-rose-100"
           >
-            <LogOut size={18} />
+            <LogOut size={collapsed ? 24 : 18} strokeWidth={collapsed ? 2.4 : 2} />
             <span className={collapsed ? "lg:sr-only" : ""}>Logout</span>
           </button>
         </div>

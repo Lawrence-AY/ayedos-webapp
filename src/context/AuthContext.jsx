@@ -11,6 +11,19 @@ const STORAGE_KEYS = {
 }
 
 const INACTIVITY_TIMEOUT_MS = 2 * 60 * 1000
+const AUTH_SYNC_INTERVAL_MS = 30 * 1000
+
+const getPersistableUser = (user) => {
+  if (!user) return null
+  return {
+    id: user.id,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+  }
+}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
@@ -54,7 +67,7 @@ export function AuthProvider({ children }) {
         else localStorage.removeItem(STORAGE_KEYS.sessionId)
       }
       if (typeof next.user !== 'undefined') {
-        if (next.user) localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(next.user))
+        if (next.user) localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(getPersistableUser(next.user)))
         else localStorage.removeItem(STORAGE_KEYS.user)
       }
     } catch {
@@ -209,6 +222,14 @@ export function AuthProvider({ children }) {
     persistAuth({ user: null, accessToken: null, refreshToken: null, sessionId: null })
   }, [accessToken, persistAuth, refreshToken, sessionId])
 
+  const clearLocalAuth = useCallback(() => {
+    setUser(null)
+    setAccessToken(null)
+    setRefreshToken(null)
+    setSessionId(null)
+    persistAuth({ user: null, accessToken: null, refreshToken: null, sessionId: null })
+  }, [persistAuth])
+
   const completeLoginOtp = useCallback(
     async ({ email, otp }) => {
       setAuthError(null)
@@ -305,6 +326,7 @@ export function AuthProvider({ children }) {
         } catch (e) {
           if (!cancelled) {
             setAuthError(e?.message || 'Authentication expired')
+            clearLocalAuth()
             setIsLoading(false)
           }
         }
@@ -339,6 +361,35 @@ export function AuthProvider({ children }) {
       events.forEach((eventName) => window.removeEventListener(eventName, resetTimer))
     }
   }, [accessToken, logout])
+
+  useEffect(() => {
+    if (!accessToken) return undefined
+
+    let cancelled = false
+    const syncAuth = async () => {
+      try {
+        await loadCurrentUser(accessToken)
+      } catch (error) {
+        if (cancelled) return
+        setAuthError(error?.message || 'Authentication expired')
+        clearLocalAuth()
+      }
+    }
+
+    const intervalId = window.setInterval(syncAuth, AUTH_SYNC_INTERVAL_MS)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') syncAuth()
+    }
+    window.addEventListener('focus', syncAuth)
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', syncAuth)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [accessToken, clearLocalAuth, loadCurrentUser])
 
   const value = useMemo(
     () => ({

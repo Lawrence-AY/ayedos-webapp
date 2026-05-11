@@ -116,7 +116,6 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
         // Ensure we actually have a receipt number before calling verify
         const receipt = data.mpesaReceipt;
         if (!receipt) {
-           console.log("Waiting for receipt number to populate...");
            return; 
         }
 
@@ -146,8 +145,7 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
       } else if (data && data.status === 'failed') {
         // ... handle failure
       }
-    } catch (err) {
-      console.error('Polling check failed:', err);
+    } catch {
       // Don't necessarily clear interval on a single network glitch
     }
   }, 3000); // 3 seconds is safer than 2

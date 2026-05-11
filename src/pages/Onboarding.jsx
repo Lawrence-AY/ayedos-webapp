@@ -55,12 +55,10 @@ function Onboarding() {
   // Load registration data from localStorage and pre-populate form
   useEffect(() => {
     const rawData = localStorage.getItem('ayedos_user');
-    console.log('🔍 Raw localStorage data:', rawData);
 
     if (rawData) {
       try {
         const data = JSON.parse(rawData);
-        console.log('✅ Parsed user data:', data);
 
         let firstName = '';
         let secondName = '';
@@ -102,12 +100,9 @@ function Onboarding() {
         }));
 
         toast.success('Your saved details have been pre-filled');
-      } catch (err) {
-        console.error('❌ Failed to parse localStorage data:', err);
+      } catch {
         toast.error('Could not load saved details');
       }
-    } else {
-      console.log('ℹ️ No saved data found in localStorage');
     }
   }, []);
 

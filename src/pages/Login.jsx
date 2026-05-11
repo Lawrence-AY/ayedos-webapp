@@ -1,4 +1,4 @@
-import { useContext, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext.jsx";
 import { getDashboardPath } from "../utils/dashboardRoutes.js";
@@ -16,6 +16,9 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [otp, setOtp] = useState("");
   const [otpRequired, setOtpRequired] = useState(false);
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const otpInputRef = useRef(null);
+  const lastAttemptedOtpRef = useRef("");
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -35,7 +38,7 @@ export default function Login() {
       const loggedInUser = await login({ email: email.trim(), password });
       if (loggedInUser?.requiresOtp) {
         setOtpRequired(true);
-        setFormError("Enter the OTP sent to your email to continue.");
+        setFormError(null);
         return;
       }
       navigate(getDashboardPath(loggedInUser?.role), { replace: true });
@@ -43,6 +46,36 @@ export default function Login() {
       setFormError(err?.message || "Login failed");
     }
   }
+
+  useEffect(() => {
+    if (!otpRequired) return;
+    window.setTimeout(() => otpInputRef.current?.focus(), 50);
+  }, [otpRequired]);
+
+  useEffect(() => {
+    const normalizedOtp = otp.trim();
+    if (!otpRequired || otpVerifying || normalizedOtp.length < 6 || lastAttemptedOtpRef.current === normalizedOtp) return;
+
+    let cancelled = false;
+    async function verifyOtp() {
+      setOtpVerifying(true);
+      lastAttemptedOtpRef.current = normalizedOtp;
+      setFormError(null);
+      try {
+        const verifiedUser = await completeLoginOtp({ email: email.trim(), otp: normalizedOtp });
+        if (!cancelled) navigate(getDashboardPath(verifiedUser?.role), { replace: true });
+      } catch (err) {
+        if (!cancelled) setFormError(err?.message || "OTP verification failed");
+      } finally {
+        if (!cancelled) setOtpVerifying(false);
+      }
+    }
+
+    verifyOtp();
+    return () => {
+      cancelled = true;
+    };
+  }, [completeLoginOtp, email, navigate, otp, otpRequired, otpVerifying]);
 
   return (
     <div
@@ -141,7 +174,6 @@ export default function Login() {
               />
             </div>
 
-            {!otpRequired ? (
             <div style={{ marginBottom: 28 }}>
               <label htmlFor="password" style={labelStyle}>
                 Password
@@ -194,24 +226,6 @@ export default function Login() {
                 </button>
               </div>
             </div>
-            ) : (
-              <div style={{ marginBottom: 28 }}>
-                <label htmlFor="otp" style={labelStyle}>
-                  Email OTP
-                </label>
-                <input
-                  id="otp"
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
-                  style={inputStyle}
-                  placeholder="Enter verification code"
-                  required
-                />
-              </div>
-            )}
 
             {(formError || authError) && (
               <div role="alert" style={errorStyle}>
@@ -228,7 +242,7 @@ export default function Login() {
                 opacity: isLoading ? 0.7 : 1,
               }}
             >
-              {isLoading ? "Signing in..." : otpRequired ? "Verify OTP" : "Sign in"}
+              {isLoading ? "Signing in..." : "Sign in"}
             </button>
 
             <div style={mutedTextStyle}>
@@ -246,6 +260,63 @@ export default function Login() {
           </form>
         </div>
       </div>
+
+      {otpRequired ? (
+        <div style={modalBackdropStyle} role="presentation">
+          <div style={modalStyle} role="dialog" aria-modal="true" aria-labelledby="otp-title">
+            <h2 id="otp-title" style={modalTitleStyle}>Verify sign in</h2>
+            <p style={modalTextStyle}>Enter the code sent to {email.trim()}. Verification starts automatically once the code is complete.</p>
+            <input
+              ref={otpInputRef}
+              id="otp"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 8))}
+              style={{ ...inputStyle, textAlign: "center", letterSpacing: "0.22em", fontWeight: 800 }}
+              placeholder="000000"
+            />
+            {(formError || authError) && (
+              <div role="alert" style={{ ...errorStyle, marginTop: 14, marginBottom: 0 }}>
+                {formError || authError}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 12, marginTop: 18 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setOtpRequired(false);
+                  setOtp("");
+                  lastAttemptedOtpRef.current = "";
+                  setFormError(null);
+                }}
+                style={secondaryButtonStyle}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={otpVerifying || otp.trim().length < 6}
+                onClick={async () => {
+                  setOtpVerifying(true);
+                  try {
+                    const verifiedUser = await completeLoginOtp({ email: email.trim(), otp: otp.trim() });
+                    navigate(getDashboardPath(verifiedUser?.role), { replace: true });
+                  } catch (err) {
+                    setFormError(err?.message || "OTP verification failed");
+                  } finally {
+                    setOtpVerifying(false);
+                  }
+                }}
+                style={{ ...buttonStyle, padding: "12px 18px", opacity: otpVerifying || otp.trim().length < 6 ? 0.7 : 1 }}
+              >
+                {otpVerifying ? "Verifying..." : "Verify"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -313,4 +384,52 @@ const forgotPasswordStyle = {
   color: "#94a3b8",
   fontSize: 13,
   textDecoration: "none",
+};
+
+const modalBackdropStyle = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 10,
+  display: "grid",
+  placeItems: "center",
+  padding: 20,
+  background: "rgba(2, 6, 23, 0.62)",
+  backdropFilter: "blur(8px)",
+};
+
+const modalStyle = {
+  width: "100%",
+  maxWidth: 420,
+  borderRadius: 16,
+  background: "white",
+  border: "1px solid rgba(226, 232, 240, 0.9)",
+  padding: 28,
+  boxShadow: "0 30px 80px rgba(2, 6, 23, 0.3)",
+};
+
+const modalTitleStyle = {
+  margin: 0,
+  color: "#0f172a",
+  fontSize: 22,
+  fontWeight: 800,
+  letterSpacing: 0,
+};
+
+const modalTextStyle = {
+  margin: "8px 0 18px",
+  color: "#64748b",
+  fontSize: 14,
+  lineHeight: 1.6,
+};
+
+const secondaryButtonStyle = {
+  width: "100%",
+  padding: "12px 18px",
+  borderRadius: 12,
+  border: "1px solid #cbd5e1",
+  background: "white",
+  color: "#334155",
+  fontWeight: 700,
+  fontSize: 14,
+  cursor: "pointer",
 };

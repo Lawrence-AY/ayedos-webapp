@@ -348,6 +348,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     let cancelled = false;
+    let intervalId;
 
     async function load() {
       await loadDashboardData();
@@ -355,8 +356,14 @@ export default function AdminDashboard() {
     }
 
     load();
+    if (accessToken) {
+      intervalId = window.setInterval(() => {
+        loadDashboardData({ showLoading: false });
+      }, 30000);
+    }
     return () => {
       cancelled = true;
+      if (intervalId) window.clearInterval(intervalId);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);

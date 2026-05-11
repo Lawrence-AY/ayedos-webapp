@@ -254,3 +254,17 @@ export async function getAuthSessions(accessToken) {
 
   return unwrapEnvelopeData(res.json)
 }
+
+export async function revokeAuthSession(sessionId, accessToken) {
+  const res = await apiRequest(`/api/auth/sessions/${sessionId}/revoke`, {
+    method: 'POST',
+    accessToken,
+  })
+
+  if (!res.ok) {
+    const error = res.json?.message || `Failed to revoke session (status ${res.status})`
+    throw new Error(error)
+  }
+
+  return unwrapEnvelopeData(res.json)
+}
