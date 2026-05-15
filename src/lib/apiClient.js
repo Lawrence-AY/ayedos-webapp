@@ -7,7 +7,7 @@ function normalizeBaseUrl(url) {
 }
 
 export function getApiBaseUrl() {
-  const envUrl = import.meta.env.VITE_API_URL;
+  const envUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE;
   return normalizeBaseUrl(envUrl) || DEFAULT_API_PATH_PREFIX;
 }
 
@@ -54,6 +54,7 @@ function getDeviceName() {
  */
 export async function apiRequest(path, { method = 'GET', body, accessToken, sessionId, signal } = {}) {
   const url = buildApiUrl(path);
+  const normalizedPath = String(path).startsWith('/') ? path : `/${path}`;
 
   const headers = {
     'Content-Type': 'application/json',
@@ -85,10 +86,8 @@ export async function apiRequest(path, { method = 'GET', body, accessToken, sess
   try {
     response = await fetch(url, fetchOptions);
   } catch (error) {
-    const normalizedPath = String(path).startsWith('/') ? path : `/${path}`;
-
     // During local development, fall back to the Vite proxy route if an absolute API host is unavailable.
-    if (url !== normalizedPath && normalizedPath.startsWith(DEFAULT_API_PATH_PREFIX)) {
+    if (import.meta.env.DEV && url !== normalizedPath && normalizedPath.startsWith(DEFAULT_API_PATH_PREFIX)) {
       response = await fetch(normalizedPath, fetchOptions);
     } else {
       throw error;
@@ -103,6 +102,18 @@ export async function apiRequest(path, { method = 'GET', body, accessToken, sess
     } catch {
       json = { raw: text };
     }
+  }
+
+  if (
+    response.status === 405 &&
+    normalizedPath.startsWith(DEFAULT_API_PATH_PREFIX) &&
+    getApiBaseUrl() === DEFAULT_API_PATH_PREFIX
+  ) {
+    json = {
+      ...(json || {}),
+      message:
+        'API base URL is not configured. Set VITE_API_URL or VITE_API_BASE to the backend URL, then rebuild and redeploy the web app.',
+    };
   }
 
   return {
