@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
 
 export default function DotSwarmCanvas({
-  color = "rgb(0, 58, 22)",  
-  dotColor = "rgb(0, 58, 22)",
+  color = "rgb(0, 58, 22)",
+  dotColor = color,
   particleCount = 50 
 }) {
   const canvasRef = useRef(null);
@@ -49,7 +49,8 @@ export default function DotSwarmCanvas({
       canvas.height = container.offsetHeight;
       particles = [];
       // Adjust density based on screen size news
-      const count = Math.floor((canvas.width * canvas.height) / 15000); 
+      const responsiveCount = Math.floor((canvas.width * canvas.height) / 15000);
+      const count = particleCount || responsiveCount;
       for (let i = 0; i < count; i++) {
         particles.push(new Particle(canvas.width, canvas.height));
       }
@@ -97,7 +98,7 @@ export default function DotSwarmCanvas({
       window.removeEventListener("resize", init);
       cancelAnimationFrame(animationFrameId);
     };
-  }, [dotColor]);
+  }, [dotColor, particleCount]);
 
   return (
     <div ref={containerRef} style={{ width: '100%', height: '100%', overflow: 'hidden', background: 'transparent' }}>

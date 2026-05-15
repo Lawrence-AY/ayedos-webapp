@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { CheckCircle2 } from 'lucide-react';
 
-export const ConfirmationStep = ({ onReset }) => {
+export const ConfirmationStep = () => {
   const navigate = useNavigate();
 
   useEffect(() => {

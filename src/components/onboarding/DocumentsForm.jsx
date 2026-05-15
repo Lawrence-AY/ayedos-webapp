@@ -1,14 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle, ArrowLeft } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { FileUpload } from './FileUpload';
 import { GrLinkNext } from "react-icons/gr";
 
 export const DocumentsForm = ({
   formData,
   onFileChange,
-  errors,
   isLoading,
   onSubmit,
   onBack,

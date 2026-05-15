@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import Sidebar from '../layout/Sidebar';
 import TopNavbar from '../layout/TopNavbar';
-import { Menu, X } from 'lucide-react';
 
 export default function DashboardLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);

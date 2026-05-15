@@ -28,6 +28,7 @@ import {
   Plus,
   ReceiptText,
   RefreshCw,
+  Search,
   Send,
   ShieldCheck,
   Smartphone,

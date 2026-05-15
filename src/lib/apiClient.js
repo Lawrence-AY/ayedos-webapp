@@ -88,9 +88,19 @@ export async function apiRequest(path, { method = 'GET', body, accessToken, sess
   } catch (error) {
     // During local development, fall back to the Vite proxy route if an absolute API host is unavailable.
     if (import.meta.env.DEV && url !== normalizedPath && normalizedPath.startsWith(DEFAULT_API_PATH_PREFIX)) {
-      response = await fetch(normalizedPath, fetchOptions);
+      try {
+        response = await fetch(normalizedPath, fetchOptions);
+      } catch (fallbackError) {
+        throw new Error(
+          `Failed to reach the API at ${url}. Check that the backend is running and that VITE_API_URL points to the backend URL.`,
+          { cause: fallbackError }
+        );
+      }
     } else {
-      throw error;
+      throw new Error(
+        `Failed to reach the API at ${url}. Check that VITE_API_URL or VITE_API_BASE points to the backend URL.`,
+        { cause: error }
+      );
     }
   }
   const text = await response.text().catch(() => '');

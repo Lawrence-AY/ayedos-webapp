@@ -4,7 +4,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { GrLinkNext } from 'react-icons/gr';
-import { ArrowLeft, Phone, Receipt, Copy, Check, Loader2, XCircle, CircleCheck, Info } from 'lucide-react';
+import { ArrowLeft, Phone, Receipt, Loader2, XCircle, CircleCheck, Info } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -29,7 +29,6 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
   const [showWaitingDialog, setShowWaitingDialog] = useState(false);
   const [waitingStatus, setWaitingStatus] = useState('waiting');
   const [progress, setProgress] = useState(0);
-  const [copied, setCopied] = useState(false);
   const pollingInterval = useRef(null);
 
   const REGISTRATION_FEE = 1;
@@ -271,12 +270,6 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
     } else {
       handlePaybillPayment();
     }
-  };
-
-  const copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   return (

@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { GrLinkNext } from "react-icons/gr";
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 
 // Kenyan counties and sub-counties data
 const kenyaCounties = {
@@ -87,20 +87,16 @@ export const PersonalDetailsForm = ({
     termsAccepted,
   } = formData;
 
-  const [subCountiesList, setSubCountiesList] = useState([]);
+  const subCountiesList = useMemo(() => {
+    return county && kenyaCounties[county] ? kenyaCounties[county] : [];
+  }, [county]);
 
   // Update sub-counties when county changes
   useEffect(() => {
-    if (county && kenyaCounties[county]) {
-      setSubCountiesList(kenyaCounties[county]);
-    } else {
-      setSubCountiesList([]);
-    }
-    // Reset subCounty if county changes
-    if (formData.subCounty) {
+    if (subCounty && !subCountiesList.includes(subCounty)) {
       onChange('subCounty', '');
     }
-  }, [county]);
+  }, [onChange, subCounty, subCountiesList]);
 
   // Handle numeric input for phone and nationalId
   const handleNumericChange = (field, value) => {
