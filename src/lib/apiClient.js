@@ -75,6 +75,7 @@ export async function apiRequest(path, { method = 'GET', body, accessToken, sess
     method,
     headers,
     signal,
+    credentials: 'include',
   };
 
   if (body !== undefined && body !== null) {

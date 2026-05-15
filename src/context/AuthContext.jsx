@@ -92,11 +92,9 @@ export function AuthProvider({ children }) {
   }, [persistAuth, sessionId])
 
   const refresh = useCallback(async () => {
-    if (!refreshToken) return
-
     const res = await apiRequest('/api/auth/refresh', {
       method: 'POST',
-      body: { refreshToken },
+      body: refreshToken ? { refreshToken } : {},
       sessionId,
     })
 
@@ -108,7 +106,10 @@ export function AuthProvider({ children }) {
     const nextAccessToken = data?.accessToken ?? null
     const nextRefreshToken = data?.refreshToken ?? null
 
-    if (!nextAccessToken) throw new Error('Refresh did not return accessToken')
+    if (!nextAccessToken) {
+      await loadCurrentUser(null)
+      return
+    }
 
       setAccessToken(nextAccessToken)
       setRefreshToken(nextRefreshToken)
@@ -250,7 +251,7 @@ export function AuthProvider({ children }) {
       const nextRefreshToken = tokens?.refreshToken ?? null
       const nextSessionId = data?.sessionId ?? null
 
-      if (!nextUser || !nextAccessToken || !nextRefreshToken) {
+      if (!nextUser) {
         throw new Error('OTP verification succeeded but response shape is unexpected')
       }
 
@@ -284,7 +285,7 @@ export function AuthProvider({ children }) {
       const nextAccessToken = tokens?.accessToken ?? null
       const nextRefreshToken = tokens?.refreshToken ?? null
 
-      if (!nextUser || !nextAccessToken || !nextRefreshToken) {
+      if (!nextUser) {
         throw new Error('OTP verification succeeded but response shape is unexpected')
       }
 
