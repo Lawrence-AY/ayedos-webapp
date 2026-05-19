@@ -40,6 +40,22 @@ import {
 import { AuthContext } from "../context/AuthContext.jsx";
 import Sidebar from "../components/layout/Sidebar.jsx";
 import TopNavbar from "../components/layout/TopNavbar.jsx";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "../components/ui/table.jsx";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationPrevious,
+  PaginationNext,
+} from "../components/ui/pagination.jsx";
 import { getDashboardPath } from "../utils/dashboardRoutes.js";
 import {
   getMyLoans,
@@ -125,16 +141,16 @@ function matchesSearch(value, search) {
 
 function SectionHeader({ eyebrow, title, description, action }) {
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div>
         {eyebrow ? (
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
             {eyebrow}
           </p>
         ) : null}
-        <h1 className="mt-2 text-2xl font-semibold tracking-normal text-slate-950 sm:text-3xl">
+        <h4 className="mt-2 text-2xl font-semibold tracking-normal text-slate-950 sm:text-3xl">
           {title}
-        </h1>
+        </h4>
         {description ? (
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
             {description}
@@ -149,7 +165,7 @@ function SectionHeader({ eyebrow, title, description, action }) {
 function Surface({ children, className = "" }) {
   return (
     <section
-      className={`rounded-lg border border-slate-200 bg-white shadow-[0_14px_40px_rgba(15,23,42,0.06)] transition-all duration-200 ease-out hover:border-emerald-200 hover:shadow-[0_20px_55px_rgba(15,23,42,0.1)] ${className}`}
+      className={`rounded-lg border border-slate-200 bg-white transition-all duration-200 ease-out hover:border-emerald-200 hover:shadow-[0_20px_55px_rgba(15,23,42,0.1)] ${className}`}
     >
       {children}
     </section>
@@ -187,10 +203,7 @@ function StatCard({ icon: Icon, label, value, trend, helper, tone = "emerald" })
         <div className={`grid h-11 w-11 place-items-center rounded-lg transition duration-200 group-hover:scale-110 ${tones[tone]}`}>
           <Icon size={21} />
         </div>
-        <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200 transition group-hover:bg-emerald-50 group-hover:text-emerald-700">
-          <TrendingUp size={13} />
-          {trend}
-        </span>
+         
       </div>
       <p className="mt-5 text-sm font-medium text-slate-500">{label}</p>
       <p className="mt-1 text-2xl font-semibold tracking-normal text-slate-950">
@@ -216,9 +229,9 @@ function QuickActions() {
     <Surface className="p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold tracking-normal text-slate-950">
+          <h5 className="text-base font-semibold tracking-normal text-slate-950">
             Quick actions
-          </h2>
+          </h5>
           <p className="text-sm text-slate-500">Common member tasks</p>
         </div>
         <Plus className="text-emerald-700" size={20} />
@@ -256,9 +269,9 @@ function ProfileCompletion({ user }) {
     <Surface className="p-5">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-base font-semibold tracking-normal text-slate-950">
+          <h5 className="text-base font-semibold tracking-normal text-slate-950">
             Profile completion
-          </h2>
+          </h5>
           <p className="text-sm text-slate-500">Finish verification to unlock faster approvals.</p>
         </div>
         <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700 ring-1 ring-emerald-200">
@@ -295,9 +308,9 @@ function NotificationsPanel({ items = [], compact = false }) {
     <Surface className="p-5">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <h2 className="text-base font-semibold tracking-normal text-slate-950">
+          <h5 className="text-base font-semibold tracking-normal text-slate-950">
             Notifications
-          </h2>
+          </h5>
           <p className="text-sm text-slate-500">Security and account alerts</p>
         </div>
         <Bell size={20} className="text-slate-500" />
@@ -346,9 +359,9 @@ function TransactionsTable({ transactions }) {
     <Surface className="overflow-hidden">
       <div className="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-base font-semibold tracking-normal text-slate-950">
+          <h4 className=" tracking-normal text-slate-950">
             Recent transactions
-          </h2>
+          </h4>
           <p className="text-sm text-slate-500">Deposits, transfers, dividends, and repayments</p>
         </div>
         <button className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
@@ -450,7 +463,7 @@ function DashboardOverview({ stats, transactions, memberName, user, notification
       label: "Account Balance",
       value: formatCurrency(stats.balance),
       icon: WalletCards,
-      trend: "+8.4%",
+      
       helper: "Available for transfers and repayments",
       tone: "emerald",
     },
@@ -458,7 +471,7 @@ function DashboardOverview({ stats, transactions, memberName, user, notification
       label: "Savings Balance",
       value: formatCurrency(stats.totalSavings),
       icon: PiggyBank,
-      trend: "+12.2%",
+       
       helper: "Monthly saving target is on track",
       tone: "blue",
     },
@@ -466,7 +479,7 @@ function DashboardOverview({ stats, transactions, memberName, user, notification
       label: "Active Loan Balance",
       value: formatCurrency(stats.loanBalance),
       icon: Landmark,
-      trend: "-4.1%",
+       
       helper: `${stats.activeLoans} active loan${stats.activeLoans === 1 ? "" : "s"}`,
       tone: "amber",
     },
@@ -474,26 +487,22 @@ function DashboardOverview({ stats, transactions, memberName, user, notification
       label: "Monthly Contributions",
       value: formatCurrency(stats.monthlyContributions),
       icon: CalendarClock,
-      trend: "Paid",
+       
       helper: "Next contribution window closes May 31",
       tone: "slate",
     },
   ];
 
   return (
-    <div className="space-y-6">
-      <section className="overflow-hidden rounded-lg border border-slate-200 bg-[linear-gradient(135deg,#07182d_0%,#0f3443_48%,#155e3f_100%)] p-6 text-white shadow-[0_24px_70px_rgba(15,23,42,0.2)]">
+    <div className="space-y-2">
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-[linear-gradient(135deg,#07182d_0%,#0f3443_48%,#155e3f_100%)] p-2 text-white">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-200">
-              Member dashboard
-            </p>
-            <h1 className="mt-3 text-2xl font-semibold tracking-normal text-white sm:text-3xl">
+            
+            <div className="mt-3  font-semibold   tracking-normal text-white sm:text-3xl">
               Welcome back, {memberName}
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-200">
-              Monitor your savings, loans, security alerts, and SACCO activity from one trusted workspace.
-            </p>
+            </div>
+             
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <Link
@@ -523,8 +532,8 @@ function DashboardOverview({ stats, transactions, memberName, user, notification
       <Surface className="p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-base font-semibold tracking-normal text-slate-950">Share capital requirement</h2>
-            <p className="mt-1 text-sm text-slate-500">
+            <h4 className="    tracking-normal text-slate-950">Share capital requirement</h4>
+            <p className="mt-1 text-[12px] text-slate-500">
               {stats.shareCapitalRemaining > 0
                 ? `${formatCurrency(stats.shareCapitalRemaining)} remaining to reach the minimum share capital of ${formatCurrency(MIN_SHARE_CAPITAL)}.`
                 : "Minimum share capital requirement has been met."}
@@ -669,8 +678,7 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
     <div className="space-y-6">
       <SectionHeader
         eyebrow="Profile settings"
-        title="Member profile"
-        description="Keep personal, employment, next of kin, and verification records accurate for faster SACCO services."
+      
       />
 
       {alert ? (
@@ -680,65 +688,107 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
       ) : null}
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        <Surface className="p-5">
-          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-4">
-              <div className="grid h-20 w-20 place-items-center overflow-hidden rounded-lg bg-slate-100 text-slate-500">
-                {preview ? (
-                  <img src={preview} alt="Profile preview" className="h-full w-full object-cover" />
-                ) : (
-                  <UserRound size={32} />
-                )}
-              </div>
-              <div>
-                <h2 className="text-base font-semibold tracking-normal text-slate-950">Profile picture</h2>
-                <p className="text-sm text-slate-500">Upload a clear member profile photo.</p>
-              </div>
-            </div>
-            <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
-              <Camera size={17} />
-              Upload photo
-              <input type="file" accept="image/*" className="sr-only" onChange={handleImage} />
-            </label>
-          </div>
-        </Surface>
-
-        <EditableSection title="Personal information" icon={UserRound}>
-          <Field label="Full Name" name="fullName" value={form.fullName} onChange={update} error={errors.fullName} />
-          <Field label="Email" name="email" value={form.email} onChange={update} error={errors.email} />
-          <Field label="Phone Number" name="phone" value={form.phone} onChange={update} error={errors.phone} />
-          <Field label="National ID" name="nationalId" value={form.nationalId} onChange={update} error={errors.nationalId} />
-          <Field label="Date of Birth" name="dateOfBirth" value={form.dateOfBirth} onChange={update} type="date" />
-          <Field label="Gender" name="gender" value={form.gender} onChange={update} />
-          <div className="md:col-span-2">
-            <Field label="Address" name="address" value={form.address} onChange={update} as="textarea" />
-          </div>
-        </EditableSection>
-
-        <EditableSection title="Employment information" icon={BriefcaseBusiness}>
-          <Field label="Employer" name="employer" value={form.employer} onChange={update} />
-          <Field label="Job Title" name="jobTitle" value={form.jobTitle} onChange={update} />
-          <Field label="Monthly Income" name="monthlyIncome" value={form.monthlyIncome} onChange={update} type="number" />
-          <Field label="Payroll Number" name="payrollNumber" value={form.payrollNumber} onChange={update} />
-        </EditableSection>
-
-        <EditableSection title="Next of kin" icon={UsersRound}>
-          <Field label="Name" name="nextOfKinName" value={form.nextOfKinName} onChange={update} error={errors.nextOfKinName} />
-          <Field label="Relationship" name="nextOfKinRelationship" value={form.nextOfKinRelationship} onChange={update} />
-          <Field label="Phone Number" name="nextOfKinPhone" value={form.nextOfKinPhone} onChange={update} />
-        </EditableSection>
-
-        <div className="flex justify-end">
-          <button
-            type="submit"
-            disabled={saving}
-            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {saving ? <RefreshCw className="animate-spin" size={17} /> : <CheckCircle2 size={17} />}
-            {saving ? "Saving changes" : "Save changes"}
-          </button>
+  <Surface className="p-5">
+    <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+      <div className="flex items-center gap-4">
+        <div className="grid h-20 w-20 place-items-center overflow-hidden rounded-lg bg-slate-100 text-slate-500">
+          {preview ? (
+            <img src={preview} alt="Profile preview" className="h-full w-full object-cover" />
+          ) : (
+            <UserRound size={32} />
+          )}
         </div>
-      </form>
+        <div>
+          <h5 className="text-base font-semibold tracking-normal text-slate-950">Profile picture</h5>
+          <p className="text-sm text-slate-500">Upload a clear member profile photo.</p>
+        </div>
+      </div>
+      <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+        <Camera size={17} />
+        Upload photo
+        <input type="file" accept="image/*" className="sr-only" onChange={handleImage} />
+      </label>
+    </div>
+  </Surface>
+
+  {/* Personal information – read‑only */}
+  <div className="rounded-lg border p-6 space-y-4">
+    <div className="flex items-center gap-2">
+      <UserRound className="h-5 w-5 text-muted-foreground" />
+      <h3 className="text-lg font-semibold">Personal information</h3>
+    </div>
+
+    <div className="grid gap-4 md:grid-cols-2">
+      {/* Full Name */}
+      <div>
+        <label className="text-sm font-medium">Full Name</label>
+        <p className="mt-1 text-sm text-foreground">{form.fullName || '—'}</p>
+      </div>
+
+      {/* Email */}
+      <div>
+        <label className="text-sm font-medium">Email</label>
+        <p className="mt-1 text-sm text-foreground">{form.email || '—'}</p>
+      </div>
+
+      {/* Phone Number */}
+      <div>
+        <label className="text-sm font-medium">Phone Number</label>
+        <p className="mt-1 text-sm text-foreground">{form.phone || '—'}</p>
+      </div>
+
+      {/* National ID */}
+      <div>
+        <label className="text-sm font-medium">National ID</label>
+        <p className="mt-1 text-sm text-foreground">{form.nationalId || '—'}</p>
+      </div>
+
+      {/* Date of Birth */}
+      <div>
+        <label className="text-sm font-medium">Date of Birth</label>
+        <p className="mt-1 text-sm text-foreground">{form.dateOfBirth || '—'}</p>
+      </div>
+
+      {/* Gender */}
+      <div>
+        <label className="text-sm font-medium">Gender</label>
+        <p className="mt-1 text-sm text-foreground">{form.gender || '—'}</p>
+      </div>
+
+      {/* Address (full width) */}
+      <div className="md:col-span-2">
+        <label className="text-sm font-medium">Address</label>
+        <p className="mt-1 text-sm text-foreground whitespace-pre-wrap">{form.address || '—'}</p>
+      </div>
+    </div>
+  </div>
+
+  {/* Employment information – editable */}
+  <EditableSection title="Employment information" icon={BriefcaseBusiness}>
+    <Field label="Employer" name="employer" value={form.employer} onChange={update} />
+    <Field label="Job Title" name="jobTitle" value={form.jobTitle} onChange={update} />
+    <Field label="Monthly Income" name="monthlyIncome" value={form.monthlyIncome} onChange={update} type="number" />
+    <Field label="Payroll Number" name="payrollNumber" value={form.payrollNumber} onChange={update} />
+  </EditableSection>
+
+  {/* Next of kin – editable */}
+  <EditableSection title="Next of kin" icon={UsersRound}>
+    <Field label="Name" name="nextOfKinName" value={form.nextOfKinName} onChange={update} error={errors.nextOfKinName} />
+    <Field label="Relationship" name="nextOfKinRelationship" value={form.nextOfKinRelationship} onChange={update} />
+    <Field label="Phone Number" name="nextOfKinPhone" value={form.nextOfKinPhone} onChange={update} />
+  </EditableSection>
+
+  <div className="flex justify-end">
+    <button
+      type="submit"
+      disabled={saving}
+      className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
+    >
+      {saving ? <RefreshCw className="animate-spin" size={17} /> : <CheckCircle2 size={17} />}
+      {saving ? "Saving changes" : "Save changes"}
+    </button>
+  </div>
+</form>
     </div>
   );
 }
@@ -750,7 +800,7 @@ function EditableSection({ title, icon: Icon, children }) {
         <div className="grid h-10 w-10 place-items-center rounded-lg bg-slate-100 text-slate-700">
           <Icon size={20} />
         </div>
-        <h2 className="text-base font-semibold tracking-normal text-slate-950">{title}</h2>
+        <h5 className="text-base font-semibold tracking-normal text-slate-950">{title}</h5>
       </div>
       <div className="grid gap-4 md:grid-cols-2">{children}</div>
     </Surface>
@@ -803,27 +853,22 @@ function SecuritySection({ user, accessToken, activeSessions = [], loginHistory 
     }
   }
 
+  // Login history pagination
+  const [loginPage, setLoginPage] = useState(1);
+  const LOGIN_PAGE_SIZE = 6;
+  const loginTotalPages = Math.max(1, Math.ceil((loginHistory || []).length / LOGIN_PAGE_SIZE));
+  const paginatedLogin = (loginHistory || []).slice((loginPage - 1) * LOGIN_PAGE_SIZE, loginPage * LOGIN_PAGE_SIZE);
+
   return (
     <div className="space-y-6">
       <SectionHeader
         eyebrow="Security center"
-        title="Protect your AYEDOS account"
-        description="Review account access, password health, login history, email verification, and future two-factor authentication readiness."
-        action={
-          <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 ring-1 ring-emerald-200">
-            <ShieldCheck size={17} />
-            Security score 86%
-          </span>
-        }
+       
+        
+         
       />
 
-      <div className="grid gap-4 lg:grid-cols-4">
-        <SecurityMetric icon={LockKeyhole} label="Password" value="Strong" tone="emerald" />
-        <SecurityMetric icon={Fingerprint} label="2FA" value="Coming soon" tone="amber" />
-        <SecurityMetric icon={MonitorSmartphone} label="Active sessions" value={activeSessions.length} tone="blue" />
-        <SecurityMetric icon={MailCheck} label="Email status" value={emailVerified ? "Verified" : "Unverified"} tone={emailVerified ? "emerald" : "amber"} />
-      </div>
-
+   
       <div className="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
         <Surface className="p-5">
           <div className="mb-5 flex items-center gap-3">
@@ -831,7 +876,7 @@ function SecuritySection({ user, accessToken, activeSessions = [], loginHistory 
               <KeyRound size={20} />
             </div>
             <div>
-              <h2 className="text-base font-semibold tracking-normal text-slate-950">Change password</h2>
+              <h5 className="text-base font-semibold tracking-normal text-slate-950">Change password</h5>
               <p className="text-sm text-slate-500">Use a unique password for your SACCO account.</p>
             </div>
           </div>
@@ -857,7 +902,7 @@ function SecuritySection({ user, accessToken, activeSessions = [], loginHistory 
           <Surface className="p-5">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-base font-semibold tracking-normal text-slate-950">Two-factor authentication</h2>
+                <h5 className="text-base font-semibold tracking-normal text-slate-950">Two-factor authentication</h5>
                 <p className="mt-1 text-sm text-slate-500">Authenticator and SMS verification will be available in a future release.</p>
               </div>
               <button
@@ -865,30 +910,15 @@ function SecuritySection({ user, accessToken, activeSessions = [], loginHistory 
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-500"
               >
                 <Fingerprint size={17} />
-                Enable later
+                Coming soon
               </button>
             </div>
           </Surface>
 
-          <Surface className="p-5">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-base font-semibold tracking-normal text-slate-950">Email verification status</h2>
-                <p className="mt-1 text-sm text-slate-500">{user?.email || "No email on file"}</p>
-              </div>
-              <span className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold ${emailVerified ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"}`}>
-                {emailVerified ? <BadgeCheck size={16} /> : <AlertCircle size={16} />}
-                {emailVerified ? "Verified" : "Verification pending"}
-              </span>
-            </div>
-          </Surface>
-        </div>
-      </div>
-
-      <div className="grid gap-5 xl:grid-cols-2">
+         
         <Surface className="overflow-hidden">
           <div className="border-b border-slate-200 p-5">
-            <h2 className="text-base font-semibold tracking-normal text-slate-950">Active sessions</h2>
+            <h5 className="text-base font-semibold tracking-normal text-slate-950">Active sessions</h5>
             <p className="text-sm text-slate-500">Devices currently trusted to access your account.</p>
           </div>
           {activeSessions.length === 0 ? (
@@ -933,49 +963,72 @@ function SecuritySection({ user, accessToken, activeSessions = [], loginHistory 
           </div>
           )}
         </Surface>
+        </div>
+      </div>
 
+      <div className="grid xl:grid-cols-1">
         <Surface className="overflow-hidden">
-          <div className="border-b border-slate-200 p-5">
-            <h2 className="text-base font-semibold tracking-normal text-slate-950">Login history</h2>
+          <div className="border-b border-slate-200 p-4">
+            <h5 className="text-base font-semibold tracking-normal text-slate-950">Login history</h5>
             <p className="text-sm text-slate-500">Recent account access events and verification results.</p>
           </div>
-          {loginHistory.length === 0 ? (
+          {(loginHistory || []).length === 0 ? (
             <EmptyState
               icon={Clock3}
               title="No login history"
               description="Recent login and security events will appear here when available."
             />
           ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-[560px]">
-              <thead>
-                <tr className="bg-slate-50">
-                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Date</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Event</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Device</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Location</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">IP</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {loginHistory.map((item) => (
-                  <tr key={`${item.date}-${item.event}`} className="bg-white">
-                    <td className="px-5 py-4 text-sm text-slate-600">{item.date}</td>
-                    <td className="px-5 py-4 text-sm font-semibold text-slate-900">{item.event}</td>
-                    <td className="px-5 py-4 text-sm text-slate-600">{item.device}</td>
-                    <td className="px-5 py-4 text-sm text-slate-600">{item.location}</td>
-                    <td className="px-5 py-4 text-sm text-slate-600">{item.ip}</td>
-                    <td className="px-5 py-4">
-                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClass(item.status)}`}>
-                        {item.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+            <>
+              <Table className=" ">
+                <TableHeader>
+                  <TableRow className=" ">
+                    <TableHead className="px-1 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Date</TableHead>
+                    <TableHead className="px-1 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Event</TableHead>
+                    <TableHead className="px-1 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Device</TableHead>
+                    <TableHead className="px-1 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Location</TableHead>
+                    <TableHead className="px-1 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">IP</TableHead>
+                    <TableHead className="px-1 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody className="divide-y divide-slate-100 pl3">
+                  {paginatedLogin.map((item) => (
+                    <TableRow key={`${item.date}-${item.event}`} className="pl-3 ">
+                      <TableCell className="px-1 pl-2 py-4 text-sm text-slate-600">{item.date}</TableCell>
+                      <TableCell className="px-1 py-4 text-sm font-semibold text-slate-900">{item.event}</TableCell>
+                      <TableCell className="px-1 py-4 text-sm text-slate-600">{item.device}</TableCell>
+                      <TableCell className="px-1 py-4 text-sm text-slate-600">{item.location}</TableCell>
+                      <TableCell className="px-1 py-4 text-sm text-slate-600">{item.ip}</TableCell>
+                      <TableCell className="px-1 py-4">
+                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClass(item.status)}`}>
+                          {item.status}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+
+              <div className="px-4 py-3">
+                <Pagination>
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious onClick={() => setLoginPage((p) => Math.max(1, p - 1))} />
+                    </PaginationItem>
+                    {Array.from({ length: loginTotalPages }).map((_, i) => (
+                      <PaginationItem key={i}>
+                        <PaginationLink isActive={loginPage === i + 1} onClick={() => setLoginPage(i + 1)}>
+                          {i + 1}
+                        </PaginationLink>
+                      </PaginationItem>
+                    ))}
+                    <PaginationItem>
+                      <PaginationNext onClick={() => setLoginPage((p) => Math.min(loginTotalPages, p + 1))} />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            </>
           )}
         </Surface>
       </div>
@@ -1051,8 +1104,7 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search }) {
     <div className="space-y-6">
       <SectionHeader
         eyebrow="Loans"
-        title="Loan management"
-        description="Apply for SACCO loan products, review active balances, and prepare for repayment workflows."
+        
         action={
           <button className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 py-3 text-sm font-semibold text-white">
             <Plus size={17} />
@@ -1073,7 +1125,7 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search }) {
 
       <div className="grid gap-5 xl:grid-cols-2">
         <Surface className="p-5">
-          <h2 className="text-base font-semibold tracking-normal text-slate-950">Request a loan</h2>
+          <h5 className="text-base font-semibold tracking-normal text-slate-950">Request a loan</h5>
           <form onSubmit={requestLoan} className="mt-4 grid gap-4">
             <label className="text-sm font-semibold text-slate-700">
               Loan product
@@ -1091,7 +1143,7 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search }) {
         </Surface>
 
         <Surface className="p-5">
-          <h2 className="text-base font-semibold tracking-normal text-slate-950">Repay a loan</h2>
+          <h5 className="text-base font-semibold tracking-normal text-slate-950">Repay a loan</h5>
           <form onSubmit={submitRepayment} className="mt-4 grid gap-4">
             <label className="text-sm font-semibold text-slate-700">
               Loan
@@ -1119,7 +1171,7 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search }) {
 function LoanProducts({ stats }) {
   return (
     <Surface className="p-5">
-      <h2 className="text-base font-semibold tracking-normal text-slate-950">Available loan products</h2>
+      <h5 className="text-base font-semibold tracking-normal text-slate-950">Available loan products</h5>
       <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {LOAN_PRODUCTS.map((product) => {
           const eligible = !product.requiresFullShareCapital || stats.shareCapitalRemaining === 0;
@@ -1145,11 +1197,11 @@ function EligibilityChecks({ stats }) {
   const checks = [
     { label: "Minimum share capital", passed: stats.shareCapitalRemaining === 0, helper: stats.shareCapitalRemaining === 0 ? "Met" : `${formatCurrency(stats.shareCapitalRemaining)} remaining` },
     { label: "Active membership", passed: true, helper: "Account is active" },
-    { label: "No overdue loan data", passed: true, helper: "Backend overdue checks can attach here" },
+ 
   ];
   return (
     <Surface className="p-5">
-      <h2 className="text-base font-semibold tracking-normal text-slate-950">Loan eligibility checks</h2>
+      <h5 className="text-base font-semibold tracking-normal text-slate-950">Loan eligibility checks</h5>
       <div className="mt-4 grid gap-3 md:grid-cols-3">
         {checks.map((check) => (
           <div key={check.label} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -1167,7 +1219,7 @@ function LoansTable({ loans }) {
   return (
     <Surface className="overflow-hidden">
       <div className="border-b border-slate-200 p-5">
-        <h2 className="text-base font-semibold tracking-normal text-slate-950">My loan records</h2>
+        <h5 className="text-base font-semibold tracking-normal text-slate-950">My loan records</h5>
         <p className="text-sm text-slate-500">Requests, approvals, active balances, and repayments.</p>
       </div>
       {loans.length === 0 ? <EmptyState icon={FileText} title="No loans found" description="Loan requests and repayments will appear here." /> : (
@@ -1185,7 +1237,7 @@ function LoansTable({ loans }) {
 function LoanCalculator({ product, amount, duration, totalInterest, monthlyRepayment }) {
   return (
     <Surface className="p-5">
-      <h2 className="text-base font-semibold tracking-normal text-slate-950">Loan calculator</h2>
+      <h5 className="text-base font-semibold tracking-normal text-slate-950">Loan calculator</h5>
       <div className="mt-4 grid gap-4 md:grid-cols-4">
         <StatCard icon={Landmark} label="Product" value={product.name} trend="Selected" helper="Based on request form" tone="blue" />
         <StatCard icon={WalletCards} label="Principal" value={formatCurrency(amount)} trend="Estimate" helper={`Max ${formatCurrency(product.max)}`} tone="emerald" />
@@ -1219,17 +1271,11 @@ function PortfolioPage({ stats, transactions, shares, search, user }) {
     <div className="space-y-6">
       <SectionHeader
         eyebrow="Portfolio"
-        title="My SACCO portfolio"
-        description="A consolidated view of your savings, share capital, loan exposure, and recent financial activity."
-      />
+        title="SACCO portfolio"
+       />
       <div className="grid gap-4 md:grid-cols-4">
-        <StatCard icon={PiggyBank} label="Share Capital" value={formatCurrency(stats.totalSavings)} trend={`${Math.round(stats.shareCapitalProgress)}%`} helper={`${formatCurrency(stats.shareCapitalRemaining)} remaining`} tone="emerald" />
-        <StatCard icon={Landmark} label="Loan Exposure" value={formatCurrency(stats.loanBalance)} trend={`${stats.activeLoans} active`} helper="Outstanding loan balance" tone="amber" />
-        <StatCard icon={ReceiptText} label="Transactions" value={filteredTransactions.length} trend="Filtered" helper="Matches current search" tone="blue" />
-        <StatCard icon={WalletCards} label="Accounts" value={shares.length} trend="Live" helper="Share and savings records" tone="slate" />
-      </div>
-      <ReadOnlyPortfolioDetails user={user} />
-      <TransactionsTable transactions={filteredTransactions} />
+         
+    </div>
     </div>
   );
 }
@@ -1251,7 +1297,7 @@ function ReadOnlyPortfolioDetails({ user }) {
           <WalletCards size={20} />
         </div>
         <div>
-          <h2 className="text-base font-semibold tracking-normal text-slate-950">Portfolio details</h2>
+          <h5 className="text-base font-semibold tracking-normal text-slate-950">Portfolio details</h5>
           <p className="text-sm text-slate-500">Read-only member details from backend records.</p>
         </div>
       </div>
@@ -1328,7 +1374,7 @@ function SearchResultsPage({ search, data, stats, user }) {
                 <group.icon size={20} />
               </div>
               <div>
-                <h2 className="text-base font-semibold tracking-normal text-slate-950">{group.title}</h2>
+                <h5 className="text-base font-semibold tracking-normal text-slate-950">{group.title}</h5>
                 <p className="text-sm text-slate-500">{group.items.length} matching record{group.items.length === 1 ? "" : "s"}</p>
               </div>
             </div>
@@ -1377,8 +1423,7 @@ function ReportsPage({ accessToken }) {
     <div className="space-y-6">
       <SectionHeader
         eyebrow="Reports"
-        title="Request member reports"
-        description="Request portfolio, transaction, savings, or loan reports and receive them on your registered email."
+        
       />
       <Surface className="p-5">
         {message ? (
@@ -1423,7 +1468,7 @@ function SavingsPage({ stats, accessToken, onRefresh }) {
   }
 
   return (
-    <SimplePage eyebrow="Savings" title="Savings wallet" description="Monitor contribution progress and prepare deposit workflows." icon={PiggyBank}>
+    <SimplePage eyebrow="Savings"   icon={PiggyBank}>
       {message ? (
         <div className={`mb-4 rounded-lg border px-4 py-3 text-sm font-medium ${message.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800"}`}>
           {message.text}
@@ -1571,7 +1616,8 @@ export default function UserDashboard() {
     if (path.includes("/transactions")) {
       return (
         <div className="space-y-6">
-          <SectionHeader eyebrow="Transactions" title="Transaction history" description="Track deposits, transfers, repayments, dividends, references, and statuses." />
+          <SectionHeader eyebrow="Transactions" 
+         />
           <TransactionsTable transactions={data.transactions.filter((transaction) => matchesSearch(transaction, search))} />
         </div>
       );
@@ -1596,7 +1642,7 @@ export default function UserDashboard() {
     if (path.includes("/notifications")) {
       return (
         <div className="space-y-6">
-          <SectionHeader eyebrow="Notifications" title="Member notifications" description="Recent account, loan, deposit, and security updates." />
+          <SectionHeader eyebrow="Notifications"  />
           <NotificationsPanel items={data.notifications} />
         </div>
       );
@@ -1610,20 +1656,10 @@ export default function UserDashboard() {
     if (path.includes("/savings")) {
       return <SavingsPage stats={stats} accessToken={accessToken} onRefresh={() => loadDashboardData({ showLoading: false })} />;
     }
-    if (path.includes("/account")) {
-      return (
-        <SimplePage eyebrow="My account" title="Account summary" description="A concise account view for wallet, membership, and verification details." icon={WalletCards}>
-          <div className="grid gap-4 md:grid-cols-3">
-            <StatCard icon={WalletCards} label="Account balance" value={formatCurrency(stats.balance)} trend="+8.4%" helper="Available account balance" tone="emerald" />
-            <StatCard icon={BadgeCheck} label="Member status" value="Active" trend="Verified" helper="Role-based access: MEMBER" tone="blue" />
-            <StatCard icon={Eye} label="Visibility" value="Private" trend="Protected" helper="Only authorized roles can access this dashboard" tone="slate" />
-          </div>
-        </SimplePage>
-      );
-    }
+  
     if (path.includes("/support")) {
       return (
-        <SimplePage eyebrow="Support" title="Member support" description="Prepare helpdesk workflows for tickets, statements, and SACCO service requests." icon={Bell}>
+        <SimplePage eyebrow="Support"  icon={Bell}>
           <div className="grid gap-3 md:grid-cols-3">
             {["Request statement", "Report login issue", "Contact loans desk"].map((item) => (
               <button key={item} className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-4 text-left text-sm font-semibold text-slate-800 transition hover:bg-emerald-50">
@@ -1646,9 +1682,9 @@ export default function UserDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100">
+    <div className="min-h-screen bg-white">
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} collapsed={sidebarCollapsed} />
-      <main className={`min-h-screen transition-all ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-72"}`}>
+      <main className={`min-h-screen transition-all ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-62"}`}>
         <TopNavbar
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => {
@@ -1659,7 +1695,7 @@ export default function UserDashboard() {
           searchValue={search}
           onSearchChange={setSearch}
         />
-        <div className="mx-auto w-full max-w-[1500px] px-4 py-5 sm:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-[1500px] px-4 py-2 sm:px-2 lg:px-2">
           {renderContent()}
         </div>
       </main>

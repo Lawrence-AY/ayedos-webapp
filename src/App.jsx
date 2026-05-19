@@ -1,6 +1,7 @@
 import './App.css'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext.jsx'
+import { Toaster } from './components/ui/sonner.jsx'
 import Login from './pages/Login.jsx'
 import Register from './pages/Register.jsx'
 import SetPassword from './pages/SetPassword.jsx'
@@ -71,6 +72,7 @@ export default function App() {
           />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
+        <Toaster position="top-right" richColors />
       </BrowserRouter>
     </AuthProvider>
   )
