@@ -18,7 +18,7 @@
 
   --text: #0f2b3d;
   --text-h: #0f2b3d;
-  --bg: #f5f7fa;
+  --bg: #ffffff;
   --border: oklch(0.922 0 0);
   --code-bg: #f8fafc;
   --accent: oklch(0.97 0 0);
@@ -44,7 +44,7 @@
     font-size: 16px;
   }
 
-  --background: oklch(1 0 0);
+  --background: oklch(100% 0.00011 271.152);
 
   --foreground: oklch(0.145 0 0);
 
@@ -120,12 +120,9 @@
 
 body {
   margin: 0;
-  background: var(--bg);
+  background: #ffffff;
   color: var(--text);
   min-width: 320px;
-  background:
-    radial-gradient(circle at top left, transparent 24%),
-    linear-gradient(180deg, #f8fafc 0%, var(--bg) 100%);
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 

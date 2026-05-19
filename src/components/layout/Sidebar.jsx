@@ -20,7 +20,7 @@ import { getDashboardPath } from "../../utils/dashboardRoutes.js";
 
 const memberNavItems = [
   { label: "Dashboard", suffix: "", exact: true, icon: LayoutDashboard },
-  { label: "My Account", suffix: "account", icon: WalletCards },
+ 
   { label: "Savings", suffix: "savings", icon: BriefcaseBusiness },
   { label: "Transactions", suffix: "transactions", icon: ReceiptText },
   { label: "Loans", suffix: "loans", icon: FileText },
@@ -79,15 +79,21 @@ function NavLinkItem({ to, label, icon: Icon, exact = false, onClick, collapsed 
       onClick={onClick}
       className={({ isActive }) =>
         [
-          `group flex items-center gap-3 rounded-lg px-3.5 py-3 text-sm font-semibold transition-all duration-200 ${collapsed ? "justify-center" : ""}`,
+          `group flex items-center gap-3 rounded-lg px-3.5 py-3 text-sm font-semibold transition-all duration-200 ${
+            collapsed ? "justify-center" : ""
+          }`,
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300",
           isActive
-            ? "bg-white text-slate-950 shadow-sm"
-            : "text-slate-300 hover:translate-x-1 hover:bg-white/10 hover:text-white",
+            ? "bg-emerald-50 text-emerald-700 shadow-sm dark:bg-emerald-900/30 dark:text-emerald-400"
+            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white",
         ].join(" ")
       }
     >
-      <Icon className="transition duration-200 group-hover:scale-110" size={collapsed ? 24 : 18} strokeWidth={collapsed ? 2.4 : 2} />
+      <Icon
+        className="transition duration-200 group-hover:scale-110"
+        size={collapsed ? 22 : 18}
+        strokeWidth={collapsed ? 2 : 1.8}
+      />
       <span className={`truncate ${collapsed ? "sr-only" : ""}`}>{label}</span>
     </NavLink>
   );
@@ -108,40 +114,66 @@ export default function Sidebar({ open = false, onClose, collapsed = false }) {
 
   return (
     <>
+      {/* Mobile overlay */}
       <div
-        className={`fixed inset-0 z-30 bg-slate-950/45 transition lg:hidden ${
+        className={`fixed inset-0 z-30 bg-black/50 transition lg:hidden ${
           open ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
         onClick={onClose}
       />
+
+      {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex ${collapsed ? "lg:w-20" : "w-72"} flex-col border-r border-white/10 bg-[#07182d] text-white shadow-2xl transition-all duration-200 lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex ${
+          collapsed ? "lg:w-20" : "w-62"
+        } flex-col border-r border-slate-200 bg-white   transition-all duration-200 dark:border-slate-800 dark:bg-slate-950 lg:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex min-h-20 items-center justify-between gap-3 border-b border-white/10 px-5">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-emerald-500 text-base font-black text-slate-950">
-              A
-            </div>
-            <div className={`min-w-0 ${collapsed ? "lg:hidden" : ""}`}>
-              <p className="truncate text-xs font-semibold uppercase tracking-[0.2em] text-emerald-200">
-                AYEDOS SACCO
-              </p>
-              <p className="truncate text-lg font-semibold text-white">{portalLabel}</p>
-            </div>
-          </div>
+        {/* Header */}
+        <div className="flex min-h-17 items-center justify-between gap-3 border-b border-slate-200 px-5 dark:border-slate-800">
+         <div className="flex min-w-0 items-center gap-2">
+  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg">
+    {/* Light mode logo */}
+    <img 
+      src="../../src/assets/Dashboard.png" 
+      alt="AYEDOS Logo" 
+      className="h-6 w-6 block dark:hidden" 
+    />
+    {/* Dark mode logo */}
+    <img 
+      src="../../src/assets/Dashboard-dark.png" 
+      alt="AYEDOS Logo" 
+      className="h-6 w-6 hidden dark:block" 
+    />
+  </div>
+  <div className={`min-w-0 ${collapsed ? "lg:hidden" : ""}`}>
+    <p 
+      className="truncate text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-600 dark:text-white"
+      style={{ fontFamily: "Pirulen, sans-serif" }}
+    >
+      AYEDOS
+    </p>
+     <p 
+      className="truncate text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-600 dark:text-white"
+      style={{ fontFamily: "Pirulen, sans-serif" }}
+    >
+      SACCO
+    </p>
+  </div>
+</div>
           <button
             type="button"
             onClick={onClose}
-            className="grid h-9 w-9 place-items-center rounded-lg text-slate-300 transition hover:bg-white/10 hover:text-white lg:hidden"
+            className="grid h-9 w-9 place-items-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white lg:hidden"
             aria-label="Close sidebar"
           >
             <X size={19} />
           </button>
         </div>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto px-4 py-5">
+        {/* Navigation - hidden scrollbar */}
+        <nav className="flex-1 space-y-1 overflow-y-auto px-4 py-5 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           {items.map((item) => (
             <NavLinkItem
               key={item.suffix || "dashboard"}
@@ -155,21 +187,18 @@ export default function Sidebar({ open = false, onClose, collapsed = false }) {
           ))}
         </nav>
 
-        <div className="space-y-4 border-t border-white/10 p-4">
-          <div className={`rounded-lg border border-white/10 bg-white/5 p-4 ${collapsed ? "lg:hidden" : ""}`}>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-              Account security
-            </p>
-            <p className="mt-2 text-sm leading-5 text-slate-200">
-              One active device is allowed. Review new logins regularly.
-            </p>
-          </div>
+        {/* Footer / Logout */}
+        <div className="border-t border-slate-200 p-4 dark:border-slate-800">
           <button
             type="button"
             onClick={handleLogout}
-            className="group flex w-full items-center gap-3 rounded-lg px-3.5 py-3 text-sm font-semibold text-slate-300 transition-all duration-200 hover:translate-x-1 hover:bg-rose-500/10 hover:text-rose-100"
+            className="group flex w-full items-center gap-3 rounded-lg px-3.5 py-3 text-sm font-semibold text-slate-600 transition-all duration-200 hover:bg-rose-50 hover:text-rose-700 dark:text-slate-300 dark:hover:bg-rose-950/30 dark:hover:text-rose-400"
           >
-            <LogOut className="transition duration-200 group-hover:scale-110" size={collapsed ? 24 : 18} strokeWidth={collapsed ? 2.4 : 2} />
+            <LogOut
+              className="transition duration-200 group-hover:scale-110"
+              size={collapsed ? 22 : 18}
+              strokeWidth={collapsed ? 2 : 1.8}
+            />
             <span className={collapsed ? "lg:sr-only" : ""}>Logout</span>
           </button>
         </div>

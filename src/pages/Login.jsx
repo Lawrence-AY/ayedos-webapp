@@ -2,7 +2,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext.jsx";
 import { getPostLoginPath } from "../utils/dashboardRoutes.js";
-import logo from "../assets/logo-light.png";
+import logo from "../assets/AUTH.png";
 import DotSwarmCanvas from "../components/landing/DotTextCanvas.jsx";
 import { Eye, EyeOff } from "lucide-react";
 
@@ -130,14 +130,14 @@ export default function Login() {
             style={{
               display: "flex",
               justifyContent: "center",
-              marginBottom: 32,
+              marginBottom: 0,
             }}
           >
             <img
               src={logo}
               alt="Logo"
               style={{
-                height: 40,
+                height: 100,
                 width: "auto",
                 objectFit: "contain",
               }}
@@ -150,8 +150,9 @@ export default function Login() {
               fontSize: 24,
               fontWeight: 800,
               letterSpacing: "-0.02em",
+              fontface:"gotham-bold",
               color: "var(--color-primary, #1a202c)",
-              marginBottom: 32,
+              marginBottom: 15,
             }}
           >
             Welcome Back !

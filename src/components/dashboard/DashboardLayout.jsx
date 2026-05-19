@@ -3,63 +3,39 @@ import Sidebar from '../layout/Sidebar';
 import TopNavbar from '../layout/TopNavbar';
 
 export default function DashboardLayout({ children }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // Desktop collapsed state
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false); // Mobile overlay open state
 
   const toggleSidebar = () => {
-    setSidebarOpen(!sidebarOpen);
+    // On desktop, toggle collapsed mode
+    // On mobile, we rely on the TopNavbar button to open the overlay
+    if (window.innerWidth >= 1024) {
+      setSidebarCollapsed(!sidebarCollapsed);
+    } else {
+      setMobileSidebarOpen(!mobileSidebarOpen);
+    }
+  };
+
+  const closeMobileSidebar = () => {
+    if (mobileSidebarOpen) setMobileSidebarOpen(false);
   };
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        height: '100vh',
-        background: '#f8f9fa',
-        overflow: 'hidden',
-      }}
-    >
-      {/* Sidebar */}
-      <div
-        style={{
-          width: sidebarOpen ? '280px' : '0',
-          background: '#0a2a43',
-          transition: 'width 0.3s ease',
-          overflow: 'hidden',
-          borderRight: '1px solid rgba(10, 42, 67, 0.1)',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '20px',
-          padding: '24px 0',
-          overflowY: 'auto',
-        }}
-      >
-        <Sidebar />
-      </div>
+    <div className="flex h-screen overflow-hidden bg-white dark:bg-slate-950">
+      {/* Sidebar - handles both desktop collapsed and mobile overlay */}
+      <Sidebar
+        open={mobileSidebarOpen}
+        onClose={closeMobileSidebar}
+        collapsed={sidebarCollapsed}
+      />
 
-      {/* Main Content */}
-      <div
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-      >
-        {/* Top Navbar */}
+      {/* Main Content Area */}
+      <div className="flex flex-1 flex-col overflow-hidden">
         <TopNavbar
-          sidebarOpen={sidebarOpen}
+          sidebarOpen={!sidebarCollapsed} // For desktop, this indicates expanded state; TopNavbar may use it for styling
           onToggleSidebar={toggleSidebar}
         />
-
-        {/* Content Area */}
-        <main
-          style={{
-            flex: 1,
-            overflow: 'auto',
-            padding: '24px 36px',
-            background: '#f8f9fa',
-          }}
-        >
+        <main className="flex-1 overflow-y-auto p-6 lg:p-8">
           {children}
         </main>
       </div>
