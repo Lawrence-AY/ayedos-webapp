@@ -5,6 +5,11 @@ import { getPostLoginPath } from "../utils/dashboardRoutes.js";
 import logo from "../assets/AUTH.png";
 import DotSwarmCanvas from "../components/landing/DotTextCanvas.jsx";
 import { Eye, EyeOff } from "lucide-react";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -19,6 +24,13 @@ export default function Login() {
   const [otpVerifying, setOtpVerifying] = useState(false);
   const otpInputRef = useRef(null);
   const lastAttemptedOtpRef = useRef("");
+  const maskEmail = (email) => {
+  const [localPart, domain] = email.split('@');
+  if (!domain) return email;
+  const visibleStart = localPart.slice(0, 1);
+  const masked = visibleStart + '*'.repeat(Math.min(localPart.length - 1, 5));
+  return `${masked}@${domain}`;
+};
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -262,62 +274,85 @@ export default function Login() {
         </div>
       </div>
 
-      {otpRequired ? (
-        <div style={modalBackdropStyle} role="presentation">
-          <div style={modalStyle} role="dialog" aria-modal="true" aria-labelledby="otp-title">
-            <h2 id="otp-title" style={modalTitleStyle}>Verify sign in</h2>
-            <p style={modalTextStyle}>Enter the code sent to {email.trim()}. Verification starts automatically once the code is complete.</p>
-            <input
-              ref={otpInputRef}
-              id="otp"
-              type="text"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              value={otp}
-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 8))}
-              style={{ ...inputStyle, textAlign: "center", letterSpacing: "0.22em", fontWeight: 800 }}
-              placeholder="000000"
-            />
-            {(formError || authError) && (
-              <div role="alert" style={{ ...errorStyle, marginTop: 14, marginBottom: 0 }}>
-                {formError || authError}
-              </div>
-            )}
-            <div style={{ display: "flex", gap: 12, marginTop: 18 }}>
-              <button
-                type="button"
-                onClick={() => {
-                  setOtpRequired(false);
-                  setOtp("");
-                  lastAttemptedOtpRef.current = "";
-                  setFormError(null);
-                }}
-                style={secondaryButtonStyle}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={otpVerifying || otp.trim().length < 6}
-                onClick={async () => {
-                  setOtpVerifying(true);
-                  try {
-                    const verifiedUser = await completeLoginOtp({ email: email.trim(), otp: otp.trim() });
-                    navigate(getPostLoginPath(verifiedUser), { replace: true });
-                  } catch (err) {
-                    setFormError(err?.message || "OTP verification failed");
-                  } finally {
-                    setOtpVerifying(false);
-                  }
-                }}
-                style={{ ...buttonStyle, padding: "12px 18px", opacity: otpVerifying || otp.trim().length < 6 ? 0.7 : 1 }}
-              >
-                {otpVerifying ? "Verifying..." : "Verify"}
-              </button>
-            </div>
+     {
+  otpRequired && (
+    <div style={modalBackdropStyle} role="presentation">
+      <div style={modalStyle} role="dialog" aria-modal="true" aria-labelledby="otp-title">
+        <h2 id="otp-title" style={modalTitleStyle}>Verify sign in</h2>
+        <p style={modalTextStyle}>
+          Enter the code sent to <strong>{maskEmail(email.trim())}</strong>.
+        </p>
+
+        {/* shadcn InputOTP component */}
+        <InputOTP
+          maxLength={8}
+          value={otp}
+          onChange={(value) => setOtp(value.replace(/\D/g, ""))}
+          pattern="\d*"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+        >
+          <InputOTPGroup>
+            <InputOTPSlot index={0} />
+            <InputOTPSlot index={1} />
+            <InputOTPSlot index={2} />
+            <InputOTPSlot index={3} />
+            <InputOTPSlot index={4} />
+            <InputOTPSlot index={5} />
+            <InputOTPSlot index={6} />
+            <InputOTPSlot index={7} />
+          </InputOTPGroup>
+        </InputOTP>
+
+        {(formError || authError) && (
+          <div role="alert" style={{ ...errorStyle, marginTop: 14, marginBottom: 0 }}>
+            {formError || authError}
           </div>
+        )}
+
+        <div style={{ display: "flex", gap: 12, marginTop: 18 }}>
+          <button
+            type="button"
+            onClick={() => {
+              setOtpRequired(false);
+              setOtp("");
+              lastAttemptedOtpRef.current = "";
+              setFormError(null);
+            }}
+            style={secondaryButtonStyle}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={otpVerifying || otp.trim().length < 6}
+            onClick={async () => {
+              setOtpVerifying(true);
+              try {
+                const verifiedUser = await completeLoginOtp({
+                  email: email.trim(),
+                  otp: otp.trim(),
+                });
+                navigate(getPostLoginPath(verifiedUser), { replace: true });
+              } catch (err) {
+                setFormError(err?.message || "OTP verification failed");
+              } finally {
+                setOtpVerifying(false);
+              }
+            }}
+            style={{
+              ...buttonStyle,
+              padding: "12px 18px",
+              opacity: otpVerifying || otp.trim().length < 6 ? 0.7 : 1,
+            }}
+          >
+            {otpVerifying ? "Verifying..." : "Verify"}
+          </button>
         </div>
-      ) : null}
+      </div>
+    </div>
+  )
+}
     </div>
   );
 }

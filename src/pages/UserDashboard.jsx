@@ -16,6 +16,7 @@ import {
   CreditCard,
   Download,
   Eye,
+  EyeOff,
   FileText,
   Fingerprint,
   KeyRound,
@@ -97,6 +98,44 @@ const LOAN_PRODUCTS = [
 
 function formatCurrency(value) {
   return `KSh ${Math.abs(Math.round(Number(value || 0))).toLocaleString()}`;
+}
+
+function getGreeting(date = new Date()) {
+  const hour = date.getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+function maskEmail(email) {
+  const normalized = String(email || "");
+  const [local, domain] = normalized.split("@");
+  if (!domain) return normalized;
+  if (local.length <= 2) return `${local[0]}***@${domain}`;
+  return `${local[0]}${"*".repeat(Math.max(1, local.length - 2))}${local.slice(-1)}@${domain}`;
+}
+
+function maskPhone(phone) {
+  const normalized = String(phone || "");
+  const digits = normalized.replace(/\D/g, "");
+  if (!digits) return normalized;
+  const prefix = normalized.trim().startsWith("+") ? "+" : "";
+  const last = digits.slice(-4);
+  const showStart = digits.length > 7 ? digits.slice(0, 3) : digits.slice(0, 1);
+  const hiddenCount = digits.length - showStart.length - 4;
+  if (hiddenCount <= 0) return `${prefix}${digits}`;
+  return `${prefix}${showStart}${"*".repeat(hiddenCount)}${last}`;
+}
+function maskNationalId(nationalId) {
+  const normalized = String(nationalId || "");
+  const digits = normalized.replace(/\D/g, "");
+  if (!digits) return normalized;
+  const prefix = normalized.trim().startsWith("+") ? "+" : "";
+  const last = digits.slice(-4);
+  const showStart = digits.length > 7 ? digits.slice(0, 3) : digits.slice(0, 1);
+  const hiddenCount = digits.length - showStart.length - 4;
+  if (hiddenCount <= 0) return `${prefix}${digits}`;
+  return `${prefix}${showStart}${"*".repeat(hiddenCount)}${last}`;
 }
 
 function normalizeStatus(status) {
@@ -189,13 +228,19 @@ function SkeletonDashboard() {
   );
 }
 
-function StatCard({ icon: Icon, label, value, trend, helper, tone = "emerald" }) {
+function StatCard({ icon: Icon, label, value, trend, helper, tone = "emerald", blur = false }) {
   const tones = {
     emerald: "bg-emerald-50 text-emerald-700",
     blue: "bg-sky-50 text-sky-700",
     amber: "bg-amber-50 text-amber-700",
     slate: "bg-slate-100 text-slate-700",
   };
+
+  const displayValue = blur ? (
+    <span className="inline-block text-slate-950 blur-sm">{value}</span>
+  ) : (
+    value
+  );
 
   return (
     <Surface className="group p-5 hover:-translate-y-1">
@@ -207,7 +252,7 @@ function StatCard({ icon: Icon, label, value, trend, helper, tone = "emerald" })
       </div>
       <p className="mt-5 text-sm font-medium text-slate-500">{label}</p>
       <p className="mt-1 text-2xl font-semibold tracking-normal text-slate-950">
-        {value}
+        {displayValue}
       </p>
       <p className="mt-3 text-xs leading-5 text-slate-500">{helper}</p>
     </Surface>
@@ -457,13 +502,13 @@ function EmptyState({ icon: Icon, title, description }) {
   );
 }
 
-function DashboardOverview({ stats, transactions, memberName, user, notifications }) {
+function DashboardOverview({ stats, transactions, memberName, user, notifications, showValues, onToggleValues }) {
+  const greeting = getGreeting();
   const cards = [
     {
       label: "Account Balance",
       value: formatCurrency(stats.balance),
       icon: WalletCards,
-      
       helper: "Available for transfers and repayments",
       tone: "emerald",
     },
@@ -471,7 +516,6 @@ function DashboardOverview({ stats, transactions, memberName, user, notification
       label: "Savings Balance",
       value: formatCurrency(stats.totalSavings),
       icon: PiggyBank,
-       
       helper: "Monthly saving target is on track",
       tone: "blue",
     },
@@ -479,7 +523,6 @@ function DashboardOverview({ stats, transactions, memberName, user, notification
       label: "Active Loan Balance",
       value: formatCurrency(stats.loanBalance),
       icon: Landmark,
-       
       helper: `${stats.activeLoans} active loan${stats.activeLoans === 1 ? "" : "s"}`,
       tone: "amber",
     },
@@ -487,7 +530,6 @@ function DashboardOverview({ stats, transactions, memberName, user, notification
       label: "Monthly Contributions",
       value: formatCurrency(stats.monthlyContributions),
       icon: CalendarClock,
-       
       helper: "Next contribution window closes May 31",
       tone: "slate",
     },
@@ -498,13 +540,12 @@ function DashboardOverview({ stats, transactions, memberName, user, notification
       <section className="overflow-hidden rounded-lg border border-slate-200 bg-[linear-gradient(135deg,#07182d_0%,#0f3443_48%,#155e3f_100%)] p-2 text-white">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            
-            <div className="mt-3  font-semibold   tracking-normal text-white sm:text-3xl">
-              Welcome back, {memberName}
+            <div className="mt-3 font-semibold tracking-normal text-white sm:text-3xl">
+              {greeting}, {memberName}
             </div>
-             
+            
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="flex flex-wrap items-center gap-3 sm:justify-end">
             <Link
               to={getDashboardPath("MEMBER", "loans")}
               className="inline-flex items-center justify-center gap-2 rounded-lg bg-white px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-50"
@@ -519,13 +560,25 @@ function DashboardOverview({ stats, transactions, memberName, user, notification
               <ShieldCheck size={17} />
               Review security
             </Link>
+            <button
+              type="button"
+              onClick={onToggleValues}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/20"
+            >
+              {showValues ? <EyeOff size={16} /> : <Eye size={16} />}
+             
+            </button>
           </div>
         </div>
       </section>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {cards.map((card) => (
-          <StatCard key={card.label} {...card} />
+          <StatCard
+            key={card.label}
+            {...card}
+            blur={!showValues}
+          />
         ))}
       </div>
 
@@ -615,6 +668,8 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
   const [saving, setSaving] = useState(false);
   const [alert, setAlert] = useState(null);
   const [preview, setPreview] = useState(null);
+  const maskedEmail = form.email ? maskEmail(form.email) : "—";
+  const maskedPhone = form.phone ? maskPhone(form.phone) : "—";
 
   function update(event) {
     setForm((current) => ({ ...current, [event.target.name]: event.target.value }));
@@ -728,13 +783,13 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
       {/* Email */}
       <div>
         <label className="text-sm font-medium">Email</label>
-        <p className="mt-1 text-sm text-foreground">{form.email || '—'}</p>
+        <p className="mt-1 text-sm text-foreground">{maskedEmail}</p>
       </div>
 
       {/* Phone Number */}
       <div>
         <label className="text-sm font-medium">Phone Number</label>
-        <p className="mt-1 text-sm text-foreground">{form.phone || '—'}</p>
+        <p className="mt-1 text-sm text-foreground">{maskedPhone}</p>
       </div>
 
       {/* National ID */}
@@ -983,7 +1038,7 @@ function SecuritySection({ user, accessToken, activeSessions = [], loginHistory 
               <Table className=" ">
                 <TableHeader>
                   <TableRow className=" ">
-                    <TableHead className="px-1 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Date</TableHead>
+                    <TableHead className="px-1 pl-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Date</TableHead>
                     <TableHead className="px-1 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Event</TableHead>
                     <TableHead className="px-1 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Device</TableHead>
                     <TableHead className="px-1 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Location</TableHead>
@@ -994,7 +1049,7 @@ function SecuritySection({ user, accessToken, activeSessions = [], loginHistory 
                 <TableBody className="divide-y divide-slate-100 pl3">
                   {paginatedLogin.map((item) => (
                     <TableRow key={`${item.date}-${item.event}`} className="pl-3 ">
-                      <TableCell className="px-1 pl-2 py-4 text-sm text-slate-600">{item.date}</TableCell>
+                      <TableCell className="px-1 pl-4 py-4 text-sm text-slate-600">{item.date}</TableCell>
                       <TableCell className="px-1 py-4 text-sm font-semibold text-slate-900">{item.event}</TableCell>
                       <TableCell className="px-1 py-4 text-sm text-slate-600">{item.device}</TableCell>
                       <TableCell className="px-1 py-4 text-sm text-slate-600">{item.location}</TableCell>
@@ -1058,7 +1113,7 @@ function SecurityMetric({ icon: Icon, label, value, tone }) {
   );
 }
 
-function LoansPage({ loans, stats, accessToken, onRefresh, search }) {
+function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues }) {
   const [loanForm, setLoanForm] = useState({ type: "EMERGENCY", amount: "10000", duration: "12" });
   const [repayAmount, setRepayAmount] = useState("");
   const [message, setMessage] = useState(null);
@@ -1114,7 +1169,7 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search }) {
       />
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard icon={FileText} label="Active loans" value={activeLoans.length} trend="Live" helper="Approved or currently active facilities" tone="blue" />
-        <StatCard icon={CreditCard} label="Outstanding balance" value={formatCurrency(totalBalance)} trend="-4.1%" helper="Estimated from loan records" tone="amber" />
+        <StatCard icon={CreditCard} label="Outstanding balance" value={formatCurrency(totalBalance)} trend="-4.1%" helper="Estimated from loan records" tone="amber" blur={!showValues} />
         <StatCard icon={Clock3} label="Next repayment" value="-" trend="Pending" helper="Repayment schedule will appear when available" tone="slate" />
       </div>
       {message ? (
@@ -1264,23 +1319,74 @@ function SimplePage({ eyebrow, title, description, icon: Icon, children }) {
   );
 }
 
-function PortfolioPage({ stats, transactions, shares, search, user }) {
+function PortfolioPage({ stats, transactions, shares, search, user, showValues, onToggleValues }) {
   const filteredTransactions = transactions.filter((transaction) => matchesSearch(transaction, search));
+  const portfolioStats = [
+    { label: "Estimated account value", value: formatCurrency(stats.balance), tone: "emerald" },
+    { label: "Share capital", value: formatCurrency(stats.totalSavings), tone: "blue" },
+    { label: "Loan balance", value: formatCurrency(stats.loanBalance), tone: "amber" },
+    { label: "This month", value: formatCurrency(stats.monthlyContributions), tone: "slate" },
+  ];
 
   return (
     <div className="space-y-6">
       <SectionHeader
         eyebrow="Portfolio"
         title="SACCO portfolio"
-       />
-      <div className="grid gap-4 md:grid-cols-4">
-         
-    </div>
+        action={(
+          <button
+            type="button"
+            onClick={onToggleValues}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+          >
+            {showValues ? <EyeOff size={16} /> : <Eye size={16} />}
+            {showValues ? "Hide data" : "Show data"}
+          </button>
+        )}
+      />
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {portfolioStats.map((item) => (
+          <StatCard
+            key={item.label}
+            icon={WalletCards}
+            label={item.label}
+            value={item.value}
+            helper="Blurred for privacy"
+            tone={item.tone}
+            blur={!showValues}
+          />
+        ))}
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.6fr)]">
+        <Surface className="p-5">
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <div>
+              <h5 className="text-base font-semibold tracking-normal text-slate-950">Portfolio summary</h5>
+              <p className="text-sm text-slate-500">Your latest SACCO holdings and activity.</p>
+            </div>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{filteredTransactions.length} transactions</span>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Member contributions</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-950">{showValues ? formatCurrency(stats.monthlyContributions) : <span className="inline-block text-slate-950 blur-sm">{formatCurrency(stats.monthlyContributions)}</span>}</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Active loans</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-950">{showValues ? stats.activeLoans : <span className="inline-block text-slate-950 blur-sm">{stats.activeLoans}</span>}</p>
+            </div>
+          </div>
+        </Surface>
+
+        <ReadOnlyPortfolioDetails user={user} showSensitive={showValues} />
+      </div>
     </div>
   );
 }
 
-function ReadOnlyPortfolioDetails({ user }) {
+function ReadOnlyPortfolioDetails({ user, showSensitive }) {
   const details = [
     ["Member name", user?.name || [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "-"],
     ["Email", user?.email || "-"],
@@ -1289,6 +1395,13 @@ function ReadOnlyPortfolioDetails({ user }) {
     ["Member number", user?.Member?.memberNumber || "-"],
     ["Membership type", user?.Member?.type || "Member"],
   ];
+
+  const renderValue = (value) =>
+    showSensitive ? (
+      value
+    ) : (
+      <span className="inline-block text-slate-950 blur-sm">{value}</span>
+    );
 
   return (
     <Surface className="p-5">
@@ -1305,7 +1418,7 @@ function ReadOnlyPortfolioDetails({ user }) {
         {details.map(([label, value]) => (
           <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</p>
-            <p className="mt-1 text-sm font-semibold text-slate-950">{value}</p>
+            <p className="mt-1 text-sm font-semibold text-slate-950">{renderValue(value)}</p>
           </div>
         ))}
       </div>
@@ -1313,7 +1426,7 @@ function ReadOnlyPortfolioDetails({ user }) {
   );
 }
 
-function SearchResultsPage({ search, data, stats, user }) {
+function SearchResultsPage({ search, data, stats, user, showValues }) {
   const resultGroups = [
     {
       title: "Transactions",
@@ -1363,7 +1476,7 @@ function SearchResultsPage({ search, data, stats, user }) {
       />
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard icon={Search} label="Matches" value={totalResults} trend="Live" helper="Updates as data refreshes" tone="blue" />
-        <StatCard icon={WalletCards} label="Balance" value={formatCurrency(stats.balance)} trend="Context" helper="Current account context" tone="emerald" />
+        <StatCard icon={WalletCards} label="Balance" value={formatCurrency(stats.balance)} trend="Context" helper="Current account context" tone="emerald" blur={!showValues} />
         <StatCard icon={MonitorSmartphone} label="Sessions" value={data.activeSessions.length} trend="Protected" helper="Only one active device is allowed" tone="slate" />
       </div>
       <div className="grid gap-5 xl:grid-cols-2">
@@ -1451,7 +1564,7 @@ function ReportsPage({ accessToken }) {
   );
 }
 
-function SavingsPage({ stats, accessToken, onRefresh }) {
+function SavingsPage({ stats, accessToken, onRefresh, showValues, onToggleValues }) {
   const [amount, setAmount] = useState("");
   const [message, setMessage] = useState(null);
 
@@ -1474,9 +1587,20 @@ function SavingsPage({ stats, accessToken, onRefresh }) {
           {message.text}
         </div>
       ) : null}
+      <div className="mb-4 flex items-center justify-between gap-3">
+       
+        <button
+          type="button"
+          onClick={onToggleValues}
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+        >
+          {showValues ? <EyeOff size={16} /> : <Eye size={16} />}
+          
+        </button>
+      </div>
       <div className="grid gap-4 md:grid-cols-2">
-        <StatCard icon={PiggyBank} label="Savings balance" value={formatCurrency(stats.totalSavings)} trend="+12.2%" helper="Includes share capital and voluntary savings" tone="emerald" />
-        <StatCard icon={ArrowDownLeft} label="Monthly deposits" value={formatCurrency(stats.monthlyContributions)} trend="Paid" helper="Current month deposits" tone="blue" />
+        <StatCard icon={PiggyBank} label="Savings balance" value={formatCurrency(stats.totalSavings)} trend="+12.2%" helper="Includes share capital and voluntary savings" tone="emerald" blur={!showValues} />
+        <StatCard icon={ArrowDownLeft} label="Monthly deposits" value={formatCurrency(stats.monthlyContributions)} trend="Paid" helper="Current month deposits" tone="blue" blur={!showValues} />
       </div>
       <form onSubmit={submitDeposit} className="mt-5 grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
         <Field label="Deposit amount" name="depositAmount" type="number" value={amount} onChange={(event) => setAmount(event.target.value)} />
@@ -1497,6 +1621,7 @@ export default function UserDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [search, setSearch] = useState("");
+  const [showValues, setShowValues] = useState(false);
   const [data, setData] = useState({
     transactions: [],
     loans: [],
@@ -1531,8 +1656,8 @@ export default function UserDashboard() {
           date: session.date ? new Date(session.date).toLocaleString() : "-",
           event: session.event || "Login",
           device: session.device || session.deviceName || "Unknown device",
-          ip: session.ip || "-",
-          location: session.location || "Location unavailable",
+          ip: session.ip || "",
+          location: session.location || "",
           status: session.isNewDevice ? "New device" : normalizeStatus(session.status),
         })),
       });
@@ -1600,7 +1725,7 @@ export default function UserDashboard() {
   function renderContent() {
     if (loading) return <SkeletonDashboard />;
     if (search.trim()) {
-      return <SearchResultsPage search={search.trim()} data={data} stats={stats} user={user} />;
+      return <SearchResultsPage search={search.trim()} data={data} stats={stats} user={user} showValues={showValues} />;
     }
     if (isDashboardHome) {
       return (
@@ -1610,6 +1735,8 @@ export default function UserDashboard() {
           memberName={memberName}
           user={user}
           notifications={data.notifications}
+          showValues={showValues}
+          onToggleValues={() => setShowValues((current) => !current)}
         />
       );
     }
@@ -1623,7 +1750,7 @@ export default function UserDashboard() {
       );
     }
     if (path.includes("/loans")) {
-      return <LoansPage loans={data.loans} stats={stats} accessToken={accessToken} onRefresh={() => loadDashboardData({ showLoading: false })} search={search} />;
+      return <LoansPage loans={data.loans} stats={stats} accessToken={accessToken} onRefresh={() => loadDashboardData({ showLoading: false })} search={search} showValues={showValues} />;
     }
     if (path.includes("/security")) {
       return (
@@ -1648,13 +1775,13 @@ export default function UserDashboard() {
       );
     }
     if (path.includes("/portfolio")) {
-      return <PortfolioPage stats={stats} transactions={data.transactions} shares={data.shares} search={search} user={user} />;
+      return <PortfolioPage stats={stats} transactions={data.transactions} shares={data.shares} search={search} user={user} showValues={showValues} onToggleValues={() => setShowValues((current) => !current)} />;
     }
     if (path.includes("/reports")) {
       return <ReportsPage accessToken={accessToken} />;
     }
     if (path.includes("/savings")) {
-      return <SavingsPage stats={stats} accessToken={accessToken} onRefresh={() => loadDashboardData({ showLoading: false })} />;
+      return <SavingsPage stats={stats} accessToken={accessToken} onRefresh={() => loadDashboardData({ showLoading: false })} showValues={showValues} onToggleValues={() => setShowValues((current) => !current)} />;
     }
   
     if (path.includes("/support")) {
@@ -1677,6 +1804,8 @@ export default function UserDashboard() {
         memberName={memberName}
         user={user}
         notifications={data.notifications}
+        showValues={showValues}
+        onToggleValues={() => setShowValues((current) => !current)}
       />
     );
   }

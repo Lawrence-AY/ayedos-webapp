@@ -138,16 +138,16 @@ export default function Sidebar({ open = false, onClose, collapsed = false }) {
     <img 
       src="../../src/assets/Dashboard.png" 
       alt="AYEDOS Logo" 
-      className="h-6 w-6 block dark:hidden" 
+      className="h-8 w-8 block dark:hidden" 
     />
     {/* Dark mode logo */}
     <img 
       src="../../src/assets/Dashboard-dark.png" 
       alt="AYEDOS Logo" 
-      className="h-6 w-6 hidden dark:block" 
+      className="h-8 w-8 hidden dark:block" 
     />
   </div>
-  <div className={`min-w-0 ${collapsed ? "lg:hidden" : ""}`}>
+  <div hidden className={`min-w-0 ${collapsed ? "lg:hidden" : ""}`}>
     <p 
       className="truncate text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-600 dark:text-white"
       style={{ fontFamily: "Pirulen, sans-serif" }}
