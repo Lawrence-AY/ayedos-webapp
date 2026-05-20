@@ -100,6 +100,31 @@ export async function depositSavings(amount, accessToken) {
   return unwrapEnvelopeData(res.json)
 }
 
+export async function initiateContribution(data, accessToken) {
+  const res = await apiRequest('/api/member/contributions', {
+    method: 'POST',
+    accessToken,
+    body: data,
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to initiate contribution')
+  return {
+    ...unwrapEnvelopeData(res.json),
+    message: res.json?.message,
+  }
+}
+
+export async function getContributionStatus(transactionId, accessToken) {
+  const res = await apiRequest(`/api/member/contributions/${transactionId}/status`, {
+    method: 'GET',
+    accessToken,
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to fetch contribution status')
+  return {
+    ...unwrapEnvelopeData(res.json),
+    message: res.json?.message,
+  }
+}
+
 export async function emailMemberReport(reportType, accessToken) {
   const res = await apiRequest('/api/member/reports/email', {
     method: 'POST',

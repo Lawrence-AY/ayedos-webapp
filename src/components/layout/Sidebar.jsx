@@ -104,8 +104,6 @@ export default function Sidebar({ open = false, onClose, collapsed = false }) {
   const navigate = useNavigate();
   const role = String(user?.role || "MEMBER").toUpperCase();
   const items = navItems[role] || navItems.MEMBER;
-  const portalLabel =
-    role === "ADMIN" ? "Administrator" : role === "FINANCE" ? "Finance Officer" : "Member Portal";
 
   async function handleLogout() {
     await logout();

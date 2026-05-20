@@ -11,6 +11,8 @@ import {
   InputOTPSlot,
 } from "@/components/ui/input-otp";
 
+const OTP_COOLDOWN_SECONDS = 60;
+
 export default function Login() {
   const navigate = useNavigate();
   const { login, completeLoginOtp, authError, isLoading } = useContext(AuthContext);
@@ -22,6 +24,8 @@ export default function Login() {
   const [otp, setOtp] = useState("");
   const [otpRequired, setOtpRequired] = useState(false);
   const [otpVerifying, setOtpVerifying] = useState(false);
+  const [otpCountdown, setOtpCountdown] = useState(0);
+  const [submitCooldown, setSubmitCooldown] = useState(0);
   const otpInputRef = useRef(null);
   const lastAttemptedOtpRef = useRef("");
   const maskEmail = (email) => {
@@ -47,9 +51,13 @@ export default function Login() {
         return;
       }
 
+      if (submitCooldown > 0) return;
+
       const loggedInUser = await login({ email: email.trim(), password });
       if (loggedInUser?.requiresOtp) {
         setOtpRequired(true);
+        setOtpCountdown(OTP_COOLDOWN_SECONDS);
+        setSubmitCooldown(OTP_COOLDOWN_SECONDS);
         setFormError(null);
         return;
       }
@@ -63,6 +71,22 @@ export default function Login() {
     if (!otpRequired) return;
     window.setTimeout(() => otpInputRef.current?.focus(), 50);
   }, [otpRequired]);
+
+  useEffect(() => {
+    if (otpCountdown <= 0) return;
+    const timerId = window.setInterval(() => {
+      setOtpCountdown((current) => Math.max(current - 1, 0));
+    }, 1000);
+    return () => window.clearInterval(timerId);
+  }, [otpCountdown]);
+
+  useEffect(() => {
+    if (submitCooldown <= 0) return;
+    const timerId = window.setInterval(() => {
+      setSubmitCooldown((current) => Math.max(current - 1, 0));
+    }, 1000);
+    return () => window.clearInterval(timerId);
+  }, [submitCooldown]);
 
   useEffect(() => {
     const normalizedOtp = otp.trim();
@@ -130,6 +154,7 @@ export default function Login() {
         <div
           style={{
             background: "rgba(255, 255, 255, 0.95)",
+            colorScheme: "light",
             backdropFilter: "blur(4px)",
             borderRadius: 20,
             padding: "48px 40px",
@@ -248,14 +273,14 @@ export default function Login() {
 
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || submitCooldown > 0}
               style={{
                 ...buttonStyle,
-                cursor: isLoading ? "not-allowed" : "pointer",
-                opacity: isLoading ? 0.7 : 1,
+                cursor: isLoading || submitCooldown > 0 ? "not-allowed" : "pointer",
+                opacity: isLoading || submitCooldown > 0 ? 0.7 : 1,
               }}
             >
-              {isLoading ? "Signing in..." : "Sign in"}
+              {isLoading ? "Signing in..." : submitCooldown > 0 ? `Try again in ${submitCooldown}s` : "Sign in"}
             </button>
 
             <div style={mutedTextStyle}>
@@ -281,6 +306,9 @@ export default function Login() {
         <h2 id="otp-title" style={modalTitleStyle}>Verify sign in</h2>
         <p style={modalTextStyle}>
           Enter the code sent to <strong>{maskEmail(email.trim())}</strong>.
+        </p>
+        <p style={timerTextStyle}>
+          Code expires soon. You can request another code in {otpCountdown}s.
         </p>
 
         {/* shadcn InputOTP component */}
@@ -316,6 +344,7 @@ export default function Login() {
             onClick={() => {
               setOtpRequired(false);
               setOtp("");
+              setOtpCountdown(0);
               lastAttemptedOtpRef.current = "";
               setFormError(null);
             }}
@@ -438,6 +467,7 @@ const modalStyle = {
   maxWidth: 420,
   borderRadius: 16,
   background: "white",
+  colorScheme: "light",
   border: "1px solid rgba(226, 232, 240, 0.9)",
   padding: 28,
   boxShadow: "0 30px 80px rgba(2, 6, 23, 0.3)",
@@ -456,6 +486,13 @@ const modalTextStyle = {
   color: "#64748b",
   fontSize: 14,
   lineHeight: 1.6,
+};
+
+const timerTextStyle = {
+  margin: "-8px 0 18px",
+  color: "#166534",
+  fontSize: 13,
+  fontWeight: 700,
 };
 
 const secondaryButtonStyle = {

@@ -1,4 +1,4 @@
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext.jsx";
 import { resendOtp } from "../services/authService.js";
@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 
+const OTP_COOLDOWN_SECONDS = 60;
+
 export default function Register() {
   const navigate = useNavigate();
   const { register, completeRegistrationOtp, authError, isLoading } = useContext(AuthContext);
@@ -25,6 +27,8 @@ export default function Register() {
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const [isResendingOtp, setIsResendingOtp] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
+  const [otpCountdown, setOtpCountdown] = useState(0);
+  const [submitCooldown, setSubmitCooldown] = useState(0);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -60,6 +64,8 @@ export default function Register() {
 
       setPendingEmail(email.trim());
       setOtpDialogOpen(true);
+      setOtpCountdown(OTP_COOLDOWN_SECONDS);
+      setSubmitCooldown(OTP_COOLDOWN_SECONDS);
     } catch (err) {
       setFormError(err?.message || "Registration failed");
     } finally {
@@ -116,6 +122,7 @@ export default function Register() {
     try {
       const response = await resendOtp(pendingEmail);
       setOtp("");
+      setOtpCountdown(OTP_COOLDOWN_SECONDS);
       setOtpMessage(response?.message || "A new OTP has been sent to your email");
     } catch (err) {
       setOtpError(err?.message || "Unable to resend OTP");
@@ -123,6 +130,22 @@ export default function Register() {
       setIsResendingOtp(false);
     }
   }
+
+  useEffect(() => {
+    if (otpCountdown <= 0) return;
+    const timerId = window.setInterval(() => {
+      setOtpCountdown((current) => Math.max(current - 1, 0));
+    }, 1000);
+    return () => window.clearInterval(timerId);
+  }, [otpCountdown]);
+
+  useEffect(() => {
+    if (submitCooldown <= 0) return;
+    const timerId = window.setInterval(() => {
+      setSubmitCooldown((current) => Math.max(current - 1, 0));
+    }, 1000);
+    return () => window.clearInterval(timerId);
+  }, [submitCooldown]);
 
   return (
     <div
@@ -164,7 +187,8 @@ export default function Register() {
       >
         <div
           style={{
-            background: "rgba(255, 255, 255, 0.5)",
+            background: "rgba(255, 255, 255, 0.95)",
+            colorScheme: "light",
             backdropFilter: "blur(4px)",
             borderRadius: 20,
             padding: "40px",
@@ -280,18 +304,18 @@ export default function Register() {
 
             <button
               type="submit"
-              disabled={isRegistering || isLoading}
+              disabled={isRegistering || isLoading || submitCooldown > 0}
               style={{
                 ...buttonStyle,
-                cursor: isRegistering || isLoading ? "not-allowed" : "pointer",
-                opacity: isRegistering || isLoading ? 0.7 : 1,
+                cursor: isRegistering || isLoading || submitCooldown > 0 ? "not-allowed" : "pointer",
+                opacity: isRegistering || isLoading || submitCooldown > 0 ? 0.7 : 1,
               }}
             >
-              {isRegistering ? "Sending OTP..." : "Create account"}
+              {isRegistering ? "Sending OTP..." : submitCooldown > 0 ? `Try again in ${submitCooldown}s` : "Create account"}
             </button>
           </form>
           <AlertDialog open={otpDialogOpen} onOpenChange={setOtpDialogOpen}>
-            <AlertDialogContent>
+            <AlertDialogContent className="bg-white text-slate-950">
               <AlertDialogHeader>
                 <AlertDialogTitle>Verify your email</AlertDialogTitle>
               </AlertDialogHeader>
@@ -299,6 +323,9 @@ export default function Register() {
                 <p style={{ margin: 0, color: "#475569" }}>
                   Enter the code sent to <strong>{pendingEmail}</strong> to
                   continue.
+                </p>
+                <p style={timerTextStyle}>
+                  You can resend a code in {otpCountdown}s.
                 </p>
                 <input
                   type="text"
@@ -326,9 +353,9 @@ export default function Register() {
                   type="button"
                   variant="secondary"
                   onClick={handleResendOtp}
-                  disabled={isResendingOtp || isVerifyingOtp}
+                  disabled={isResendingOtp || isVerifyingOtp || otpCountdown > 0}
                 >
-                  {isResendingOtp ? "Sending..." : "Resend OTP"}
+                  {isResendingOtp ? "Sending..." : otpCountdown > 0 ? `Resend in ${otpCountdown}s` : "Resend OTP"}
                 </Button>
                 <Button
                   type="button"
@@ -396,6 +423,13 @@ const successStyle = {
   color: "#166534",
   fontWeight: 500,
   fontSize: 14,
+};
+
+const timerTextStyle = {
+  margin: "-8px 0 0",
+  color: "#166534",
+  fontSize: 13,
+  fontWeight: 700,
 };
 
 const mutedTextStyle = {
