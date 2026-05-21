@@ -25,6 +25,7 @@ export default function TopNavbar({
   const [menuOpen, setMenuOpen] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem("ayedos_theme") || "light");
   const name = user?.name || "AYEDOS Member";
+  const profilePhoto = user?.passportPhotoUrl || user?.profilePhotoUrl || user?.avatarUrl;
 
   useEffect(() => {
     const isDark = theme === "dark";
@@ -87,8 +88,12 @@ export default function TopNavbar({
               className="flex h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 text-left transition duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-slate-50 hover:shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:hover:border-emerald-800 dark:hover:bg-slate-800"
               aria-label="Open profile menu"
             >
-              <span className="grid h-8 w-8 place-items-center rounded-lg bg-slate-950 text-xs font-bold text-white dark:bg-slate-700 dark:text-white">
-                {getInitials(name)}
+              <span className="grid h-8 w-8 place-items-center overflow-hidden rounded-lg bg-slate-950 text-xs font-bold text-white dark:bg-slate-700 dark:text-white">
+                {profilePhoto ? (
+                  <img src={profilePhoto} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  getInitials(name)
+                )}
               </span>
               <span className="hidden min-w-0 lg:block">
                 <span className="block max-w-36 truncate text-sm font-semibold text-slate-950 dark:text-white">

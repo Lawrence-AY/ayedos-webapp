@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowDownLeft,
@@ -81,6 +81,7 @@ const emptyProfile = {
 };
 
 const MIN_SHARE_CAPITAL = 25000;
+const MAX_PROFILE_PHOTO_BYTES = 1.5 * 1024 * 1024;
 
 const LOAN_PRODUCTS = [
   { type: "EMERGENCY", name: "Emergency Loan", max: 50000, interestRate: 1, duration: 12, guarantors: 0, requiresFullShareCapital: false },
@@ -630,6 +631,27 @@ function Field({ label, name, value, onChange, type = "text", error, as = "input
   );
 }
 
+function buildProfileForm(profile = {}) {
+  return {
+    ...emptyProfile,
+    fullName: profile?.name || profile?.fullName || "",
+    email: profile?.email || "",
+    phone: profile?.phone || "",
+    nationalId: profile?.nationalId || profile?.Member?.nationalId || "",
+    dateOfBirth: profile?.dateOfBirth || "",
+    gender: profile?.gender || "",
+    address: profile?.address || "",
+    employer: profile?.employer || "",
+    jobTitle: profile?.occupation || profile?.jobTitle || "",
+    monthlyIncome: profile?.monthlyIncome || "",
+    payrollNumber: profile?.payrollNumber || "",
+    nextOfKinName: profile?.nextOfKinName || profile?.nextOfKin?.name || "",
+    nextOfKinRelationship: profile?.nextOfKinRelationship || profile?.nextOfKin?.relationship || "",
+    nextOfKinPhone: profile?.nextOfKinPhone || profile?.nextOfKin?.phone || "",
+    passportPhotoUrl: profile?.passportPhotoUrl || "",
+  };
+}
+
 function ProfileSettings({ user, accessToken, onProfileUpdated }) {
   const [form, setForm] = useState(() => ({
     ...emptyProfile,
@@ -647,11 +669,16 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
     nextOfKinName: user?.nextOfKinName || user?.nextOfKin?.name || "",
     nextOfKinRelationship: user?.nextOfKinRelationship || user?.nextOfKin?.relationship || "",
     nextOfKinPhone: user?.nextOfKinPhone || user?.nextOfKin?.phone || "",
+    passportPhotoUrl: user?.passportPhotoUrl || "",
   }));
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [alert, setAlert] = useState(null);
-  const [preview, setPreview] = useState(null);
+  const [preview, setPreview] = useState(user?.passportPhotoUrl || null);
+  useEffect(() => {
+    setForm(buildProfileForm(user));
+    setPreview(user?.passportPhotoUrl || null);
+  }, [user]);
   const maskedEmail = form.email ? maskEmail(form.email) : "—";
   const maskedPhone = form.phone ? maskPhone(form.phone) : "—";
 
@@ -662,7 +689,23 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
   function handleImage(event) {
     const file = event.target.files?.[0];
     if (!file) return;
-    setPreview(URL.createObjectURL(file));
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setAlert({ type: "error", message: "Upload a JPG, PNG, or WebP image." });
+      return;
+    }
+    if (file.size > MAX_PROFILE_PHOTO_BYTES) {
+      setAlert({ type: "error", message: "Profile photo must be 1.5 MB or smaller." });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const imageUrl = String(reader.result || "");
+      setPreview(imageUrl);
+      setForm((current) => ({ ...current, passportPhotoUrl: imageUrl }));
+      setAlert(null);
+    };
+    reader.onerror = () => setAlert({ type: "error", message: "Could not read the selected image." });
+    reader.readAsDataURL(file);
   }
 
   function validate() {
@@ -695,6 +738,10 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
         occupation: form.jobTitle,
         monthlyIncome: form.monthlyIncome,
         payrollNumber: form.payrollNumber,
+        passportPhotoUrl: form.passportPhotoUrl,
+        nextOfKinName: form.nextOfKinName,
+        nextOfKinRelationship: form.nextOfKinRelationship,
+        nextOfKinPhone: form.nextOfKinPhone,
         gender: form.gender,
         dateOfBirth: form.dateOfBirth,
         employer: form.employer,

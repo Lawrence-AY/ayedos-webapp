@@ -21,6 +21,15 @@ const getPersistableUser = (user) => {
     lastName: user.lastName,
     name: user.name,
     email: user.email,
+    phone: user.phone,
+    nationalId: user.nationalId,
+    address: user.address,
+    passportPhotoUrl: user.passportPhotoUrl,
+    nextOfKinName: user.nextOfKinName,
+    nextOfKinRelationship: user.nextOfKinRelationship,
+    nextOfKinPhone: user.nextOfKinPhone,
+    nextOfKin: user.nextOfKin,
+    consentGiven: user.consentGiven,
     role: user.role,
   }
 }

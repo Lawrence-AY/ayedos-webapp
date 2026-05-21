@@ -28,6 +28,7 @@ export default function Login() {
   const [submitCooldown, setSubmitCooldown] = useState(0);
   const otpInputRef = useRef(null);
   const lastAttemptedOtpRef = useRef("");
+  const otpVerifyingRef = useRef(false);
   const maskEmail = (email) => {
   const [localPart, domain] = email.split('@');
   if (!domain) return email;
@@ -89,8 +90,12 @@ export default function Login() {
   }, [submitCooldown]);
 
   useEffect(() => {
+    otpVerifyingRef.current = otpVerifying;
+  }, [otpVerifying]);
+
+  useEffect(() => {
     const normalizedOtp = otp.trim();
-    if (!otpRequired || otpVerifying || normalizedOtp.length < 6 || lastAttemptedOtpRef.current === normalizedOtp) return;
+    if (!otpRequired || otpVerifyingRef.current || normalizedOtp.length < 6 || lastAttemptedOtpRef.current === normalizedOtp) return;
 
     let cancelled = false;
     async function verifyOtp() {
@@ -111,7 +116,7 @@ export default function Login() {
     return () => {
       cancelled = true;
     };
-  }, [completeLoginOtp, email, navigate, otp, otpRequired, otpVerifying]);
+  }, [completeLoginOtp, email, navigate, otp, otpRequired]);
 
   return (
     <div
