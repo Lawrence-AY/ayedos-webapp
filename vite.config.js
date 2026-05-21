@@ -23,9 +23,23 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://127.0.0.1:3000',
         changeOrigin: true,
         secure: false,
+        configure: (proxy) => {
+          proxy.on('error', (err, req, res) => {
+            if (res.headersSent) return
+
+            res.writeHead(503, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({
+              success: false,
+              message: 'Backend API is not running on http://127.0.0.1:3000. Start sacco-backend with npm run dev or npm start.',
+              error: err.code || 'PROXY_ERROR',
+              path: req.url,
+              timestamp: new Date().toISOString(),
+            }))
+          })
+        },
       },
     },
   },

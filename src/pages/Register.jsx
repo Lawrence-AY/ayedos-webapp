@@ -77,8 +77,8 @@ export default function Register() {
     setOtpError(null);
     setOtpMessage("");
 
-    if (!otp.trim()) {
-      setOtpError("Please enter the OTP sent to your email");
+    if (!/^\d{6,8}$/.test(otp.trim())) {
+      setOtpError("Enter the 6 to 8 digit OTP sent to your email");
       return;
     }
 
@@ -333,7 +333,10 @@ export default function Register() {
                   autoComplete="one-time-code"
                   placeholder="Enter verification code"
                   value={otp}
-                  onChange={(event) => setOtp(event.target.value)}
+                  onChange={(event) => {
+                    setOtp(event.target.value.replace(/\D/g, "").slice(0, 8));
+                    setOtpError(null);
+                  }}
                   style={inputStyle}
                 />
                 {otpMessage && (
@@ -360,7 +363,7 @@ export default function Register() {
                 <Button
                   type="button"
                   onClick={handleVerifyOtp}
-                  disabled={isVerifyingOtp || isResendingOtp}
+                  disabled={isVerifyingOtp || isResendingOtp || !/^\d{6,8}$/.test(otp.trim())}
                 >
                   {isVerifyingOtp ? "Verifying..." : "Verify OTP"}
                 </Button>

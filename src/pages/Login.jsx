@@ -27,8 +27,6 @@ export default function Login() {
   const [otpCountdown, setOtpCountdown] = useState(0);
   const [submitCooldown, setSubmitCooldown] = useState(0);
   const otpInputRef = useRef(null);
-  const lastAttemptedOtpRef = useRef("");
-  const otpVerifyingRef = useRef(false);
   const maskEmail = (email) => {
   const [localPart, domain] = email.split('@');
   if (!domain) return email;
@@ -46,7 +44,9 @@ export default function Login() {
 
     try {
       if (otpRequired) {
-        if (!otp.trim()) return setFormError("OTP is required");
+        if (!/^\d{6,8}$/.test(otp.trim())) {
+          return setFormError("Enter the 6 to 8 digit OTP sent to your email");
+        }
         const verifiedUser = await completeLoginOtp({ email: email.trim(), otp: otp.trim() });
         navigate(getPostLoginPath(verifiedUser), { replace: true });
         return;
@@ -88,35 +88,6 @@ export default function Login() {
     }, 1000);
     return () => window.clearInterval(timerId);
   }, [submitCooldown]);
-
-  useEffect(() => {
-    otpVerifyingRef.current = otpVerifying;
-  }, [otpVerifying]);
-
-  useEffect(() => {
-    const normalizedOtp = otp.trim();
-    if (!otpRequired || otpVerifyingRef.current || normalizedOtp.length < 6 || lastAttemptedOtpRef.current === normalizedOtp) return;
-
-    let cancelled = false;
-    async function verifyOtp() {
-      setOtpVerifying(true);
-      lastAttemptedOtpRef.current = normalizedOtp;
-      setFormError(null);
-      try {
-        const verifiedUser = await completeLoginOtp({ email: email.trim(), otp: normalizedOtp });
-        if (!cancelled) navigate(getPostLoginPath(verifiedUser), { replace: true });
-      } catch (err) {
-        if (!cancelled) setFormError(err?.message || "OTP verification failed");
-      } finally {
-        if (!cancelled) setOtpVerifying(false);
-      }
-    }
-
-    verifyOtp();
-    return () => {
-      cancelled = true;
-    };
-  }, [completeLoginOtp, email, navigate, otp, otpRequired]);
 
   return (
     <div
@@ -320,7 +291,10 @@ export default function Login() {
         <InputOTP
           maxLength={8}
           value={otp}
-          onChange={(value) => setOtp(value.replace(/\D/g, ""))}
+          onChange={(value) => {
+            setOtp(value.replace(/\D/g, ""));
+            setFormError(null);
+          }}
           pattern="\d*"
           inputMode="numeric"
           autoComplete="one-time-code"
@@ -350,7 +324,6 @@ export default function Login() {
               setOtpRequired(false);
               setOtp("");
               setOtpCountdown(0);
-              lastAttemptedOtpRef.current = "";
               setFormError(null);
             }}
             style={secondaryButtonStyle}
@@ -359,9 +332,14 @@ export default function Login() {
           </button>
           <button
             type="button"
-            disabled={otpVerifying || otp.trim().length < 6}
+            disabled={otpVerifying || !/^\d{6,8}$/.test(otp.trim())}
             onClick={async () => {
+              if (!/^\d{6,8}$/.test(otp.trim())) {
+                setFormError("Enter the 6 to 8 digit OTP sent to your email");
+                return;
+              }
               setOtpVerifying(true);
+              setFormError(null);
               try {
                 const verifiedUser = await completeLoginOtp({
                   email: email.trim(),
@@ -377,7 +355,7 @@ export default function Login() {
             style={{
               ...buttonStyle,
               padding: "12px 18px",
-              opacity: otpVerifying || otp.trim().length < 6 ? 0.7 : 1,
+              opacity: otpVerifying || !/^\d{6,8}$/.test(otp.trim()) ? 0.7 : 1,
             }}
           >
             {otpVerifying ? "Verifying..." : "Verify"}
