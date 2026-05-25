@@ -290,10 +290,16 @@ function QuickActions() {
 }
 
 function ProfileCompletion({ user }) {
+  const nextOfKinPath = `${getDashboardPath("MEMBER", "settings")}#next-of-kin`;
+  const hasNextOfKin = Boolean(
+    (user?.nextOfKinName || user?.nextOfKin?.name) &&
+      (user?.nextOfKinRelationship || user?.nextOfKin?.relationship) &&
+      (user?.nextOfKinPhone || user?.nextOfKin?.phone)
+  );
   const checks = [
     { label: "Identity details", complete: Boolean(user?.nationalId || user?.Member?.nationalId), icon: BadgeCheck },
     { label: "Verify phone number", complete: Boolean(user?.phoneVerified || user?.isPhoneVerified || user?.phone), icon: Smartphone },
-    { label: "Add next of kin", complete: Boolean(user?.nextOfKinName || user?.nextOfKin?.name), icon: UsersRound },
+    { label: "Add next of kin", complete: hasNextOfKin, icon: UsersRound },
   ];
   const completed = checks.filter((item) => item.complete).length;
   const completion = Math.round((completed / checks.length) * 100);
@@ -306,7 +312,12 @@ function ProfileCompletion({ user }) {
           <h5 className="text-base font-semibold tracking-normal text-slate-950">
             Profile completion
           </h5>
-          <p className="text-sm text-slate-500">Finish verification to unlock faster approvals.</p>
+          <Link
+            to={nextOfKinPath}
+            className="text-sm font-medium text-slate-500 transition hover:text-emerald-700"
+          >
+            Finish verification to unlock faster approvals.
+          </Link>
         </div>
         <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700 ring-1 ring-emerald-200">
           {completion}%
@@ -720,6 +731,18 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
     setPreview(user?.passportPhotoUrl || null);
     setPhotoFile(null);
   }, [user]);
+
+  useEffect(() => {
+    if (window.location.hash !== "#next-of-kin") return;
+
+    window.requestAnimationFrame(() => {
+      document.getElementById("next-of-kin")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }, []);
+
   const maskedEmail = form.email ? maskEmail(form.email) : "—";
   const maskedPhone = form.phone ? maskPhone(form.phone) : "—";
   const maskedNationalId = form.nationalId ? maskNationalId(form.nationalId) : "—";
@@ -783,6 +806,8 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
     if (form.phone.replace(/\D/g, "").length < 10) nextErrors.phone = "Enter a valid phone number.";
     if (!form.nationalId.trim()) nextErrors.nationalId = "National ID is required.";
     if (!form.nextOfKinName.trim()) nextErrors.nextOfKinName = "Next of kin name is required.";
+    if (!form.nextOfKinRelationship.trim()) nextErrors.nextOfKinRelationship = "Relationship is required.";
+    if (form.nextOfKinPhone.replace(/\D/g, "").length < 10) nextErrors.nextOfKinPhone = "Enter a valid next of kin phone number.";
     return nextErrors;
   }
 
@@ -939,10 +964,10 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
   </EditableSection>
 
   {/* Next of kin – editable */}
-  <EditableSection title="Next of kin" icon={UsersRound}>
+  <EditableSection id="next-of-kin" title="Next of kin" icon={UsersRound}>
     <Field label="Name" name="nextOfKinName" value={form.nextOfKinName} onChange={update} error={errors.nextOfKinName} />
-    <Field label="Relationship" name="nextOfKinRelationship" value={form.nextOfKinRelationship} onChange={update} />
-    <Field label="Phone Number" name="nextOfKinPhone" value={form.nextOfKinPhone} onChange={update} />
+    <Field label="Relationship" name="nextOfKinRelationship" value={form.nextOfKinRelationship} onChange={update} error={errors.nextOfKinRelationship} />
+    <Field label="Phone Number" name="nextOfKinPhone" value={form.nextOfKinPhone} onChange={update} error={errors.nextOfKinPhone} />
   </EditableSection>
 
   <div className="flex justify-end">
@@ -960,9 +985,9 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
   );
 }
 
-function EditableSection({ title, icon: Icon, children }) {
+function EditableSection({ id, title, icon: Icon, children }) {
   return (
-    <Surface className="p-5">
+    <Surface id={id} className="scroll-mt-24 p-5">
       <div className="mb-5 flex items-center gap-3">
         <div className="grid h-10 w-10 place-items-center rounded-lg bg-slate-100 text-slate-700">
           <Icon size={20} />
