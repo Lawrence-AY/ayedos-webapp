@@ -28,7 +28,7 @@ import { MIN_SHARE_CAPITAL, matchesSearch, normalizeStatus } from "../components
 
 export default function UserDashboard() {
   const location = useLocation();
-  const { user, accessToken, loadCurrentUser } = useContext(AuthContext);
+  const { user, accessToken, loadCurrentUser, updateCurrentUser } = useContext(AuthContext);
   const dashboardBasePath = getDashboardPath("MEMBER");
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -177,7 +177,16 @@ export default function UserDashboard() {
       );
     }
     if (path.includes("/settings") || path.includes("/profile")) {
-      return <ProfileSettings user={user} accessToken={accessToken} onProfileUpdated={() => loadCurrentUser?.(accessToken)} />;
+      return (
+        <ProfileSettings
+          user={user}
+          accessToken={accessToken}
+          onProfileUpdated={(updatedUser) => {
+            updateCurrentUser?.(updatedUser);
+            return loadCurrentUser?.(accessToken);
+          }}
+        />
+      );
     }
     if (path.includes("/notifications")) {
       return (

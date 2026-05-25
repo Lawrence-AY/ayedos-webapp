@@ -24,8 +24,13 @@ export default function TopNavbar({
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem("ayedos_theme") || "light");
+  const [photoFailed, setPhotoFailed] = useState(false);
   const name = user?.name || "AYEDOS Member";
   const profilePhoto = user?.passportPhotoUrl || user?.profilePhotoUrl || user?.avatarUrl;
+
+  useEffect(() => {
+    setPhotoFailed(false);
+  }, [profilePhoto]);
 
   useEffect(() => {
     const isDark = theme === "dark";
@@ -89,8 +94,13 @@ export default function TopNavbar({
               aria-label="Open profile menu"
             >
               <span className="grid h-8 w-8 place-items-center overflow-hidden rounded-lg bg-slate-950 text-xs font-bold text-white dark:bg-slate-700 dark:text-white">
-                {profilePhoto ? (
-                  <img src={profilePhoto} alt="" className="h-full w-full object-cover" />
+                {profilePhoto && !photoFailed ? (
+                  <img
+                    src={profilePhoto}
+                    alt=""
+                    className="h-full w-full object-cover"
+                    onError={() => setPhotoFailed(true)}
+                  />
                 ) : (
                   getInitials(name)
                 )}
