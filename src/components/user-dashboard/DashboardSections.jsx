@@ -992,8 +992,14 @@ function SecuritySection({ user, accessToken, activeSessions = [], loginHistory 
   // Login history pagination
   const [loginPage, setLoginPage] = useState(1);
   const LOGIN_PAGE_SIZE = 6;
-  const loginTotalPages = Math.max(1, Math.ceil((loginHistory || []).length / LOGIN_PAGE_SIZE));
-  const paginatedLogin = (loginHistory || []).slice((loginPage - 1) * LOGIN_PAGE_SIZE, loginPage * LOGIN_PAGE_SIZE);
+  const LOGIN_MAX_EVENTS = 12;
+  const visibleLoginHistory = (loginHistory || []).slice(0, LOGIN_MAX_EVENTS);
+  const loginTotalPages = Math.max(1, Math.ceil(visibleLoginHistory.length / LOGIN_PAGE_SIZE));
+  const paginatedLogin = visibleLoginHistory.slice((loginPage - 1) * LOGIN_PAGE_SIZE, loginPage * LOGIN_PAGE_SIZE);
+
+  useEffect(() => {
+    setLoginPage((current) => Math.min(current, loginTotalPages));
+  }, [loginTotalPages]);
 
   return (
     <div className="space-y-6">
@@ -1108,7 +1114,7 @@ function SecuritySection({ user, accessToken, activeSessions = [], loginHistory 
             <h5 className="text-base font-semibold tracking-normal text-slate-950">Login history</h5>
             <p className="text-sm text-slate-500">Recent account access events and verification results.</p>
           </div>
-          {(loginHistory || []).length === 0 ? (
+          {visibleLoginHistory.length === 0 ? (
             <EmptyState
               icon={Clock3}
               title="No login history"
