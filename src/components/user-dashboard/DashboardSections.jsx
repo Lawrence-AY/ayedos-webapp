@@ -675,9 +675,11 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
   const [saving, setSaving] = useState(false);
   const [alert, setAlert] = useState(null);
   const [preview, setPreview] = useState(user?.passportPhotoUrl || null);
+  const [photoFile, setPhotoFile] = useState(null);
   useEffect(() => {
     setForm(buildProfileForm(user));
     setPreview(user?.passportPhotoUrl || null);
+    setPhotoFile(null);
   }, [user]);
   const maskedEmail = form.email ? maskEmail(form.email) : "—";
   const maskedPhone = form.phone ? maskPhone(form.phone) : "—";
@@ -697,15 +699,13 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
       setAlert({ type: "error", message: "Profile photo must be 1.5 MB or smaller." });
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const imageUrl = String(reader.result || "");
-      setPreview(imageUrl);
-      setForm((current) => ({ ...current, passportPhotoUrl: imageUrl }));
-      setAlert(null);
-    };
-    reader.onerror = () => setAlert({ type: "error", message: "Could not read the selected image." });
-    reader.readAsDataURL(file);
+    const previewUrl = URL.createObjectURL(file);
+    setPreview((current) => {
+      if (current?.startsWith("blob:")) URL.revokeObjectURL(current);
+      return previewUrl;
+    });
+    setPhotoFile(file);
+    setAlert(null);
   }
 
   function validate() {
@@ -729,6 +729,10 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
 
     setSaving(true);
     try {
+      const passportPhotoUrl = photoFile
+        ? await uploadProfilePhoto(photoFile, user)
+        : form.passportPhotoUrl;
+
       await updateMemberProfile({
         name: form.fullName,
         email: form.email,
@@ -738,7 +742,7 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
         occupation: form.jobTitle,
         monthlyIncome: form.monthlyIncome,
         payrollNumber: form.payrollNumber,
-        passportPhotoUrl: form.passportPhotoUrl,
+        passportPhotoUrl,
         nextOfKinName: form.nextOfKinName,
         nextOfKinRelationship: form.nextOfKinRelationship,
         nextOfKinPhone: form.nextOfKinPhone,
@@ -751,6 +755,9 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
           phone: form.nextOfKinPhone,
         },
       }, accessToken);
+      setForm((current) => ({ ...current, passportPhotoUrl }));
+      setPreview(passportPhotoUrl);
+      setPhotoFile(null);
       await onProfileUpdated?.();
       setAlert({ type: "success", message: "Profile changes saved successfully." });
     } catch (error) {
