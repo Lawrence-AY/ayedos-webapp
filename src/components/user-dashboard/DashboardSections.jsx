@@ -9,8 +9,6 @@ import {
   CalendarClock,
   Camera,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
   Clock3,
   CreditCard,
   Download,
@@ -388,8 +386,18 @@ function NotificationsPanel({ items = [], compact = false }) {
   );
 }
 
-function TransactionsTable({ transactions }) {
-  const rows = transactions;
+function TransactionsTable({ transactions, limit = null, showViewAll = false, paginate = false, pageSize = 10 }) {
+  const [page, setPage] = useState(1);
+  const totalPages = paginate ? Math.max(1, Math.ceil(transactions.length / pageSize)) : 1;
+  const limitedRows = limit ? transactions.slice(0, limit) : transactions;
+  const rows = paginate
+    ? transactions.slice((page - 1) * pageSize, page * pageSize)
+    : limitedRows;
+  const hasMore = transactions.length > rows.length;
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
 
   return (
     <Surface className="overflow-hidden">
@@ -467,16 +475,38 @@ function TransactionsTable({ transactions }) {
             </table>
           </div>
           <div className="flex flex-col gap-3 border-t border-slate-200 px-5 py-4 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
-            <span> {Math.max(rows.length, 4)} records</span>
-            <div className="flex items-center gap-2">
-              <button className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-500">
-                <ChevronLeft size={16} />
-              </button>
-              <span className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white">1</span>
-              <button className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-500">
-                <ChevronRight size={16} />
-              </button>
-            </div>
+            <span>
+              {showViewAll && hasMore
+                ? `Showing ${rows.length} of ${transactions.length} records`
+                : `${rows.length} record${rows.length === 1 ? "" : "s"}`}
+            </span>
+            {showViewAll ? (
+              <Link
+                to={getDashboardPath("MEMBER", "transactions")}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800"
+              >
+                View all
+                <ArrowUpRight size={16} />
+              </Link>
+            ) : paginate && totalPages > 1 ? (
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious onClick={() => setPage((current) => Math.max(1, current - 1))} />
+                  </PaginationItem>
+                  {Array.from({ length: totalPages }).map((_, index) => (
+                    <PaginationItem key={index}>
+                      <PaginationLink isActive={page === index + 1} onClick={() => setPage(index + 1)}>
+                        {index + 1}
+                      </PaginationLink>
+                    </PaginationItem>
+                  ))}
+                  <PaginationItem>
+                    <PaginationNext onClick={() => setPage((current) => Math.min(totalPages, current + 1))} />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            ) : null}
           </div>
         </>
       )}
@@ -600,7 +630,7 @@ function DashboardOverview({ stats, transactions, memberName, user, notification
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.8fr)]">
         <div className="space-y-5">
-          <TransactionsTable transactions={transactions} />
+          <TransactionsTable transactions={transactions} limit={5} showViewAll />
           <NotificationsPanel items={notifications} />
         </div>
         <div className="space-y-5">
