@@ -158,7 +158,11 @@ export default function UserDashboard() {
         <div className="space-y-6">
           <SectionHeader eyebrow="Transactions" 
          />
-          <TransactionsTable transactions={data.transactions.filter((transaction) => matchesSearch(transaction, search))} />
+          <TransactionsTable
+            transactions={data.transactions.filter((transaction) => matchesSearch(transaction, search))}
+            paginate
+            pageSize={10}
+          />
         </div>
       );
     }
