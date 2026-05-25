@@ -100,6 +100,18 @@ export function AuthProvider({ children }) {
     persistAuth({ user: data })
   }, [persistAuth, sessionId])
 
+  const updateCurrentUser = useCallback((nextUser) => {
+    if (!nextUser) return
+    setUser((current) => {
+      const merged = {
+        ...(current || {}),
+        ...nextUser,
+      }
+      persistAuth({ user: merged })
+      return merged
+    })
+  }, [persistAuth])
+
   const refresh = useCallback(async () => {
     const res = await apiRequest('/api/auth/refresh', {
       method: 'POST',
@@ -416,9 +428,10 @@ export function AuthProvider({ children }) {
       refresh,
       logout,
       loadCurrentUser,
+      updateCurrentUser,
       apiBaseUrl: getApiBaseUrl(),
     }),
-    [accessToken, authError, completeLoginOtp, completeRegistrationOtp, isLoading, login, loadCurrentUser, logout, refresh, refreshToken, register, sessionId, user]
+    [accessToken, authError, completeLoginOtp, completeRegistrationOtp, isLoading, login, loadCurrentUser, logout, refresh, refreshToken, register, sessionId, updateCurrentUser, user]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -62,6 +62,7 @@ import {
   repayLoan,
 } from "../../features/member/memberService.js";
 import { changePassword, revokeAuthSession } from "../../services/authService.js";
+import { uploadProfilePhoto } from "../../lib/supabaseStorage.js";
 
 const emptyProfile = {
   fullName: "",
@@ -78,6 +79,7 @@ const emptyProfile = {
   nextOfKinName: "",
   nextOfKinRelationship: "",
   nextOfKinPhone: "",
+  passportPhotoUrl: "",
 };
 
 const MIN_SHARE_CAPITAL = 25000;
@@ -120,6 +122,13 @@ function maskPhone(phone) {
   if (hiddenCount <= 0) return `${prefix}${digits}`;
   return `${prefix}${showStart}${"*".repeat(hiddenCount)}${last}`;
 }
+
+function maskNationalId(nationalId) {
+  const normalized = String(nationalId || "").trim();
+  if (normalized.length <= 4) return normalized;
+  return `${normalized.slice(0, 2)}${"*".repeat(Math.max(1, normalized.length - 4))}${normalized.slice(-2)}`;
+}
+
 function normalizeStatus(status) {
   return String(status || "Pending").replace(/_/g, " ");
 }
@@ -683,20 +692,23 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
   }, [user]);
   const maskedEmail = form.email ? maskEmail(form.email) : "—";
   const maskedPhone = form.phone ? maskPhone(form.phone) : "—";
+  const maskedNationalId = form.nationalId ? maskNationalId(form.nationalId) : "—";
 
   function update(event) {
     setForm((current) => ({ ...current, [event.target.name]: event.target.value }));
   }
 
-  function handleImage(event) {
+  async function handleImage(event) {
     const file = event.target.files?.[0];
     if (!file) return;
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
       setAlert({ type: "error", message: "Upload a JPG, PNG, or WebP image." });
+      event.target.value = "";
       return;
     }
     if (file.size > MAX_PROFILE_PHOTO_BYTES) {
       setAlert({ type: "error", message: "Profile photo must be 1.5 MB or smaller." });
+      event.target.value = "";
       return;
     }
     const previewUrl = URL.createObjectURL(file);
@@ -706,6 +718,32 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
     });
     setPhotoFile(file);
     setAlert(null);
+
+    setSaving(true);
+    try {
+      const uploadedProfile = await uploadProfilePhoto(file, accessToken);
+      const passportPhotoUrl = uploadedProfile?.passportPhotoUrl;
+
+      if (!passportPhotoUrl) {
+        throw new Error("Profile photo uploaded but no photo URL was returned.");
+      }
+
+      setForm((current) => ({ ...current, passportPhotoUrl }));
+      setPreview((current) => {
+        if (current?.startsWith("blob:")) URL.revokeObjectURL(current);
+        return passportPhotoUrl;
+      });
+      setPhotoFile(null);
+      await onProfileUpdated?.(uploadedProfile);
+      setAlert({ type: "success", message: "Profile photo saved successfully." });
+    } catch (error) {
+      setPreview(form.passportPhotoUrl || user?.passportPhotoUrl || null);
+      setPhotoFile(null);
+      setAlert({ type: "error", message: error?.message || "Failed to upload profile photo." });
+    } finally {
+      setSaving(false);
+      event.target.value = "";
+    }
   }
 
   function validate() {
@@ -729,11 +767,14 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
 
     setSaving(true);
     try {
-      const passportPhotoUrl = photoFile
-        ? await uploadProfilePhoto(photoFile, user)
-        : form.passportPhotoUrl;
+      const uploadedProfile = photoFile ? await uploadProfilePhoto(photoFile, accessToken) : null;
+      const passportPhotoUrl = uploadedProfile?.passportPhotoUrl || form.passportPhotoUrl;
 
-      await updateMemberProfile({
+      if (photoFile && !passportPhotoUrl) {
+        throw new Error("Profile photo uploaded but no photo URL was returned.");
+      }
+
+      const updatedProfile = await updateMemberProfile({
         name: form.fullName,
         email: form.email,
         phone: form.phone,
@@ -742,7 +783,7 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
         occupation: form.jobTitle,
         monthlyIncome: form.monthlyIncome,
         payrollNumber: form.payrollNumber,
-        passportPhotoUrl,
+        ...(passportPhotoUrl ? { passportPhotoUrl } : {}),
         nextOfKinName: form.nextOfKinName,
         nextOfKinRelationship: form.nextOfKinRelationship,
         nextOfKinPhone: form.nextOfKinPhone,
@@ -756,9 +797,12 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
         },
       }, accessToken);
       setForm((current) => ({ ...current, passportPhotoUrl }));
-      setPreview(passportPhotoUrl);
+      setPreview(passportPhotoUrl || null);
       setPhotoFile(null);
-      await onProfileUpdated?.();
+      await onProfileUpdated?.({
+        ...updatedProfile,
+        passportPhotoUrl: updatedProfile?.passportPhotoUrl || passportPhotoUrl,
+      });
       setAlert({ type: "success", message: "Profile changes saved successfully." });
     } catch (error) {
       setAlert({ type: "error", message: error?.message || "Failed to save profile changes." });
@@ -833,7 +877,7 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
       {/* National ID */}
       <div>
         <label className="text-sm font-medium">National ID</label>
-        <p className="mt-1 text-sm text-foreground">{form.nationalId || '—'}</p>
+        <p className="mt-1 text-sm text-foreground">{maskedNationalId}</p>
       </div>
 
       {/* Date of Birth */}
