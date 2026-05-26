@@ -228,9 +228,7 @@ export default function SavingsContributionForm({ accessToken, user, onRefresh, 
       {paymentResult?.kcbMpesa ? (
         <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950">
           <p className="font-semibold">STK request sent to {phoneDigits}. Check your phone for the M-PESA PIN prompt.</p>
-          <p className="mt-2">Tracked as <span className="font-bold">{paymentResult.paymentCategory || "payment"}</span> on <span className="font-bold">{paymentResult.kcbEndpoint || "KCB-MPESA"}</span>.</p>
-          <p className="mt-2">MPESA request reference: <span className="font-bold">{paymentResult.mpesaReference || paymentResult.reference}</span></p>
-          {paymentResult.status === "SUCCESS" ? (
+           {paymentResult.status === "SUCCESS" ? (
             <p className="mt-2 font-semibold text-emerald-700">Payment confirmed.</p>
           ) : (
             <p className="mt-2 text-sky-800">Waiting for M-PESA confirmation...</p>
