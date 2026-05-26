@@ -1,5 +1,5 @@
 import { createContext, useCallback, useEffect, useMemo, useState } from 'react'
-import { apiRequest, unwrapEnvelopeData, getApiBaseUrl } from '../lib/apiClient'
+import { apiRequest, unwrapEnvelopeData, getApiBaseUrl, getApiErrorMessage, isApiDebugEnabled } from '../lib/apiClient'
 
 const AuthContext = createContext(null)
 
@@ -8,10 +8,13 @@ const STORAGE_KEYS = {
   refreshToken: 'ayedos_refreshToken',
   sessionId: 'ayedos_sessionId',
   user: 'ayedos_user',
+  otpSession: 'ayedos_loginOtpSession',
 }
 
 const INACTIVITY_TIMEOUT_MS = 2 * 60 * 1000
 const AUTH_SYNC_INTERVAL_MS = 30 * 1000
+const OTP_SESSION_TTL_MS = 10 * 60 * 1000
+const OTP_RESEND_COOLDOWN_MS = 60 * 1000
 
 const getPersistableUser = (user) => {
   if (!user) return null
@@ -34,11 +37,27 @@ const getPersistableUser = (user) => {
   }
 }
 
+const normalizeOtpSession = (session) => {
+  if (!session?.email) return null
+  const expiresAt = Number(session.expiresAt) || Date.now() + OTP_SESSION_TTL_MS
+  if (expiresAt <= Date.now()) return null
+
+  return {
+    email: String(session.email).trim().toLowerCase(),
+    tempToken: session.tempToken || session.sessionId || null,
+    sessionId: session.sessionId || session.tempToken || null,
+    requiresOTP: true,
+    expiresAt,
+    resendAvailableAt: Number(session.resendAvailableAt) || Date.now() + OTP_RESEND_COOLDOWN_MS,
+  }
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [accessToken, setAccessToken] = useState(null)
   const [refreshToken, setRefreshToken] = useState(null)
   const [sessionId, setSessionId] = useState(null)
+  const [otpSession, setOtpSession] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [authError, setAuthError] = useState(null)
 
@@ -48,16 +67,21 @@ export function AuthProvider({ children }) {
       const storedRefreshToken = localStorage.getItem(STORAGE_KEYS.refreshToken)
       const storedSessionId = localStorage.getItem(STORAGE_KEYS.sessionId)
       const storedUser = localStorage.getItem(STORAGE_KEYS.user)
+      const storedOtpSession = sessionStorage.getItem(STORAGE_KEYS.otpSession)
+      const nextOtpSession = normalizeOtpSession(storedOtpSession ? JSON.parse(storedOtpSession) : null)
 
       setAccessToken(storedAccessToken || null)
       setRefreshToken(storedRefreshToken || null)
       setSessionId(storedSessionId || null)
       setUser(storedUser ? JSON.parse(storedUser) : null)
+      setOtpSession(nextOtpSession)
+      if (!nextOtpSession) sessionStorage.removeItem(STORAGE_KEYS.otpSession)
     } catch {
       setAccessToken(null)
       setRefreshToken(null)
       setSessionId(null)
       setUser(null)
+      setOtpSession(null)
     }
   }, [])
 
@@ -83,6 +107,22 @@ export function AuthProvider({ children }) {
       // ignore storage errors
     }
   }, [])
+
+  const persistOtpSession = useCallback((nextSession) => {
+    const normalized = normalizeOtpSession(nextSession)
+    setOtpSession(normalized)
+    try {
+      if (normalized) sessionStorage.setItem(STORAGE_KEYS.otpSession, JSON.stringify(normalized))
+      else sessionStorage.removeItem(STORAGE_KEYS.otpSession)
+    } catch {
+      // ignore storage errors
+    }
+    return normalized
+  }, [])
+
+  const clearOtpSession = useCallback(() => {
+    persistOtpSession(null)
+  }, [persistOtpSession])
 
   const loadCurrentUser = useCallback(async (token) => {
     const res = await apiRequest('/api/users/me', {
@@ -152,13 +192,21 @@ export function AuthProvider({ children }) {
         throw new Error(msg)
       }
 
-      const data = unwrapEnvelopeData(res.json) // expected: { user, tokens }
-      if (data?.requiresOtp) {
-        if (data?.sessionId) {
-          setSessionId(data.sessionId)
-          persistAuth({ sessionId: data.sessionId })
+      const data = unwrapEnvelopeData(res.json) // expected: { user, tokens } or OTP challenge
+      const requiresOTP = Boolean(data?.requiresOtp || data?.requiresOTP)
+      if (requiresOTP) {
+        const nextOtpSession = persistOtpSession({
+          email: data?.email || email,
+          tempToken: data?.tempToken || data?.sessionId || null,
+          sessionId: data?.sessionId || data?.tempToken || null,
+          expiresAt: Date.now() + OTP_SESSION_TTL_MS,
+          resendAvailableAt: Date.now() + OTP_RESEND_COOLDOWN_MS,
+        })
+        if (nextOtpSession?.sessionId) {
+          setSessionId(nextOtpSession.sessionId)
+          persistAuth({ sessionId: null })
         }
-        return data
+        return { ...data, requiresOtp: true, requiresOTP: true, otpSession: nextOtpSession }
       }
       const nextUser = data?.user ?? null
       const tokens = data?.tokens ?? data?.token ?? null
@@ -176,10 +224,11 @@ export function AuthProvider({ children }) {
       setRefreshToken(nextRefreshToken)
       setSessionId(nextSessionId)
       persistAuth({ user: nextUser, accessToken: nextAccessToken, refreshToken: nextRefreshToken, sessionId: nextSessionId })
+      clearOtpSession()
 
       return nextUser
     },
-    [persistAuth]
+    [clearOtpSession, persistAuth, persistOtpSession]
   )
 
   const register = useCallback(
@@ -241,27 +290,50 @@ export function AuthProvider({ children }) {
     setAccessToken(null)
     setRefreshToken(null)
     setSessionId(null)
+    setOtpSession(null)
     persistAuth({ user: null, accessToken: null, refreshToken: null, sessionId: null })
-  }, [accessToken, persistAuth, refreshToken, sessionId])
+    clearOtpSession()
+  }, [accessToken, clearOtpSession, persistAuth, refreshToken, sessionId])
 
   const clearLocalAuth = useCallback(() => {
     setUser(null)
     setAccessToken(null)
     setRefreshToken(null)
     setSessionId(null)
+    setOtpSession(null)
     persistAuth({ user: null, accessToken: null, refreshToken: null, sessionId: null })
-  }, [persistAuth])
+    clearOtpSession()
+  }, [clearOtpSession, persistAuth])
 
   const completeLoginOtp = useCallback(
-    async ({ email, otp }) => {
+    async ({ email, otp, tempToken, sessionId: otpSessionId }) => {
       setAuthError(null)
+      const storedOtpSession = normalizeOtpSession(otpSession)
+      const resolvedEmail = (email || storedOtpSession?.email || '').trim().toLowerCase()
+      const resolvedSessionId = otpSessionId || tempToken || storedOtpSession?.sessionId || storedOtpSession?.tempToken || sessionId || null
+
+      if (!resolvedEmail) {
+        throw new Error('Your login verification session was lost. Please sign in again.')
+      }
+
+      if (isApiDebugEnabled()) {
+        console.log({
+          apiUrl: `${getApiBaseUrl()}/auth/login/verify-otp`,
+          route: window.location.pathname,
+          email: resolvedEmail,
+          tempToken: resolvedSessionId,
+          otp,
+        })
+      }
+
       const res = await apiRequest('/api/auth/login/verify-otp', {
         method: 'POST',
-        body: { email, otp },
+        body: { email: resolvedEmail, otp },
+        sessionId: resolvedSessionId || undefined,
       })
 
       if (!res.ok) {
-        const msg = res.json?.message || `OTP verification failed (status ${res.status})`
+        const msg = getApiErrorMessage(res.error) || res.json?.message || `OTP verification failed (status ${res.status})`
         throw new Error(msg)
       }
 
@@ -281,11 +353,48 @@ export function AuthProvider({ children }) {
       setRefreshToken(nextRefreshToken)
       setSessionId(nextSessionId)
       persistAuth({ user: nextUser, accessToken: nextAccessToken, refreshToken: nextRefreshToken, sessionId: nextSessionId })
+      clearOtpSession()
 
       return nextUser
     },
-    [persistAuth]
+    [clearOtpSession, otpSession, persistAuth, sessionId]
   )
+
+  const resendLoginOtp = useCallback(async () => {
+    setAuthError(null)
+    const storedOtpSession = normalizeOtpSession(otpSession)
+    if (!storedOtpSession?.email) {
+      throw new Error('Your login verification session was lost. Please sign in again.')
+    }
+
+    const now = Date.now()
+    if (storedOtpSession.resendAvailableAt > now) {
+      const waitSeconds = Math.ceil((storedOtpSession.resendAvailableAt - now) / 1000)
+      throw new Error(`Please wait ${waitSeconds} seconds before requesting another code.`)
+    }
+
+    const res = await apiRequest('/api/auth/resend-otp', {
+      method: 'POST',
+      body: { email: storedOtpSession.email },
+      sessionId: storedOtpSession.sessionId || undefined,
+    })
+
+    if (!res.ok) {
+      const msg = getApiErrorMessage(res.error) || res.json?.message || `OTP resend failed (status ${res.status})`
+      throw new Error(msg)
+    }
+
+    const nextOtpSession = persistOtpSession({
+      ...storedOtpSession,
+      expiresAt: Date.now() + OTP_SESSION_TTL_MS,
+      resendAvailableAt: Date.now() + OTP_RESEND_COOLDOWN_MS,
+    })
+
+    return {
+      message: res.json?.message || 'A new OTP has been sent to your email',
+      otpSession: nextOtpSession,
+    }
+  }, [otpSession, persistOtpSession])
 
   const completeRegistrationOtp = useCallback(
     async ({ email, otp }) => {
@@ -419,10 +528,13 @@ export function AuthProvider({ children }) {
       accessToken,
       refreshToken,
       sessionId,
+      otpSession,
       isLoading,
       authError,
       login,
       completeLoginOtp,
+      resendLoginOtp,
+      clearOtpSession,
       completeRegistrationOtp,
       register,
       refresh,
@@ -431,7 +543,7 @@ export function AuthProvider({ children }) {
       updateCurrentUser,
       apiBaseUrl: getApiBaseUrl(),
     }),
-    [accessToken, authError, completeLoginOtp, completeRegistrationOtp, isLoading, login, loadCurrentUser, logout, refresh, refreshToken, register, sessionId, updateCurrentUser, user]
+    [accessToken, authError, clearOtpSession, completeLoginOtp, completeRegistrationOtp, isLoading, login, loadCurrentUser, logout, otpSession, refresh, refreshToken, register, resendLoginOtp, sessionId, updateCurrentUser, user]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

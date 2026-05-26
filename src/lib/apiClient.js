@@ -1,5 +1,20 @@
 // src/lib/apiClient.js
 export const DEFAULT_API_PATH_PREFIX = '/api';
+const DEFAULT_TIMEOUT_MS = 45000;
+const RETRYABLE_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
+
+export class ApiError extends Error {
+  constructor(message, details = {}) {
+    super(message);
+    this.name = 'ApiError';
+    this.kind = details.kind || 'unknown';
+    this.status = details.status || 0;
+    this.url = details.url || '';
+    this.method = details.method || 'GET';
+    this.response = details.response || null;
+    this.cause = details.cause;
+  }
+}
 
 function normalizeBaseUrl(url) {
   if (!url) return '';
@@ -24,6 +39,72 @@ export function buildApiUrl(path) {
   }
 
   return `${baseUrl}${normalizedPath}`;
+}
+
+export function isApiDebugEnabled() {
+  try {
+    return import.meta.env.DEV || import.meta.env.VITE_AUTH_DEBUG === 'true' || localStorage.getItem('ayedos_debug_api') === 'true';
+  } catch {
+    return import.meta.env.DEV || import.meta.env.VITE_AUTH_DEBUG === 'true';
+  }
+}
+
+export function getApiErrorMessage(error) {
+  if (!(error instanceof ApiError)) return error?.message || 'Something went wrong. Please try again.';
+
+  if (error.kind === 'timeout') {
+    return 'The server is taking longer than usual to respond. It may be waking up; please try again in a moment.';
+  }
+  if (error.kind === 'network') {
+    return 'Network connection failed. Check your internet connection, CORS settings, or backend availability.';
+  }
+  if (error.status === 400) {
+    return error.response?.message || 'The request was rejected. Please check the details and try again.';
+  }
+  if (error.status === 401 || error.status === 403) {
+    return error.response?.message || 'The verification code is invalid, expired, or this session is no longer authorized.';
+  }
+  if (error.status === 408 || error.status === 504) {
+    return 'The request timed out while waiting for the backend. Please try again.';
+  }
+  if (error.status === 429) {
+    return error.response?.message || 'Too many requests. Please wait before trying again.';
+  }
+  if (error.status >= 500) {
+    return 'The backend is temporarily unavailable. Please wait a few seconds and try again.';
+  }
+
+  return error.response?.message || error.message || 'Something went wrong. Please try again.';
+}
+
+function wait(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function getBackoffMs(attempt) {
+  return Math.min(1200 * 2 ** attempt, 5000);
+}
+
+function createTimeoutSignal(parentSignal, timeoutMs) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(new DOMException('Request timed out', 'TimeoutError')), timeoutMs);
+
+  const abortFromParent = () => {
+    controller.abort(parentSignal.reason || new DOMException('Request aborted', 'AbortError'));
+  };
+
+  if (parentSignal) {
+    if (parentSignal.aborted) abortFromParent();
+    else parentSignal.addEventListener('abort', abortFromParent, { once: true });
+  }
+
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      window.clearTimeout(timeoutId);
+      parentSignal?.removeEventListener?.('abort', abortFromParent);
+    },
+  };
 }
 
 function getOrCreateDeviceId() {
@@ -52,7 +133,7 @@ function getDeviceName() {
  * @param {AbortSignal} options.signal - AbortSignal for request cancellation
  * @returns {Promise<{ok: boolean, status: number, json: any}>}
  */
-export async function apiRequest(path, { method = 'GET', body, accessToken, sessionId, signal } = {}) {
+export async function apiRequest(path, { method = 'GET', body, accessToken, sessionId, signal, timeoutMs = DEFAULT_TIMEOUT_MS, retry = true } = {}) {
   const url = buildApiUrl(path);
   const normalizedPath = String(path).startsWith('/') ? path : `/${path}`;
 
@@ -74,7 +155,6 @@ export async function apiRequest(path, { method = 'GET', body, accessToken, sess
   const fetchOptions = {
     method,
     headers,
-    signal,
     credentials: 'include',
   };
 
@@ -82,28 +162,95 @@ export async function apiRequest(path, { method = 'GET', body, accessToken, sess
     fetchOptions.body = JSON.stringify(body);
   }
 
+  const shouldRetry = retry && method.toUpperCase() !== 'DELETE';
   let response;
 
-  try {
-    response = await fetch(url, fetchOptions);
-  } catch (error) {
-    // During local development, fall back to the Vite proxy route if an absolute API host is unavailable.
-    if (import.meta.env.DEV && url !== normalizedPath && normalizedPath.startsWith(DEFAULT_API_PATH_PREFIX)) {
-      try {
-        response = await fetch(normalizedPath, fetchOptions);
-      } catch (fallbackError) {
-        throw new Error(
-          `Failed to reach the API at ${url}. Check that the backend is running and that VITE_API_URL points to the backend URL.`,
-          { cause: fallbackError }
+  const runFetch = async (targetUrl, attempt) => {
+    const timeout = createTimeoutSignal(signal, timeoutMs);
+    const startedAt = Date.now();
+    try {
+      if (isApiDebugEnabled()) {
+        console.log('[api:request]', {
+          route: window.location.pathname,
+          apiUrl: targetUrl,
+          method,
+          attempt: attempt + 1,
+          hasAccessToken: Boolean(accessToken),
+          hasSessionId: Boolean(storedSessionId),
+        });
+      }
+
+      const nextResponse = await fetch(targetUrl, {
+        ...fetchOptions,
+        signal: timeout.signal,
+      });
+
+      if (isApiDebugEnabled()) {
+        console.log('[api:response]', {
+          route: window.location.pathname,
+          apiUrl: targetUrl,
+          method,
+          status: nextResponse.status,
+          durationMs: Date.now() - startedAt,
+        });
+      }
+
+      return nextResponse;
+    } catch (error) {
+      const kind = error?.name === 'TimeoutError' || timeout.signal.reason?.name === 'TimeoutError' ? 'timeout' : 'network';
+      if (signal?.aborted) {
+        throw new ApiError('Request was cancelled', { kind: 'cancelled', url: targetUrl, method, cause: error });
+      }
+      throw new ApiError(
+        kind === 'timeout' ? `API request timed out after ${timeoutMs}ms` : `Failed to reach the API at ${targetUrl}`,
+        { kind, url: targetUrl, method, cause: error }
+      );
+    } finally {
+      timeout.cleanup();
+    }
+  };
+
+  for (let attempt = 0; attempt <= (shouldRetry ? 1 : 0); attempt += 1) {
+    try {
+      response = await runFetch(url, attempt);
+    } catch (error) {
+      // During local development, fall back to the Vite proxy route if an absolute API host is unavailable.
+      if (import.meta.env.DEV && url !== normalizedPath && normalizedPath.startsWith(DEFAULT_API_PATH_PREFIX)) {
+        try {
+          response = await runFetch(normalizedPath, attempt);
+        } catch (fallbackError) {
+          if (attempt < 1 && shouldRetry && fallbackError.kind !== 'cancelled') {
+            await wait(getBackoffMs(attempt));
+            continue;
+          }
+          throw new ApiError(
+            `Failed to reach the API at ${url}. Check that the backend is running and that VITE_API_URL points to the backend URL.`,
+            { kind: fallbackError.kind || 'network', url, method, cause: fallbackError }
+          );
+        }
+      } else if (attempt < 1 && shouldRetry && error.kind !== 'cancelled') {
+        await wait(getBackoffMs(attempt));
+        continue;
+      } else {
+        throw new ApiError(
+          `Failed to reach the API at ${url}. Check that VITE_API_URL or VITE_API_BASE points to the backend URL.`,
+          { kind: error.kind || 'network', url, method, cause: error }
         );
       }
-    } else {
-      throw new Error(
-        `Failed to reach the API at ${url}. Check that VITE_API_URL or VITE_API_BASE points to the backend URL.`,
-        { cause: error }
-      );
     }
+
+    if (attempt < 1 && shouldRetry && RETRYABLE_STATUSES.has(response.status)) {
+      await wait(getBackoffMs(attempt));
+      continue;
+    }
+
+    break;
   }
+
+  if (!response) {
+    throw new ApiError(`Failed to reach the API at ${url}`, { kind: 'network', url, method });
+  }
+
   const text = await response.text().catch(() => '');
   let json = null;
 
@@ -131,6 +278,14 @@ export async function apiRequest(path, { method = 'GET', body, accessToken, sess
     ok: response.ok,
     status: response.status,
     json,
+    url,
+    error: response.ok ? null : new ApiError(json?.message || `API request failed (status ${response.status})`, {
+      kind: 'http',
+      status: response.status,
+      url,
+      method,
+      response: json,
+    }),
   };
 }
 

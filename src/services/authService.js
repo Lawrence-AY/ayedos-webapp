@@ -1,5 +1,5 @@
 // Authentication service - handles all auth-related API calls
-import { apiRequest, unwrapEnvelopeData } from '../lib/apiClient'
+import { apiRequest, unwrapEnvelopeData, getApiErrorMessage, getApiBaseUrl, isApiDebugEnabled } from '../lib/apiClient'
 
 const AUTH_ENDPOINTS = {
   LOGIN: '/api/auth/login',
@@ -27,7 +27,7 @@ export async function verifyOtp({ email, otp }) {
   })
 
   if (!res.ok) {
-    const error = res.json?.message || `OTP verification failed (status ${res.status})`
+    const error = getApiErrorMessage(res.error) || res.json?.message || `OTP verification failed (status ${res.status})`
     throw new Error(error)
   }
 
@@ -47,7 +47,7 @@ export async function resendOtp(email) {
   })
 
   if (!res.ok) {
-    const error = res.json?.message || `OTP resend failed (status ${res.status})`
+    const error = getApiErrorMessage(res.error) || res.json?.message || `OTP resend failed (status ${res.status})`
     throw new Error(error)
   }
 
@@ -68,7 +68,7 @@ export async function login({ email, password }) {
   })
 
   if (!res.ok) {
-    const error = res.json?.message || `Login failed (status ${res.status})`
+    const error = getApiErrorMessage(res.error) || res.json?.message || `Login failed (status ${res.status})`
     throw new Error(error)
   }
 
@@ -206,14 +206,24 @@ export async function resetPassword({ token, newPassword }) {
   }
 }
 
-export async function verifyLoginOtp({ email, otp }) {
+export async function verifyLoginOtp({ email, otp, tempToken, sessionId }) {
+  if (isApiDebugEnabled()) {
+    console.log({
+      apiUrl: `${getApiBaseUrl()}/auth/login/verify-otp`,
+      email,
+      tempToken: tempToken || sessionId || null,
+      otp,
+    })
+  }
+
   const res = await apiRequest(AUTH_ENDPOINTS.VERIFY_LOGIN_OTP, {
     method: 'POST',
     body: { email, otp },
+    sessionId: sessionId || tempToken || undefined,
   })
 
   if (!res.ok) {
-    const error = res.json?.message || `Login OTP verification failed (status ${res.status})`
+    const error = getApiErrorMessage(res.error) || res.json?.message || `Login OTP verification failed (status ${res.status})`
     throw new Error(error)
   }
 

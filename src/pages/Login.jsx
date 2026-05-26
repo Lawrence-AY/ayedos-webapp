@@ -2,6 +2,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext.jsx";
 import { getPostLoginPath } from "../utils/dashboardRoutes.js";
+import { getApiBaseUrl, isApiDebugEnabled } from "../lib/apiClient.js";
 import logo from "../assets/AUTH.png";
 import DotSwarmCanvas from "../components/landing/DotTextCanvas.jsx";
 import { Eye, EyeOff } from "lucide-react";
@@ -15,7 +16,15 @@ const OTP_COOLDOWN_SECONDS = 60;
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login, completeLoginOtp, authError, isLoading } = useContext(AuthContext);
+  const {
+    login,
+    completeLoginOtp,
+    resendLoginOtp,
+    clearOtpSession,
+    otpSession,
+    authError,
+    isLoading,
+  } = useContext(AuthContext);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -26,7 +35,10 @@ export default function Login() {
   const [otpVerifying, setOtpVerifying] = useState(false);
   const [otpCountdown, setOtpCountdown] = useState(0);
   const [submitCooldown, setSubmitCooldown] = useState(0);
+  const [otpMessage, setOtpMessage] = useState("");
+  const [resendingOtp, setResendingOtp] = useState(false);
   const otpInputRef = useRef(null);
+  const autoSubmitTimerRef = useRef(null);
   const maskEmail = (email) => {
   const [localPart, domain] = email.split('@');
   if (!domain) return email;
@@ -35,31 +47,69 @@ export default function Login() {
   return `${masked}@${domain}`;
 };
 
+  async function verifyCurrentOtp() {
+    setFormError(null);
+
+    const verificationEmail = (email || otpSession?.email || "").trim();
+    const code = otp.trim();
+    const tempToken = otpSession?.tempToken || otpSession?.sessionId || null;
+
+    if (!/^\d{6,8}$/.test(code)) {
+      setFormError("Enter the 6 to 8 digit OTP sent to your email");
+      return;
+    }
+
+    if (isApiDebugEnabled()) {
+      console.log({
+        apiUrl: `${getApiBaseUrl()}/auth/login/verify-otp`,
+        email: verificationEmail,
+        tempToken,
+        otp: code,
+      });
+    }
+
+    setOtpVerifying(true);
+    try {
+      const verifiedUser = await completeLoginOtp({
+        email: verificationEmail,
+        otp: code,
+        tempToken,
+      });
+      setOtp("");
+      navigate(getPostLoginPath(verifiedUser), { replace: true });
+    } catch (err) {
+      setFormError(err?.message || "OTP verification failed");
+    } finally {
+      setOtpVerifying(false);
+    }
+  }
+
   async function onSubmit(e) {
     e.preventDefault();
     setFormError(null);
+    setOtpMessage("");
+
+    if (otpRequired) {
+      await verifyCurrentOtp();
+      return;
+    }
 
     if (!email.trim()) return setFormError("Email is required");
     if (!password) return setFormError("Password is required");
 
     try {
-      if (otpRequired) {
-        if (!/^\d{6,8}$/.test(otp.trim())) {
-          return setFormError("Enter the 6 to 8 digit OTP sent to your email");
-        }
-        const verifiedUser = await completeLoginOtp({ email: email.trim(), otp: otp.trim() });
-        navigate(getPostLoginPath(verifiedUser), { replace: true });
-        return;
-      }
 
       if (submitCooldown > 0) return;
 
       const loggedInUser = await login({ email: email.trim(), password });
-      if (loggedInUser?.requiresOtp) {
+      if (loggedInUser?.requiresOtp || loggedInUser?.requiresOTP) {
+        const nextSession = loggedInUser?.otpSession;
+        if (nextSession?.email) setEmail(nextSession.email);
         setOtpRequired(true);
-        setOtpCountdown(OTP_COOLDOWN_SECONDS);
-        setSubmitCooldown(OTP_COOLDOWN_SECONDS);
+        setOtpCountdown(Math.ceil(Math.max((nextSession?.resendAvailableAt || Date.now() + OTP_COOLDOWN_SECONDS * 1000) - Date.now(), 0) / 1000));
+        setSubmitCooldown(0);
         setFormError(null);
+        setOtpMessage("We sent a verification code to your email.");
         return;
       }
       navigate(getPostLoginPath(loggedInUser), { replace: true });
@@ -74,12 +124,20 @@ export default function Login() {
   }, [otpRequired]);
 
   useEffect(() => {
+    if (!otpSession?.email) return;
+    setEmail((current) => current || otpSession.email);
+    setOtpRequired(true);
+    setOtpCountdown(Math.ceil(Math.max((otpSession.resendAvailableAt || Date.now()) - Date.now(), 0) / 1000));
+  }, [otpSession]);
+
+  useEffect(() => {
+    if (!otpRequired) return;
     if (otpCountdown <= 0) return;
     const timerId = window.setInterval(() => {
       setOtpCountdown((current) => Math.max(current - 1, 0));
     }, 1000);
     return () => window.clearInterval(timerId);
-  }, [otpCountdown]);
+  }, [otpCountdown, otpRequired]);
 
   useEffect(() => {
     if (submitCooldown <= 0) return;
@@ -88,6 +146,38 @@ export default function Login() {
     }, 1000);
     return () => window.clearInterval(timerId);
   }, [submitCooldown]);
+
+  useEffect(() => {
+    window.clearTimeout(autoSubmitTimerRef.current);
+    if (!otpRequired || otpVerifying || !/^\d{6,8}$/.test(otp.trim())) return undefined;
+
+    autoSubmitTimerRef.current = window.setTimeout(() => {
+      verifyCurrentOtp();
+    }, 600);
+
+    return () => window.clearTimeout(autoSubmitTimerRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [otp, otpRequired, otpVerifying]);
+
+  async function handleResendOtp() {
+    if (otpCountdown > 0 || resendingOtp || otpVerifying) return;
+
+    setResendingOtp(true);
+    setFormError(null);
+    setOtpMessage("");
+
+    try {
+      const response = await resendLoginOtp();
+      const nextSession = response?.otpSession;
+      setOtp("");
+      setOtpCountdown(Math.ceil(Math.max((nextSession?.resendAvailableAt || Date.now() + OTP_COOLDOWN_SECONDS * 1000) - Date.now(), 0) / 1000));
+      setOtpMessage(response?.message || "A new OTP has been sent to your email.");
+    } catch (err) {
+      setFormError(err?.message || "Unable to resend OTP");
+    } finally {
+      setResendingOtp(false);
+    }
+  }
 
   return (
     <div
@@ -182,6 +272,7 @@ export default function Login() {
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                disabled={otpRequired}
                 style={inputStyle}
                 placeholder="name@email.com"
                 required
@@ -209,6 +300,7 @@ export default function Login() {
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  disabled={otpRequired}
                   placeholder="••••••••"
                   required
                   style={{
@@ -249,14 +341,14 @@ export default function Login() {
 
             <button
               type="submit"
-              disabled={isLoading || submitCooldown > 0}
+              disabled={isLoading || submitCooldown > 0 || otpVerifying}
               style={{
                 ...buttonStyle,
-                cursor: isLoading || submitCooldown > 0 ? "not-allowed" : "pointer",
-                opacity: isLoading || submitCooldown > 0 ? 0.7 : 1,
+                cursor: isLoading || submitCooldown > 0 || otpVerifying ? "not-allowed" : "pointer",
+                opacity: isLoading || submitCooldown > 0 || otpVerifying ? 0.7 : 1,
               }}
             >
-              {isLoading ? "Signing in..." : submitCooldown > 0 ? `Try again in ${submitCooldown}s` : "Sign in"}
+              {otpVerifying ? "Verifying..." : isLoading ? "Signing in..." : submitCooldown > 0 ? `Try again in ${submitCooldown}s` : otpRequired ? "Verify code" : "Sign in"}
             </button>
 
             <div style={mutedTextStyle}>
@@ -281,19 +373,21 @@ export default function Login() {
       <div style={modalStyle} role="dialog" aria-modal="true" aria-labelledby="otp-title">
         <h2 id="otp-title" style={modalTitleStyle}>Verify sign in</h2>
         <p style={modalTextStyle}>
-          Enter the code sent to <strong>{maskEmail(email.trim())}</strong>.
+          Enter the code sent to <strong>{maskEmail((email || otpSession?.email || "").trim())}</strong>.
         </p>
         <p style={timerTextStyle}>
-          Code expires soon. You can request another code in {otpCountdown}s.
+          {otpCountdown > 0 ? `Code expires soon. You can request another code in ${otpCountdown}s.` : "You can request another code now."}
         </p>
 
         {/* shadcn InputOTP component */}
         <InputOTP
+          ref={otpInputRef}
           maxLength={8}
           value={otp}
           onChange={(value) => {
             setOtp(value.replace(/\D/g, ""));
             setFormError(null);
+            setOtpMessage("");
           }}
           pattern="\d*"
           inputMode="numeric"
@@ -316,6 +410,11 @@ export default function Login() {
             {formError || authError}
           </div>
         )}
+        {otpMessage && (
+          <div role="status" style={{ ...successStyle, marginTop: 14, marginBottom: 0 }}>
+            {otpMessage}
+          </div>
+        )}
 
         <div style={{ display: "flex", gap: 12, marginTop: 18 }}>
           <button
@@ -324,7 +423,9 @@ export default function Login() {
               setOtpRequired(false);
               setOtp("");
               setOtpCountdown(0);
+              setOtpMessage("");
               setFormError(null);
+              clearOtpSession();
             }}
             style={secondaryButtonStyle}
           >
@@ -332,26 +433,20 @@ export default function Login() {
           </button>
           <button
             type="button"
-            disabled={otpVerifying || !/^\d{6,8}$/.test(otp.trim())}
-            onClick={async () => {
-              if (!/^\d{6,8}$/.test(otp.trim())) {
-                setFormError("Enter the 6 to 8 digit OTP sent to your email");
-                return;
-              }
-              setOtpVerifying(true);
-              setFormError(null);
-              try {
-                const verifiedUser = await completeLoginOtp({
-                  email: email.trim(),
-                  otp: otp.trim(),
-                });
-                navigate(getPostLoginPath(verifiedUser), { replace: true });
-              } catch (err) {
-                setFormError(err?.message || "OTP verification failed");
-              } finally {
-                setOtpVerifying(false);
-              }
+            disabled={otpCountdown > 0 || resendingOtp || otpVerifying}
+            onClick={handleResendOtp}
+            style={{
+              ...secondaryButtonStyle,
+              cursor: otpCountdown > 0 || resendingOtp || otpVerifying ? "not-allowed" : "pointer",
+              opacity: otpCountdown > 0 || resendingOtp || otpVerifying ? 0.7 : 1,
             }}
+          >
+            {resendingOtp ? "Sending..." : otpCountdown > 0 ? `Resend in ${otpCountdown}s` : "Resend"}
+          </button>
+          <button
+            type="button"
+            disabled={otpVerifying || !/^\d{6,8}$/.test(otp.trim())}
+            onClick={verifyCurrentOtp}
             style={{
               ...buttonStyle,
               padding: "12px 18px",
@@ -411,6 +506,17 @@ const errorStyle = {
   background: "#fef2f2",
   border: "1px solid #fee2e2",
   color: "#b91c1c",
+  fontWeight: 500,
+  fontSize: 14,
+};
+
+const successStyle = {
+  marginBottom: 20,
+  padding: 14,
+  borderRadius: 12,
+  background: "#f0fdf4",
+  border: "1px solid #bbf7d0",
+  color: "#166534",
   fontWeight: 500,
   fontSize: 14,
 };
