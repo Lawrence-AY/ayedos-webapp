@@ -21,7 +21,7 @@ import { getDashboardPath } from "../../utils/dashboardRoutes.js";
 const memberNavItems = [
   { label: "Dashboard", suffix: "", exact: true, icon: LayoutDashboard },
  
-  { label: "Savings", suffix: "savings", icon: BriefcaseBusiness },
+  { label: "Deposit", suffix: "savings", icon: BriefcaseBusiness },
   { label: "Transactions", suffix: "transactions", icon: ReceiptText },
   { label: "Loans", suffix: "loans", icon: FileText },
   { label: "Portfolio", suffix: "portfolio", icon: PieChart },
