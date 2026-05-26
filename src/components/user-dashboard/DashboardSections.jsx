@@ -90,8 +90,16 @@ const LOAN_PRODUCTS = [
   { type: "DEVELOPMENT", name: "Development Loan", max: 250000, interestRate: 2, duration: 72, guarantors: 3, requiresFullShareCapital: true },
 ];
 
-function formatCurrency(value) {
-  return `KES ${Math.abs(Math.round(Number(value || 0))).toLocaleString()}`;
+function formatCurrency(value, options = {}) {
+  const {
+    minimumFractionDigits = 0,
+    maximumFractionDigits = 0,
+  } = options;
+  const amount = Math.abs(Number(value || 0));
+  return `KES ${amount.toLocaleString(undefined, {
+    minimumFractionDigits,
+    maximumFractionDigits,
+  })}`;
 }
 
 function getGreeting(date = new Date()) {
@@ -131,9 +139,39 @@ function normalizeStatus(status) {
   return String(status || "Pending").replace(/_/g, " ");
 }
 
+function getTransactionPromptLabel(transaction) {
+  const endpoint = transaction?.kcbEndpoint;
+  const category = transaction?.paymentCategory;
+  const label = category || endpoint || transaction?.description || transaction?.type || "Payment";
+  return normalizeStatus(label).replace(/^\/+/, "");
+}
+
+function buildPromptSummary(transactions = []) {
+  return transactions.reduce((summary, transaction) => {
+    if (!transaction?.paymentCategory && !transaction?.kcbEndpoint) return summary;
+    const key = transaction.paymentCategory || transaction.kcbEndpoint;
+    const current = summary[key] || {
+      key,
+      label: getTransactionPromptLabel(transaction),
+      total: 0,
+      pending: 0,
+      success: 0,
+      failed: 0,
+      amount: 0,
+    };
+    const status = String(transaction.status || "").toUpperCase();
+    current.total += 1;
+    current.amount += Number(transaction.amount || 0);
+    if (status === "SUCCESS") current.success += 1;
+    else if (status === "FAILED") current.failed += 1;
+    else current.pending += 1;
+    return { ...summary, [key]: current };
+  }, {});
+}
+
 function getStatusClass(status) {
   const normalized = normalizeStatus(status).toLowerCase();
-  if (["completed", "approved", "verified", "trusted"].includes(normalized)) {
+  if (["completed", "approved", "verified", "trusted", "success", "paid"].includes(normalized)) {
     return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
   }
   if (["processing", "pending", "reviewed"].includes(normalized)) {
@@ -397,8 +435,10 @@ function NotificationsPanel({ items = [], compact = false }) {
   );
 }
 
-function TransactionsTable({ transactions, limit = null, showViewAll = false, paginate = false, pageSize = 10 }) {
+function TransactionsTable({ transactions, limit = null, showViewAll = false, paginate = false, pageSize = 10, accessToken }) {
   const [page, setPage] = useState(1);
+  const [exporting, setExporting] = useState(false);
+  const [exportMessage, setExportMessage] = useState(null);
   const totalPages = paginate ? Math.max(1, Math.ceil(transactions.length / pageSize)) : 1;
   const limitedRows = limit ? transactions.slice(0, limit) : transactions;
   const rows = paginate
@@ -410,6 +450,20 @@ function TransactionsTable({ transactions, limit = null, showViewAll = false, pa
     setPage((current) => Math.min(current, totalPages));
   }, [totalPages]);
 
+  async function emailTransactions() {
+    if (!accessToken || exporting) return;
+    setExporting(true);
+    setExportMessage(null);
+    try {
+      await emailMemberReport("transactions", accessToken);
+      setExportMessage({ type: "success", text: "Transaction statement sent to your email." });
+    } catch (error) {
+      setExportMessage({ type: "error", text: error?.message || "Failed to email transaction statement." });
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <Surface className="overflow-hidden">
       <div className="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between">
@@ -419,11 +473,21 @@ function TransactionsTable({ transactions, limit = null, showViewAll = false, pa
           </h4>
           <p className="text-sm text-slate-500">Deposits, transfers, dividends, and repayments</p>
         </div>
-        <button className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+        <button
+          type="button"
+          onClick={emailTransactions}
+          disabled={!accessToken || exporting}
+          className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+        >
           <Download size={16} />
-          Export
+          {exporting ? "Sending..." : "Email export"}
         </button>
       </div>
+      {exportMessage ? (
+        <div className={`border-b px-5 py-3 text-sm font-medium ${exportMessage.type === "success" ? "border-emerald-100 bg-emerald-50 text-emerald-800" : "border-rose-100 bg-rose-50 text-rose-800"}`}>
+          {exportMessage.text}
+        </div>
+      ) : null}
       {rows.length === 0 ? (
         <EmptyState
           icon={ReceiptText}
@@ -433,7 +497,7 @@ function TransactionsTable({ transactions, limit = null, showViewAll = false, pa
       ) : (
         <>
           <div className="overflow-x-auto">
-            <table className="min-w-[900px]">
+            <table className="min-w-[980px]">
               <thead>
                 <tr className="bg-slate-50">
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
@@ -442,6 +506,7 @@ function TransactionsTable({ transactions, limit = null, showViewAll = false, pa
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
                     Transaction type
                   </th>
+                   
                   
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
                     reference
@@ -458,14 +523,16 @@ function TransactionsTable({ transactions, limit = null, showViewAll = false, pa
                 {rows.map((transaction, index) => {
                   const amount = Number(transaction.amount || transaction.value || 0);
                   const type = normalizeStatus(transaction.type || transaction.transactionType);
+                   
                   const createdAt = transaction.createdAt || transaction.date;
                   const mpesaReference = transaction.mpesaReference || transaction.mpesaReceipt || transaction.checkoutRequestId || transaction.merchantRequestId || transaction.reference;
                   return (
                     <tr key={transaction.id || index} className="bg-white text-center transition hover:bg-slate-50">
-                      <td className="px-5 bg-red-300 text-center pl-5 py-4 text-sm text-slate-600">
+                      <td className="px-5  text-center pl-5 py-4 text-sm text-slate-600">
                         {createdAt ? new Date(createdAt).toLocaleDateString() : "-"}
                       </td>
                       <td className="px-5 py-4 text-sm font-semibold text-slate-900">{type}</td>
+                    
                       
                       <td className="px-5 py-4 text-sm font-semibold text-slate-700">
                         {mpesaReference || "-"}
@@ -488,7 +555,7 @@ function TransactionsTable({ transactions, limit = null, showViewAll = false, pa
           <div className="flex flex-col gap-3 border-t border-slate-200 px-5 py-4 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
             <span>
               {showViewAll && hasMore
-                ? `Showing ${rows.length} of ${transactions.length} records`
+                ? `  `
                 : `${rows.length} record${rows.length === 1 ? "" : "s"}`}
             </span>
             {showViewAll ? (
@@ -537,7 +604,23 @@ function EmptyState({ icon: Icon, title, description }) {
   );
 }
 
-function DashboardOverview({ stats, transactions, memberName, user, notifications, showValues, onToggleValues }) {
+function PaymentPromptSummary({ transactions }) {
+  const prompts = Object.values(buildPromptSummary(transactions))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 4);
+
+  if (prompts.length === 0) return null;
+
+  return (
+    <Surface className="p-5 hidden" hidden>
+       
+       
+       
+    </Surface>
+  );
+}
+
+function DashboardOverview({ stats, transactions, memberName, user, notifications, showValues, accessToken, onToggleValues }) {
   const greeting = getGreeting();
   const cards = [
     {
@@ -617,6 +700,8 @@ function DashboardOverview({ stats, transactions, memberName, user, notification
         ))}
       </div>
 
+      <PaymentPromptSummary transactions={transactions} />
+
       <Surface className="p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -629,7 +714,7 @@ function DashboardOverview({ stats, transactions, memberName, user, notification
           </div>
           <div className="min-w-56">
             <div className="mb-2 flex justify-between text-xs font-semibold text-slate-500">
-              <span>{formatCurrency(stats.totalSavings)}</span>
+              <span>{formatCurrency(stats.shareCapital)}</span>
               <span>{Math.round(stats.shareCapitalProgress)}%</span>
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-slate-100">
@@ -641,7 +726,7 @@ function DashboardOverview({ stats, transactions, memberName, user, notification
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.8fr)]">
         <div className="space-y-5">
-          <TransactionsTable transactions={transactions} limit={5} showViewAll />
+          <TransactionsTable transactions={transactions} limit={5} showViewAll accessToken={accessToken} />
           <NotificationsPanel items={notifications} />
         </div>
         <div className="space-y-5">
@@ -1443,7 +1528,7 @@ function PortfolioPage({ stats, transactions, shares, search, user, showValues, 
   const filteredTransactions = transactions.filter((transaction) => matchesSearch(transaction, search));
   const portfolioStats = [
     { label: "Estimated account value", value: formatCurrency(stats.balance), tone: "emerald" },
-    { label: "Share capital", value: formatCurrency(stats.totalSavings), tone: "blue" },
+    { label: "Share capital", value: formatCurrency(stats.shareCapital), tone: "blue" },
     { label: "Loan balance", value: formatCurrency(stats.loanBalance), tone: "amber" },
     { label: "This month", value: formatCurrency(stats.monthlyContributions), tone: "slate" },
   ];
@@ -1684,11 +1769,15 @@ function ReportsPage({ accessToken }) {
   );
 }
 
-function SavingsPage({ stats, accessToken, onRefresh, showValues, onToggleValues, user }) {
+function SavingsPage({ stats, transactions = [], accessToken, onRefresh, showValues, onToggleValues, user }) {
   const [message, setMessage] = useState(null);
+  const savingsTransactions = transactions.filter((transaction) => {
+    const category = String(transaction.paymentCategory || transaction.kcbEndpoint || transaction.type || "").toLowerCase();
+    return ["savings", "monthly", "share", "wallet", "fine", "loan"].some((token) => category.includes(token));
+  });
 
   return (
-    <SimplePage eyebrow="Savings"   icon={PiggyBank}>
+    <SimplePage eyebrow="Deposit" icon={PiggyBank}>
       {message ? (
         <div className={`mb-4 rounded-lg border px-4 py-3 text-sm font-medium ${message.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800"}`}>
           {message.text}
@@ -1706,7 +1795,7 @@ function SavingsPage({ stats, accessToken, onRefresh, showValues, onToggleValues
         </button>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
-        <StatCard icon={PiggyBank} label="Savings balance" value={formatCurrency(stats.totalSavings)} trend="+12.2%"  tone="emerald" blur={!showValues} />
+        <StatCard icon={PiggyBank} label="Savings balance" value={formatCurrency(stats.totalSavings)} trend="Paid" tone="emerald" blur={!showValues} />
         <StatCard icon={ArrowDownLeft} label="Monthly deposits" value={formatCurrency(stats.monthlyContributions)} trend="Paid" helper="Current month deposits" tone="blue" blur={!showValues} />
       </div>
       <SavingsContributionForm
@@ -1715,6 +1804,7 @@ function SavingsPage({ stats, accessToken, onRefresh, showValues, onToggleValues
         onRefresh={onRefresh}
         onMessage={setMessage}
       />
+      <TransactionsTable transactions={savingsTransactions} limit={6} showViewAll accessToken={accessToken} />
     </SimplePage>
   );
 }
