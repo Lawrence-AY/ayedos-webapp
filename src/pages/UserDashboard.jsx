@@ -100,30 +100,52 @@ export default function UserDashboard() {
   }, [accessToken]);
 
   const stats = useMemo(() => {
-    const balance = data.transactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
-    const savings = data.shares.reduce((sum, share) => sum + Number(share.totalInvested || share.shares || 0), 0);
+    const successfulTransactions = data.transactions.filter((transaction) => {
+      const status = String(transaction.status || "").toUpperCase();
+      return ["SUCCESS", "PAID", "COMPLETED"].includes(status);
+    });
+    const getCategory = (transaction) => String(
+      transaction.paymentCategory ||
+      transaction.kcbEndpoint ||
+      transaction.description ||
+      transaction.type ||
+      ""
+    ).toLowerCase();
+    const categoryTotal = (tokens) => successfulTransactions.reduce((sum, transaction) => {
+      const category = getCategory(transaction);
+      return tokens.some((token) => category.includes(token))
+        ? sum + Number(transaction.amount || 0)
+        : sum;
+    }, 0);
+
+    const savings = categoryTotal(["savings"]);
+    const paidShareCapital = categoryTotal(["share_capital", "sharecapital", "share capital"]);
+    const shareAccountCapital = data.shares.reduce((sum, share) => sum + Number(share.totalInvested || 0), 0);
+    const shareCapital = Math.max(paidShareCapital, shareAccountCapital);
+    const balance = successfulTransactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
     const loanBalance = data.loans.reduce((sum, loan) => sum + Number(loan.balance || loan.principal || 0), 0);
     const now = new Date();
-    const monthlyContributions = data.transactions.reduce((sum, transaction) => {
+    const monthlyContributions = successfulTransactions.reduce((sum, transaction) => {
       const date = transaction.createdAt || transaction.date;
       const transactionDate = date ? new Date(date) : null;
       const isCurrentMonth =
         transactionDate &&
         transactionDate.getMonth() === now.getMonth() &&
         transactionDate.getFullYear() === now.getFullYear();
-      const type = String(transaction.type || transaction.transactionType || "").toLowerCase();
-      const isContribution = type.includes("deposit") || type.includes("saving") || type.includes("contribution");
-      return isCurrentMonth && isContribution ? sum + Number(transaction.amount || 0) : sum;
+      const category = getCategory(transaction);
+      const isMonthlyContribution = category.includes("monthly_contribution") || category.includes("monthlycontributions");
+      return isCurrentMonth && isMonthlyContribution ? sum + Number(transaction.amount || 0) : sum;
     }, 0);
 
     return {
       balance,
       totalSavings: savings,
+      shareCapital,
       loanBalance,
       monthlyContributions,
       activeLoans: data.loans.filter((loan) => ["ACTIVE", "APPROVED"].includes(String(loan.status || "").toUpperCase())).length,
-      shareCapitalRemaining: Math.max(MIN_SHARE_CAPITAL - savings, 0),
-      shareCapitalProgress: Math.min((savings / MIN_SHARE_CAPITAL) * 100, 100),
+      shareCapitalRemaining: Math.max(MIN_SHARE_CAPITAL - shareCapital, 0),
+      shareCapitalProgress: Math.min((shareCapital / MIN_SHARE_CAPITAL) * 100, 100),
     };
   }, [data]);
 
@@ -149,6 +171,7 @@ export default function UserDashboard() {
           user={user}
           notifications={data.notifications}
           showValues={showValues}
+          accessToken={accessToken}
           onToggleValues={() => setShowValues((current) => !current)}
         />
       );
@@ -158,7 +181,12 @@ export default function UserDashboard() {
         <div className="space-y-6">
           <SectionHeader eyebrow="Transactions" 
          />
-          <TransactionsTable transactions={data.transactions.filter((transaction) => matchesSearch(transaction, search))} />
+          <TransactionsTable
+            transactions={data.transactions.filter((transaction) => matchesSearch(transaction, search))}
+            accessToken={accessToken}
+            paginate
+            pageSize={10}
+          />
         </div>
       );
     }
@@ -203,7 +231,7 @@ export default function UserDashboard() {
       return <ReportsPage accessToken={accessToken} />;
     }
     if (path.includes("/savings")) {
-      return <SavingsPage stats={stats} accessToken={accessToken} onRefresh={() => loadDashboardData({ showLoading: false })} showValues={showValues} onToggleValues={() => setShowValues((current) => !current)} user={user} />;
+      return <SavingsPage stats={stats} transactions={data.transactions} accessToken={accessToken} onRefresh={() => loadDashboardData({ showLoading: false })} showValues={showValues} onToggleValues={() => setShowValues((current) => !current)} user={user} />;
     }
   
     if (path.includes("/support")) {
@@ -227,6 +255,7 @@ export default function UserDashboard() {
         user={user}
         notifications={data.notifications}
         showValues={showValues}
+        accessToken={accessToken}
         onToggleValues={() => setShowValues((current) => !current)}
       />
     );
