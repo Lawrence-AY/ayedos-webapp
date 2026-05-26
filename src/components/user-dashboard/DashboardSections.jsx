@@ -290,10 +290,10 @@ function QuickActions() {
   const actions = [
     { label: "Apply Loan", icon: FileText, to: "loans" },
     { label: "Repay Loan", icon: CreditCard, to: "loans" },
-    { label: "Deposit Savings", icon: PiggyBank, to: "savings" },
-    { label: "Transfer Funds", icon: Send, to: "transactions" },
+    { label: "Deposit", icon: PiggyBank, to: "savings" },
+   
     { label: "Request Report", icon: Download, to: "reports" },
-    { label: "View Portfolio", icon: WalletCards, to: "portfolio" },
+    { label: "View Sacco Portfolio", icon: WalletCards, to: "portfolio" },
     { label: "Update Profile", icon: UserRound, to: "settings" },
   ];
 
@@ -523,7 +523,7 @@ function TransactionsTable({ transactions, limit = null, showViewAll = false, pa
                 {rows.map((transaction, index) => {
                   const amount = Number(transaction.amount || transaction.value || 0);
                   const type = normalizeStatus(transaction.type || transaction.transactionType);
-                   
+                   const description= (transaction.description || transaction.transactionDescription || "");
                   const createdAt = transaction.createdAt || transaction.date;
                   const mpesaReference = transaction.mpesaReference || transaction.mpesaReceipt || transaction.checkoutRequestId || transaction.merchantRequestId || transaction.reference;
                   return (
@@ -531,7 +531,7 @@ function TransactionsTable({ transactions, limit = null, showViewAll = false, pa
                       <td className="px-5  text-center pl-5 py-4 text-sm text-slate-600">
                         {createdAt ? new Date(createdAt).toLocaleDateString() : "-"}
                       </td>
-                      <td className="px-5 py-4 text-sm font-semibold text-slate-900">{type}</td>
+                      <td className="px-5 py-4 text-sm font-semibold text-slate-900">{description}</td>
                     
                       
                       <td className="px-5 py-4 text-sm font-semibold text-slate-700">
@@ -623,9 +623,10 @@ function PaymentPromptSummary({ transactions }) {
 function DashboardOverview({ stats, transactions, memberName, user, notifications, showValues, accessToken, onToggleValues }) {
   const greeting = getGreeting();
   const cards = [
+    
     {
-      label: "Account Balance",
-      value: formatCurrency(stats.balance),
+      label: "Share Capital",
+      value: formatCurrency(stats.shareCapital),
       icon: WalletCards,
        
       tone: "emerald",
@@ -666,7 +667,7 @@ function DashboardOverview({ stats, transactions, memberName, user, notification
           <div className="flex flex-wrap items-center gap-3 sm:justify-end">
             <Link
               to={getDashboardPath("MEMBER", "loans")}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-white px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-50"
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/20 px-4 py-3 text-sm font-semibold text-slate-950 transition "
             >
               <FileText size={17} />
               Apply loan
