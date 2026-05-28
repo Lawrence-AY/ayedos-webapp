@@ -60,6 +60,7 @@ export function AuthProvider({ children }) {
   const [otpSession, setOtpSession] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [authError, setAuthError] = useState(null)
+  const [isOnline, setIsOnline] = useState(() => navigator.onLine)
 
   const loadStoredAuth = useCallback(() => {
     try {
@@ -522,6 +523,39 @@ export function AuthProvider({ children }) {
     }
   }, [accessToken, clearLocalAuth, loadCurrentUser])
 
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      setAuthError('Your session has expired. Please sign in again.')
+      clearLocalAuth()
+    }
+    const handleAuthRefreshed = (event) => {
+      const tokens = event.detail || {}
+      if (tokens.accessToken) setAccessToken(tokens.accessToken)
+      if (tokens.refreshToken) setRefreshToken(tokens.refreshToken)
+      if (tokens.sessionId) setSessionId(tokens.sessionId)
+    }
+    const handleOnline = () => {
+      setIsOnline(true)
+      setAuthError(null)
+    }
+    const handleOffline = () => {
+      setIsOnline(false)
+      setAuthError('You are offline. Some actions will resume when your connection returns.')
+    }
+
+    window.addEventListener('ayedos:auth-expired', handleAuthExpired)
+    window.addEventListener('ayedos:auth-refreshed', handleAuthRefreshed)
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+
+    return () => {
+      window.removeEventListener('ayedos:auth-expired', handleAuthExpired)
+      window.removeEventListener('ayedos:auth-refreshed', handleAuthRefreshed)
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [clearLocalAuth])
+
   const value = useMemo(
     () => ({
       user,
@@ -531,6 +565,7 @@ export function AuthProvider({ children }) {
       otpSession,
       isLoading,
       authError,
+      isOnline,
       login,
       completeLoginOtp,
       resendLoginOtp,
@@ -543,7 +578,7 @@ export function AuthProvider({ children }) {
       updateCurrentUser,
       apiBaseUrl: getApiBaseUrl(),
     }),
-    [accessToken, authError, clearOtpSession, completeLoginOtp, completeRegistrationOtp, isLoading, login, loadCurrentUser, logout, otpSession, refresh, refreshToken, register, resendLoginOtp, sessionId, updateCurrentUser, user]
+    [accessToken, authError, clearOtpSession, completeLoginOtp, completeRegistrationOtp, isLoading, isOnline, login, loadCurrentUser, logout, otpSession, refresh, refreshToken, register, resendLoginOtp, sessionId, updateCurrentUser, user]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

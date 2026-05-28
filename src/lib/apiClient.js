@@ -2,6 +2,21 @@
 export const DEFAULT_API_PATH_PREFIX = '/api';
 const DEFAULT_TIMEOUT_MS = 45000;
 const RETRYABLE_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
+const TOKEN_STORAGE_KEYS = {
+  accessToken: 'ayedos_accessToken',
+  refreshToken: 'ayedos_refreshToken',
+  sessionId: 'ayedos_sessionId',
+};
+const PUBLIC_AUTH_PATHS = new Set([
+  '/api/auth/login',
+  '/api/auth/login/verify-otp',
+  '/api/auth/register',
+  '/api/auth/verify-otp',
+  '/api/auth/resend-otp',
+  '/api/auth/forgot-password',
+  '/api/auth/reset-password',
+  '/api/auth/set-password',
+]);
 
 export class ApiError extends Error {
   constructor(message, details = {}) {
@@ -56,6 +71,9 @@ export function getApiErrorMessage(error) {
     return 'The server is taking longer than usual to respond. It may be waking up; please try again in a moment.';
   }
   if (error.kind === 'network') {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      return 'You appear to be offline. Reconnect and try again.';
+    }
     return 'Network connection failed. Check your internet connection, CORS settings, or backend availability.';
   }
   if (error.status === 400) {
@@ -123,6 +141,67 @@ function getDeviceName() {
   return `${browser} on ${platform}`;
 }
 
+function getStoredAuth() {
+  try {
+    return {
+      accessToken: localStorage.getItem(TOKEN_STORAGE_KEYS.accessToken),
+      refreshToken: localStorage.getItem(TOKEN_STORAGE_KEYS.refreshToken),
+      sessionId: localStorage.getItem(TOKEN_STORAGE_KEYS.sessionId),
+    };
+  } catch {
+    return {};
+  }
+}
+
+function persistTokens(tokens = {}) {
+  try {
+    if (tokens.accessToken) localStorage.setItem(TOKEN_STORAGE_KEYS.accessToken, tokens.accessToken);
+    if (tokens.refreshToken) localStorage.setItem(TOKEN_STORAGE_KEYS.refreshToken, tokens.refreshToken);
+    if (tokens.sessionId) localStorage.setItem(TOKEN_STORAGE_KEYS.sessionId, tokens.sessionId);
+  } catch {
+    // storage may be unavailable in private mode
+  }
+}
+
+function clearStoredAuth() {
+  try {
+    Object.values(TOKEN_STORAGE_KEYS).forEach((key) => localStorage.removeItem(key));
+    localStorage.removeItem('ayedos_user');
+  } catch {
+    // ignore storage errors
+  }
+  window.dispatchEvent(new CustomEvent('ayedos:auth-expired'));
+}
+
+async function refreshStoredAccessToken() {
+  const stored = getStoredAuth();
+  if (!stored.refreshToken) return null;
+
+  const res = await apiRequest('/api/auth/refresh', {
+    method: 'POST',
+    body: { refreshToken: stored.refreshToken },
+    sessionId: stored.sessionId,
+    retry: false,
+    skipAuthRefresh: true,
+  });
+
+  if (!res.ok) {
+    clearStoredAuth();
+    return null;
+  }
+
+  const data = unwrapEnvelopeData(res.json);
+  const nextTokens = {
+    accessToken: data?.accessToken,
+    refreshToken: data?.refreshToken || stored.refreshToken,
+    sessionId: data?.sessionId || stored.sessionId,
+  };
+  if (!nextTokens.accessToken) return null;
+  persistTokens(nextTokens);
+  window.dispatchEvent(new CustomEvent('ayedos:auth-refreshed', { detail: nextTokens }));
+  return nextTokens;
+}
+
 /**
  * Generic API request helper
  * @param {string} path - API endpoint path (e.g. '/api/applications')
@@ -133,9 +212,12 @@ function getDeviceName() {
  * @param {AbortSignal} options.signal - AbortSignal for request cancellation
  * @returns {Promise<{ok: boolean, status: number, json: any}>}
  */
-export async function apiRequest(path, { method = 'GET', body, accessToken, sessionId, signal, timeoutMs = DEFAULT_TIMEOUT_MS, retry = true } = {}) {
+export async function apiRequest(path, { method = 'GET', body, accessToken, sessionId, signal, timeoutMs = DEFAULT_TIMEOUT_MS, retry = true, skipAuthRefresh = false } = {}) {
   const url = buildApiUrl(path);
   const normalizedPath = String(path).startsWith('/') ? path : `/${path}`;
+  const storedAuth = getStoredAuth();
+  const isPublicAuthPath = PUBLIC_AUTH_PATHS.has(normalizedPath);
+  const resolvedAccessToken = accessToken || (!isPublicAuthPath ? storedAuth.accessToken : null) || null;
 
   const headers = {
     'Content-Type': 'application/json',
@@ -143,11 +225,11 @@ export async function apiRequest(path, { method = 'GET', body, accessToken, sess
     'X-Device-Name': getDeviceName(),
   };
 
-  if (accessToken) {
-    headers.Authorization = `Bearer ${accessToken}`;
+  if (resolvedAccessToken) {
+    headers.Authorization = `Bearer ${resolvedAccessToken}`;
   }
 
-  const storedSessionId = sessionId || localStorage.getItem('ayedos_sessionId');
+  const storedSessionId = sessionId || storedAuth.sessionId;
   if (storedSessionId) {
     headers['X-Session-Id'] = storedSessionId;
   }
@@ -175,7 +257,7 @@ export async function apiRequest(path, { method = 'GET', body, accessToken, sess
           apiUrl: targetUrl,
           method,
           attempt: attempt + 1,
-          hasAccessToken: Boolean(accessToken),
+          hasAccessToken: Boolean(resolvedAccessToken),
           hasSessionId: Boolean(storedSessionId),
         });
       }
@@ -272,6 +354,32 @@ export async function apiRequest(path, { method = 'GET', body, accessToken, sess
       message:
         'API base URL is not configured. Set VITE_API_URL or VITE_API_BASE to the backend URL, then rebuild and redeploy the web app.',
     };
+  }
+
+  if (
+    response.status === 401 &&
+    !skipAuthRefresh &&
+    !isPublicAuthPath &&
+    normalizedPath !== '/api/auth/refresh' &&
+    getStoredAuth().refreshToken
+  ) {
+    const nextTokens = await refreshStoredAccessToken().catch(() => null);
+    if (nextTokens?.accessToken) {
+      return apiRequest(path, {
+        method,
+        body,
+        accessToken: nextTokens.accessToken,
+        sessionId: nextTokens.sessionId,
+        signal,
+        timeoutMs,
+        retry: false,
+        skipAuthRefresh: true,
+      });
+    }
+  }
+
+  if ((response.status === 401 || response.status === 403) && !skipAuthRefresh && !isPublicAuthPath) {
+    clearStoredAuth();
   }
 
   return {
