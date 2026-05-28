@@ -10,6 +10,7 @@ import {
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
+import { motion } from "framer-motion";
 import {
   Area,
   AreaChart,
@@ -53,7 +54,12 @@ export function statusClass(status) {
 
 export function SectionHeader({ eyebrow, title, description, action }) {
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.28 }}
+      className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
+    >
       <div>
         {eyebrow ? (
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
@@ -70,13 +76,13 @@ export function SectionHeader({ eyebrow, title, description, action }) {
         ) : null}
       </div>
       {action}
-    </div>
+    </motion.div>
   );
 }
 
 export function Surface({ children, className = "" }) {
   return (
-    <section className={`rounded-lg border border-slate-200 bg-white shadow-[0_14px_40px_rgba(15,23,42,0.06)] ${className}`}>
+    <section className={`premium-surface rounded-lg ${className}`}>
       {children}
     </section>
   );
@@ -93,7 +99,7 @@ export function StatusBadge({ status }) {
 export function EmptyState({ icon: Icon = FileText, title = "No records found", description = "Records will appear here when available." }) {
   return (
     <div className="grid place-items-center px-6 py-14 text-center">
-      <div className="grid h-14 w-14 place-items-center rounded-lg bg-slate-100 text-slate-500">
+      <div className="grid h-16 w-16 place-items-center rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
         <Icon size={26} />
       </div>
       <h3 className="mt-4 text-base font-semibold text-slate-950">{title}</h3>
@@ -105,15 +111,15 @@ export function EmptyState({ icon: Icon = FileText, title = "No records found", 
 export function SkeletonDashboard() {
   return (
     <div className="space-y-6">
-      <div className="h-28 animate-pulse rounded-lg bg-slate-200" />
+      <div className="shimmer h-36 rounded-lg bg-slate-200" />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {[1, 2, 3, 4, 5, 6, 7, 8].map((item) => (
-          <div key={item} className="h-32 animate-pulse rounded-lg bg-slate-200" />
+          <div key={item} className="shimmer h-32 rounded-lg bg-slate-200" />
         ))}
       </div>
       <div className="grid gap-5 xl:grid-cols-2">
-        <div className="h-96 animate-pulse rounded-lg bg-slate-200" />
-        <div className="h-96 animate-pulse rounded-lg bg-slate-200" />
+        <div className="shimmer h-96 rounded-lg bg-slate-200" />
+        <div className="shimmer h-96 rounded-lg bg-slate-200" />
       </div>
     </div>
   );
@@ -129,7 +135,13 @@ export function KpiCard({ icon: Icon, label, value, trend = "Live", helper, tone
   };
 
   return (
-    <Surface className="group p-5 transition duration-200 hover:-translate-y-1 hover:shadow-[0_22px_50px_rgba(15,23,42,0.1)]">
+    <motion.div
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ y: -4 }}
+      transition={{ duration: 0.24 }}
+    >
+    <Surface className="group overflow-hidden p-5 transition duration-200 hover:shadow-[0_22px_50px_rgba(15,23,42,0.1)]">
       <div className="flex items-start justify-between gap-4">
         <div className={`grid h-11 w-11 place-items-center rounded-lg ${tones[tone] || tones.emerald}`}>
           <Icon size={21} />
@@ -140,7 +152,14 @@ export function KpiCard({ icon: Icon, label, value, trend = "Live", helper, tone
         </span>
       </div>
       <p className="mt-5 text-sm font-medium text-slate-500">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tracking-normal text-slate-950">{value}</p>
+      <motion.p
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.08, duration: 0.22 }}
+        className="mt-1 text-2xl font-semibold tracking-normal text-slate-950"
+      >
+        {value}
+      </motion.p>
       <div className="mt-4 flex h-8 items-end gap-1.5">
         {(bars.length ? bars : [0, 0, 0, 0, 0, 0]).map((bar, index) => (
           <span
@@ -152,6 +171,7 @@ export function KpiCard({ icon: Icon, label, value, trend = "Live", helper, tone
       </div>
       {helper ? <p className="mt-3 text-xs leading-5 text-slate-500">{helper}</p> : null}
     </Surface>
+    </motion.div>
   );
 }
 
@@ -208,7 +228,7 @@ export function DataTable({ title, description, columns, data = [], emptyTitle, 
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {data.map((row, index) => (
-                  <tr key={row.id || row._id || index} className="bg-white transition hover:bg-slate-50">
+                  <tr key={row.id || row._id || index} className="bg-white transition hover:bg-emerald-50/40">
                     {columns.map((column) => (
                       <td key={column.key} className="px-5 py-4 text-sm text-slate-700">
                         {column.render ? column.render(row[column.key], row) : (row[column.key] ?? "-")}
@@ -239,6 +259,7 @@ export function DataTable({ title, description, columns, data = [], emptyTitle, 
 
 export function AnalyticsPanel({ title, description, data = [], type = "area", dataKey = "value", color = "#047857" }) {
   return (
+    <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.26 }}>
     <Surface className="p-5">
       <div className="mb-5 flex items-center justify-between gap-4">
         <div>
@@ -273,6 +294,35 @@ export function AnalyticsPanel({ title, description, data = [], type = "area", d
         </div>
       )}
     </Surface>
+    </motion.div>
+  );
+}
+
+export function DashboardHero({ eyebrow, title, description, metrics = [], action }) {
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.32 }}
+      className="finance-gradient overflow-hidden rounded-lg p-6 text-white shadow-[0_24px_70px_rgba(6,63,42,0.22)]"
+    >
+      <div className="grid gap-6 lg:grid-cols-[1.25fr_0.75fr] lg:items-end">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-200">{eyebrow}</p>
+          <h1 className="mt-3 max-w-3xl text-2xl font-semibold tracking-normal text-white sm:text-4xl">{title}</h1>
+          {description ? <p className="mt-3 max-w-3xl text-sm leading-6 text-emerald-50/86">{description}</p> : null}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+          {metrics.map((metric) => (
+            <div key={metric.label} className="rounded-lg border border-white/14 bg-white/10 px-4 py-3 backdrop-blur">
+              <p className="text-xs font-medium text-emerald-100">{metric.label}</p>
+              <p className="mt-1 text-lg font-bold text-white">{metric.value}</p>
+            </div>
+          ))}
+          {action}
+        </div>
+      </div>
+    </motion.section>
   );
 }
 

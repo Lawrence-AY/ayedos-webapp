@@ -25,6 +25,7 @@ import SimplePage from "../components/user-dashboard/SimplePage.jsx";
 import SkeletonDashboard from "../components/user-dashboard/SkeletonDashboard.jsx";
 import TransactionsTable from "../components/user-dashboard/TransactionsTable.jsx";
 import { MIN_SHARE_CAPITAL, matchesSearch, normalizeStatus } from "../components/user-dashboard/dashboardUtils.js";
+import { DashboardHero, formatCurrency } from "../components/dashboard/EnterpriseDashboard.jsx";
 
 export default function UserDashboard() {
   const location = useLocation();
@@ -164,6 +165,17 @@ export default function UserDashboard() {
     }
     if (isDashboardHome) {
       return (
+        <div className="space-y-6">
+        <DashboardHero
+          eyebrow="Member banking workspace"
+          title={`Welcome back, ${memberName}`}
+          description="Track savings, share capital, loans, transactions, and account security from one secure AYEDOS SACCO dashboard."
+          metrics={[
+            { label: "Savings", value: formatCurrency(stats.totalSavings) },
+            { label: "Share capital", value: formatCurrency(stats.shareCapital) },
+            { label: "Active loans", value: stats.activeLoans },
+          ]}
+        />
         <DashboardOverview
           stats={stats}
           transactions={data.transactions.filter((transaction) => matchesSearch(transaction, search))}
@@ -174,6 +186,7 @@ export default function UserDashboard() {
           accessToken={accessToken}
           onToggleValues={() => setShowValues((current) => !current)}
         />
+        </div>
       );
     }
     if (path.includes("/transactions")) {
@@ -262,7 +275,7 @@ export default function UserDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="enterprise-shell">
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} collapsed={sidebarCollapsed} />
       <main className={`min-h-screen transition-all ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-62"}`}>
         <TopNavbar

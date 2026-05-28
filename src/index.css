@@ -2,19 +2,33 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "@fontsource/inter/latin-400.css";
+@import "@fontsource/inter/latin-500.css";
+@import "@fontsource/inter/latin-600.css";
+@import "@fontsource/inter/latin-700.css";
+@import "@fontsource/manrope/latin-500.css";
+@import "@fontsource/manrope/latin-600.css";
+@import "@fontsource/manrope/latin-700.css";
+@import "@fontsource/poppins/latin-600.css";
 @import "./fonts.css";
 
 @custom-variant dark (&:is(.dark *));
 
 :root {
   /* AYEDOS SACCO website theme */
-  --color-primary: #003a16;
-  --color-secondary: #828385;
+  --color-primary: #063f2a;
+  --color-secondary: #39414d;
   --color-accent: #8cc63f;
-  --color-background: #f5f7fa;
-  --color-text: #0f2b3d;
-  --color-muted: #607082;
+  --color-background: #f6f8f7;
+  --color-text: #101923;
+  --color-muted: #64717f;
   --color-white: #ffffff;
+  --ayedos-ink: #101923;
+  --ayedos-forest: #063f2a;
+  --ayedos-green: #8cc63f;
+  --ayedos-mint: #e8f8dc;
+  --ayedos-steel: #39414d;
+  --ayedos-line: rgba(16, 25, 35, 0.1);
 
   --text: #0f2b3d;
   --text-h: #0f2b3d;
@@ -36,8 +50,8 @@
   --auth-input-border: #dbe3ec;
   --auth-label: #475569;
   --auth-muted: #64748b;
-    --font-body:"Gotham Regular";
-  --font-heading: "Gotham Bold";
+  --font-body: "Inter", "Manrope", "Geist Variable", system-ui, sans-serif;
+  --font-heading: "Manrope", "Poppins", "Inter", system-ui, sans-serif;
 
   font-family: var(--font-body);
   line-height: 1.5;
@@ -127,7 +141,9 @@
 
 body {
   margin: 0;
-  background: #ffffff;
+  background:
+    linear-gradient(180deg, rgba(232, 248, 220, 0.42), rgba(255, 255, 255, 0) 320px),
+    #f6f8f7;
   color: var(--text);
   min-width: 320px;
   transition: background-color 0.3s ease, color 0.3s ease;
@@ -143,7 +159,7 @@ body {
 
 h1, h2, h3, h4 {
   font-family: var(--font-heading);
-  letter-spacing: -0.03em;
+  letter-spacing: 0;
   color: var(--text-h);
   margin: 0;
 }
@@ -178,8 +194,8 @@ a {
 }
 
 @theme inline {
-  --font-heading: var(--font-sans);
-  --font-sans: 'Geist Variable', sans-serif;
+  --font-heading: var(--font-heading);
+  --font-sans: var(--font-body);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -354,6 +370,46 @@ a:focus-visible {
     @apply bg-background text-foreground;}
   html {
     @apply font-sans;}}
+
+.enterprise-shell {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(140, 198, 63, 0.16), transparent 30rem),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(246, 248, 247, 0.94));
+}
+
+.premium-surface {
+  border: 1px solid rgba(16, 25, 35, 0.09);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 18px 55px rgba(16, 25, 35, 0.07);
+  backdrop-filter: blur(18px);
+}
+
+.finance-gradient {
+  background:
+    linear-gradient(135deg, rgba(6, 63, 42, 0.96), rgba(38, 72, 82, 0.92) 54%, rgba(140, 198, 63, 0.86)),
+    #063f2a;
+}
+
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.62), transparent);
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
 .font-gotham-bold {
   font-family: "Gotham Bold";
 }

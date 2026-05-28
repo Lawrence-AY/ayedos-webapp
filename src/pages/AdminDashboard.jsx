@@ -35,6 +35,7 @@ import {
 import {
   AnalyticsPanel,
   DataTable,
+  DashboardHero,
   KpiCard,
   RoutePlaceholder,
   SectionHeader,
@@ -72,15 +73,16 @@ function AdminHome({ stats, users, applications, onReviewApplication }) {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-lg border border-slate-200 bg-[linear-gradient(135deg,#07182d_0%,#0f3443_52%,#155e3f_100%)] p-6 text-white shadow-[0_24px_70px_rgba(15,23,42,0.2)]">
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-200">Admin command center</p>
-        <h1 className="mt-3 text-2xl font-semibold tracking-normal text-white sm:text-3xl">
-          SACCO operations overview
-        </h1>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-200">
-          Monitor member growth, applications, loans, dividends, controls, and financial governance from one enterprise workspace.
-        </p>
-      </section>
+      <DashboardHero
+        eyebrow="Admin command center"
+        title="SACCO operations overview"
+        description="Monitor member growth, applications, loans, dividends, controls, and financial governance from one enterprise workspace."
+        metrics={[
+          { label: "Members", value: stats.totalMembers ?? activeMembers.length },
+          { label: "Pending", value: stats.pendingApplications ?? pendingApplications.length },
+          { label: "Active loans", value: stats.activeLoans ?? 0 },
+        ]}
+      />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {cards.map((card) => (
@@ -462,7 +464,7 @@ export default function AdminDashboard() {
   })();
 
   return (
-    <div className="min-h-screen bg-slate-100">
+    <div className="enterprise-shell">
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <main className="min-h-screen lg:pl-72">
         <TopNavbar
