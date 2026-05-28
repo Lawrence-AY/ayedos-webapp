@@ -90,7 +90,7 @@ export default function UserDashboard() {
     if (accessToken) {
       intervalId = window.setInterval(() => {
         loadDashboardData({ showLoading: false });
-      }, 30000);
+      }, 120000);
     }
     return () => {
       cancelled = true;

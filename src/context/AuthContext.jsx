@@ -1,5 +1,5 @@
-import { createContext, useCallback, useEffect, useMemo, useState } from 'react'
-import { apiRequest, unwrapEnvelopeData, getApiBaseUrl, getApiErrorMessage, isApiDebugEnabled } from '../lib/apiClient'
+import { createContext, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { apiRequest, unwrapEnvelopeData, getApiBaseUrl, getApiErrorMessage, isApiDebugEnabled, clearApiCache } from '../lib/apiClient'
 
 const AuthContext = createContext(null)
 
@@ -12,7 +12,7 @@ const STORAGE_KEYS = {
 }
 
 const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000
-const AUTH_SYNC_INTERVAL_MS = 30 * 1000
+const AUTH_SYNC_INTERVAL_MS = 5 * 60 * 1000
 const OTP_SESSION_TTL_MS = 10 * 60 * 1000
 const OTP_RESEND_COOLDOWN_MS = 60 * 1000
 
@@ -61,6 +61,9 @@ export function AuthProvider({ children }) {
   const [isLoading, setIsLoading] = useState(true)
   const [authError, setAuthError] = useState(null)
   const [isOnline, setIsOnline] = useState(() => navigator.onLine)
+  const loadUserPromiseRef = useRef(null)
+  const refreshPromiseRef = useRef(null)
+  const lastUserLoadAtRef = useRef(0)
 
   const loadStoredAuth = useCallback(() => {
     try {
@@ -125,20 +128,40 @@ export function AuthProvider({ children }) {
     persistOtpSession(null)
   }, [persistOtpSession])
 
-  const loadCurrentUser = useCallback(async (token) => {
-    const res = await apiRequest('/api/users/me', {
-      method: 'GET',
-      accessToken: token,
-      sessionId,
-    })
+  const loadCurrentUser = useCallback(async (token, { force = false } = {}) => {
+    const resolvedToken = token || localStorage.getItem(STORAGE_KEYS.accessToken)
+    if (!resolvedToken) return null
 
-    if (!res.ok) {
-      throw new Error(`Failed to load current user (status ${res.status})`)
+    if (!force && loadUserPromiseRef.current && Date.now() - lastUserLoadAtRef.current < 5000) {
+      return loadUserPromiseRef.current
     }
 
-    const data = unwrapEnvelopeData(res.json)
-    setUser(data)
-    persistAuth({ user: data })
+    loadUserPromiseRef.current = (async () => {
+      const res = await apiRequest('/api/users/me', {
+        method: 'GET',
+        accessToken: resolvedToken,
+        sessionId,
+        cacheTtlMs: 2 * 60 * 1000,
+      })
+
+      if (!res.ok) {
+        throw res.error || new Error(`Failed to load current user (status ${res.status})`)
+      }
+
+      const data = unwrapEnvelopeData(res.json)
+      setUser(data)
+      persistAuth({ user: data })
+      lastUserLoadAtRef.current = Date.now()
+      return data
+    })()
+
+    try {
+      return await loadUserPromiseRef.current
+    } finally {
+      window.setTimeout(() => {
+        loadUserPromiseRef.current = null
+      }, 0)
+    }
   }, [persistAuth, sessionId])
 
   const updateCurrentUser = useCallback((nextUser) => {
@@ -154,34 +177,45 @@ export function AuthProvider({ children }) {
   }, [persistAuth])
 
   const refresh = useCallback(async (overrideRefreshToken) => {
+    if (refreshPromiseRef.current) return refreshPromiseRef.current
+
     const tokenForRefresh = overrideRefreshToken || refreshToken || localStorage.getItem(STORAGE_KEYS.refreshToken)
     const activeSessionId = sessionId || localStorage.getItem(STORAGE_KEYS.sessionId)
-    const res = await apiRequest('/api/auth/refresh', {
-      method: 'POST',
-      body: tokenForRefresh ? { refreshToken: tokenForRefresh } : {},
-      sessionId: activeSessionId,
-    })
 
-    if (!res.ok) {
-      throw new Error(`Refresh failed (status ${res.status})`)
-    }
+    refreshPromiseRef.current = (async () => {
+      const res = await apiRequest('/api/auth/refresh', {
+        method: 'POST',
+        body: tokenForRefresh ? { refreshToken: tokenForRefresh } : {},
+        sessionId: activeSessionId,
+        cache: false,
+      })
 
-    const data = unwrapEnvelopeData(res.json) // expected: tokens { accessToken, refreshToken }
-    const nextAccessToken = data?.accessToken ?? null
-    const nextRefreshToken = data?.refreshToken ?? tokenForRefresh ?? null
-    const nextSessionId = data?.sessionId ?? activeSessionId ?? null
+      if (!res.ok) {
+        throw res.error || new Error(`Refresh failed (status ${res.status})`)
+      }
 
-    if (!nextAccessToken) {
-      await loadCurrentUser(null)
-      return
-    }
+      const data = unwrapEnvelopeData(res.json) // expected: tokens { accessToken, refreshToken }
+      const nextAccessToken = data?.accessToken ?? null
+      const nextRefreshToken = data?.refreshToken ?? tokenForRefresh ?? null
+      const nextSessionId = data?.sessionId ?? activeSessionId ?? null
+
+      if (!nextAccessToken) {
+        return loadCurrentUser(null, { force: true })
+      }
 
       setAccessToken(nextAccessToken)
       setRefreshToken(nextRefreshToken)
       setSessionId(nextSessionId)
       persistAuth({ accessToken: nextAccessToken, refreshToken: nextRefreshToken, sessionId: nextSessionId })
 
-    await loadCurrentUser(nextAccessToken)
+      return loadCurrentUser(nextAccessToken, { force: true })
+    })()
+
+    try {
+      return await refreshPromiseRef.current
+    } finally {
+      refreshPromiseRef.current = null
+    }
   }, [loadCurrentUser, persistAuth, refreshToken, sessionId])
 
   const login = useCallback(
@@ -193,8 +227,7 @@ export function AuthProvider({ children }) {
       })
 
       if (!res.ok) {
-        const msg = res.json?.message || `Login failed (status ${res.status})`
-        throw new Error(msg)
+        throw res.error || new Error(getApiErrorMessage(res.error) || `Login failed (status ${res.status})`)
       }
 
       const data = unwrapEnvelopeData(res.json) // expected: { user, tokens } or OTP challenge
@@ -298,6 +331,7 @@ export function AuthProvider({ children }) {
     setOtpSession(null)
     persistAuth({ user: null, accessToken: null, refreshToken: null, sessionId: null })
     clearOtpSession()
+    clearApiCache()
   }, [accessToken, clearOtpSession, persistAuth, refreshToken, sessionId])
 
   const clearLocalAuth = useCallback(() => {
@@ -308,6 +342,7 @@ export function AuthProvider({ children }) {
     setOtpSession(null)
     persistAuth({ user: null, accessToken: null, refreshToken: null, sessionId: null })
     clearOtpSession()
+    clearApiCache()
   }, [clearOtpSession, persistAuth])
 
   const completeLoginOtp = useCallback(

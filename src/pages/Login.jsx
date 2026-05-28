@@ -2,7 +2,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext.jsx";
 import { getPostLoginPath } from "../utils/dashboardRoutes.js";
-import { getApiBaseUrl, isApiDebugEnabled } from "../lib/apiClient.js";
+import { getApiBaseUrl, getApiErrorMessage, isApiDebugEnabled } from "../lib/apiClient.js";
 import logo from "../assets/AUTH.png";
 import DotSwarmCanvas from "../components/landing/DotTextCanvas.jsx";
 import { Eye, EyeOff } from "lucide-react";
@@ -35,6 +35,7 @@ export default function Login() {
   const [otpVerifying, setOtpVerifying] = useState(false);
   const [otpCountdown, setOtpCountdown] = useState(0);
   const [submitCooldown, setSubmitCooldown] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
   const [otpMessage, setOtpMessage] = useState("");
   const [resendingOtp, setResendingOtp] = useState(false);
   const otpInputRef = useRef(null);
@@ -98,9 +99,9 @@ export default function Login() {
     if (!password) return setFormError("Password is required");
 
     try {
+      if (submitCooldown > 0 || submitting) return;
 
-      if (submitCooldown > 0) return;
-
+      setSubmitting(true);
       const loggedInUser = await login({ email: email.trim(), password });
       if (loggedInUser?.requiresOtp || loggedInUser?.requiresOTP) {
         const nextSession = loggedInUser?.otpSession;
@@ -114,7 +115,17 @@ export default function Login() {
       }
       navigate(getPostLoginPath(loggedInUser), { replace: true });
     } catch (err) {
-      setFormError(err?.message || "Login failed");
+      if (err?.status === 429 || err?.isRateLimited) {
+        const seconds = Math.max(Number(err.retryAfterSeconds) || 60, 30);
+        setSubmitCooldown(seconds);
+        setFormError("Too many login attempts. Please wait before trying again.");
+      } else if (err?.kind === "timeout") {
+        setFormError("Server is waking up. Please wait...");
+      } else {
+        setFormError(getApiErrorMessage(err) || err?.message || "Login failed");
+      }
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -340,14 +351,14 @@ export default function Login() {
 
             <button
               type="submit"
-              disabled={isLoading || submitCooldown > 0 || otpVerifying}
+              disabled={isLoading || submitting || submitCooldown > 0 || otpVerifying}
               style={{
                 ...buttonStyle,
-                cursor: isLoading || submitCooldown > 0 || otpVerifying ? "not-allowed" : "pointer",
-                opacity: isLoading || submitCooldown > 0 || otpVerifying ? 0.7 : 1,
+                cursor: isLoading || submitting || submitCooldown > 0 || otpVerifying ? "not-allowed" : "pointer",
+                opacity: isLoading || submitting || submitCooldown > 0 || otpVerifying ? 0.7 : 1,
               }}
             >
-              {otpVerifying ? "Verifying..." : isLoading ? "Signing in..." : submitCooldown > 0 ? `Try again in ${submitCooldown}s` : otpRequired ? "Verify code" : "Sign in"}
+              {otpVerifying ? "Verifying..." : submitting || isLoading ? "Signing in..." : submitCooldown > 0 ? `Try again in ${submitCooldown}s` : otpRequired ? "Verify code" : "Sign in"}
             </button>
 
             <div style={mutedTextStyle}>
