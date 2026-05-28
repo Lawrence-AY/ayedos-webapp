@@ -4,14 +4,11 @@ import { getContributionStatus, initiateContribution } from "../../features/memb
 
 const promptOptions = [
   { value: "savings", label: "Savings deposit" },
-  { value: "monthly", label: "Monthly contribution" },
+  
   { value: "sharecapital", label: "Share capital" },
   { value: "wallet", label: "Wallet top-up" },
   { value: "loans_repayment", label: "Loan repayment" },
-  { value: "fines", label: "Fine payment" },
-  { value: "kcbmpesa", label: "KCB M-PESA" },
-  { value: "stkpush", label: "General STK push" },
-  { value: "register", label: "Registration fee" },
+ 
 ];
 
 function FormField({ label, name, value, onChange, type = "text", min, step, inputMode, maxLength, pattern }) {
@@ -161,7 +158,7 @@ export default function SavingsContributionForm({ accessToken, user, onRefresh, 
 
         {/* Contribution Type selection – different UI depending on payment mode */}
         {paymentMode === "STK" ? (
-          <SelectField label="Prompt type" value={stkContributionType} onChange={(event) => setStkContributionType(event.target.value)}>
+          <SelectField label="type" value={stkContributionType} onChange={(event) => setStkContributionType(event.target.value)}>
             {promptOptions.map((option) => (
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
