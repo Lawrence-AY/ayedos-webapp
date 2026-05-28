@@ -153,7 +153,7 @@ export default function Sidebar({ open = false, onClose, collapsed = false }) {
       src={dashboardLogo}
       alt="AYEDOS Logo" 
       className="h-9 w-9 object-contain block dark:hidden" 
-    />
+    /> 
     {/* Dark mode logo */}
     <img 
       src={dashboardLogoDark}

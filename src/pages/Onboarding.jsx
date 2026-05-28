@@ -1,6 +1,7 @@
 // Onboarding.jsx
 import { useState, useEffect } from 'react';
 import { Toaster, toast } from 'sonner';
+import { decryptData } from '../lib/storageCrypto';
 import {
   Card,
   CardContent,
@@ -58,7 +59,8 @@ function Onboarding() {
 
     if (rawData) {
       try {
-        const data = JSON.parse(rawData);
+        const decrypted = decryptData(rawData);
+        const data = decrypted && typeof decrypted === 'object' ? decrypted : JSON.parse(rawData);
 
         let firstName = '';
         let secondName = '';
@@ -247,19 +249,10 @@ function Onboarding() {
             margin: '0 auto',
           }}
         >
-          <div
-            className="glass-card"
-            style={{
-              background: 'rgba(255, 255, 255, 0.95)',
-              backdropFilter: 'blur(4px)',
-              borderRadius: 24,
-              padding: '32px 40px',
-              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0,0,0,0.02)',
-              border: '1px solid rgba(226, 232, 240, 0.8)',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
-              <img src={logo} alt="AYEDOS SACCO Logo" style={{ height: 48, width: 'auto', objectFit: 'contain' }} />
+          <div className="glass-card relative z-10 w-full max-w-[1280px] mx-auto rounded-[1.5rem] border border-slate-200/80 bg-white/90 p-10 shadow-[0_20px_40px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-slate-800/80 dark:bg-slate-950/80">
+            <div className="flex justify-center mb-5">
+              <img src="/logos/logo-light.png" alt="AYEDOS SACCO Logo" className="h-12 w-auto block dark:hidden" />
+              <img src="/logos/logo-dark.png" alt="AYEDOS SACCO Logo" className="h-12 w-auto hidden dark:block" />
             </div>
 
             <div style={{ textAlign: 'center', marginBottom: 10 }}>
@@ -319,12 +312,12 @@ function Onboarding() {
               </div>
 
               <div className="lg:col-span-1">
-                <Card className="border border-gray-200 bg-white/50 shadow-sm">
-                  <CardHeader className="border-b border-gray-100 pb-1">
-                    <CardDescription className="font-bold text-xs uppercase text-[#828385]">
+                <Card className="border border-slate-200 bg-white/60 shadow-sm dark:border-slate-800 dark:bg-slate-950/60">
+                  <CardHeader className="border-b border-slate-100 pb-1 dark:border-slate-800">
+                    <CardDescription className="font-bold text-xs uppercase text-slate-500 dark:text-slate-400">
                       CHECKLIST
                     </CardDescription>
-                    <CardTitle className="text-md font-semibold text-gray-800">
+                    <CardTitle className="text-md font-semibold text-slate-900 dark:text-slate-100">
                       Before you submit
                     </CardTitle>
                   </CardHeader>
@@ -379,8 +372,8 @@ function Onboarding() {
           border-radius: 12px;
           font-size: 15px;
           background: #f8fafc;
-          color: #1e293b;
-          transition: border-color 0.2s ease;
+          color: #0f172a;
+          transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
         }
         .glass-card input:focus,
         .glass-card select:focus,
@@ -429,6 +422,17 @@ function Onboarding() {
         .glass-card .form-group,
         .glass-card .space-y-4 > div {
           margin-bottom: 1.25rem;
+        }
+        .dark .glass-card input,
+        .dark .glass-card select,
+        .dark .glass-card textarea,
+        .dark .glass-card [role="button"]:not(.no-style) {
+          background: #0f172a;
+          color: #e2e8f0;
+          border-color: #334155;
+        }
+        .dark .glass-card label {
+          color: #cbd5e1;
         }
       `}</style>
     </>
