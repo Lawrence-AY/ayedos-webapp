@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
-import { apiRequest, unwrapEnvelopeData } from '../../lib/apiClient';
+import { apiRequest, unwrapEnvelopeData, getApiErrorMessage } from '../../lib/apiClient';
 import { AuthContext } from '../../context/AuthContext.jsx';
 
 export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, userData }) => {
@@ -155,8 +155,8 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
 
         const payload = {
           paymentReference: receipt,
-          phone: formattedPhone,
-          checkoutRequestId: checkoutId // Added for the updated backend logic
+          paymentPhone: formattedPhone,
+          checkoutRequestId: checkoutId,
         };
 
         const verifyRes = await apiRequest(`/api/applications/${appId}/verify-payment`, {
@@ -193,8 +193,10 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
         setError('Payment confirmation is taking too long. If you paid, use the receipt option to complete onboarding.');
         setLoading(false);
       }
-    } catch {
+    } catch (err) {
       // Don't necessarily clear interval on a single network glitch
+      const message = getApiErrorMessage(err) || 'Unable to confirm payment status. Please try again.';
+      setError(message);
     } finally {
       inFlight = false;
     }
@@ -242,7 +244,8 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
     } catch (err) {
       if (progressInterval.current) clearInterval(progressInterval.current);
       setWaitingStatus('failed');
-      setError(err.name === 'AbortError' ? 'Payment prompt service timed out. Please try again.' : err.message);
+      const message = getApiErrorMessage(err) || (err?.message ?? 'Payment prompt service failed. Please try again.');
+      setError(message);
       setLoading(false);
       setTimeout(() => setShowWaitingDialog(false), 3000);
     }
@@ -262,7 +265,7 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
       const appId = await createApplication();
       const payload = {
         paymentReference: mpesaReceipt.trim(),
-        phone: formatPhoneForBackend(userData.phone),
+        paymentPhone: formatPhoneForBackend(userData.phone),
       };
       const verifyRes = await apiRequest(`/api/applications/${appId}/verify-payment`, {
         method: 'POST',
@@ -276,7 +279,8 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
       setTimeout(() => onPaymentSuccess(), 500);
     } catch (err) {
       clearInterval(interval);
-      setError(err.message || 'Payment registration failed');
+      const message = getApiErrorMessage(err) || (err?.message ?? 'Payment registration failed');
+      setError(message);
       setLoading(false);
     }
   };

@@ -222,7 +222,7 @@ export default function Register() {
               textAlign: "center",
               letterSpacing: "-0.02em",
               color: "var(--color-primary, #1a202c)",
-              margin: "0 0 32px 0",
+              margin: "0 0 10px 0",
             }}
           >
             Create Account
