@@ -97,7 +97,7 @@ export default function SavingsContributionForm({ accessToken, user, onRefresh, 
     setSubmitting(true);
     try {
       if (!amountIsValid) {
-        onMessage?.({ type: "error", text: "Contribution amount must be at least KES 1." });
+        onMessage?.({ type: "error", text: "Amount must be at least KES 1." });
         return;
       }
       if (!phoneIsValid) {
@@ -120,7 +120,7 @@ export default function SavingsContributionForm({ accessToken, user, onRefresh, 
       }
       onMessage?.({
         type: "success",
-        text: result?.message || (paymentMode === "STK" ? "STK push requested. Check your phone for the M-PESA PIN prompt." : "Contribution recorded. Follow the Paybill steps below."),
+        text: result?.message || (paymentMode === "STK" ? "Check your phone for the M-PESA PIN prompt." : "Follow the Paybill steps below."),
       });
       setAmount("");
       await onRefresh?.();
@@ -137,7 +137,7 @@ export default function SavingsContributionForm({ accessToken, user, onRefresh, 
   return (
     <div className="space-y-4">
       <form onSubmit={submitContribution} className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_auto] md:items-end">
-        <FormField label="Contribution amount" name="depositAmount" type="number"
+        <FormField label="Amount" name="depositAmount" type="number"
           min="1" step="1" inputMode="numeric"
           value={amount} onChange={(event) => setAmount(event.target.value.replace(/\D/g, ""))} />
         <FormField
@@ -152,7 +152,7 @@ export default function SavingsContributionForm({ accessToken, user, onRefresh, 
         />
         
         <SelectField label="Payment" value={paymentMode} onChange={(event) => setPaymentMode(event.target.value)}>
-          <option value="STK">STK push</option>
+          <option value="STK">Mpesa Prompt</option>
           <option value="PAYBILL">Paybill</option>
         </SelectField>
 
