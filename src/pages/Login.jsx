@@ -219,14 +219,13 @@ export default function Login() {
       >
         <div
           style={{
-            background: "rgba(255, 255, 255, 0.95)",
-            colorScheme: "light",
+            background: "var(--auth-card-bg)",
+            color: "var(--text)",
             backdropFilter: "blur(4px)",
             borderRadius: 20,
             padding: "48px 40px",
-            boxShadow:
-              "0 20px 40px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0,0,0,0.02)",
-            border: "1px solid rgba(226, 232, 240, 0.8)",
+            boxShadow: "var(--auth-card-shadow)",
+            border: "1px solid var(--auth-card-border)",
           }}
         >
           <div
@@ -288,9 +287,9 @@ export default function Login() {
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  border: "1px solid #e2e8f0",
+                  border: "1px solid var(--auth-input-border)",
                   borderRadius: 12,
-                  background: "#f8fafc",
+                  background: "var(--auth-input-bg)",
                   paddingRight: 12,
                 }}
               >
@@ -310,7 +309,7 @@ export default function Login() {
                     outline: "none",
                     background: "transparent",
                     fontSize: 15,
-                    color: "#1e293b",
+                    color: "var(--text)",
                   }}
                 />
 
@@ -325,7 +324,7 @@ export default function Login() {
                     alignItems: "center",
                     justifyContent: "center",
                     padding: 6,
-                    color: "black",
+                    color: "var(--text)",
                   }}
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -376,7 +375,7 @@ export default function Login() {
           Enter the code sent to <strong>{maskEmail((email || otpSession?.email || "").trim())}</strong>.
         </p>
         <p style={timerTextStyle}>
-          {otpCountdown > 0 ? `Code expires soon. You can request another code in ${otpCountdown}s.` : "You can request another code now."}
+          {otpCountdown > 0 ? ` ` : "You can request another code now."}
         </p>
 
         {/* shadcn InputOTP component */}
@@ -471,17 +470,17 @@ const labelStyle = {
   fontSize: 13,
   textTransform: "uppercase",
   letterSpacing: "0.025em",
-  color: "#64748b",
+  color: "var(--auth-label)",
 };
 
 const inputStyle = {
   width: "100%",
   padding: "14px 16px",
-  border: "1px solid #e2e8f0",
+  border: "1px solid var(--auth-input-border)",
   borderRadius: 12,
   fontSize: 15,
-  background: "#f8fafc",
-  color: "#1e293b",
+  background: "var(--auth-input-bg)",
+  color: "var(--text)",
   boxSizing: "border-box",
   transition: "border-color 0.2s ease",
 };
@@ -524,7 +523,7 @@ const successStyle = {
 const mutedTextStyle = {
   marginTop: 24,
   textAlign: "center",
-  color: "#64748b",
+  color: "var(--auth-muted)",
   fontSize: 14,
 };
 
@@ -555,16 +554,16 @@ const modalStyle = {
   width: "100%",
   maxWidth: 420,
   borderRadius: 16,
-  background: "white",
-  colorScheme: "light",
-  border: "1px solid rgba(226, 232, 240, 0.9)",
+  background: "var(--auth-card-bg)",
+  color: "var(--text)",
+  border: "1px solid var(--auth-card-border)",
   padding: 28,
   boxShadow: "0 30px 80px rgba(2, 6, 23, 0.3)",
 };
 
 const modalTitleStyle = {
   margin: 0,
-  color: "#0f172a",
+  color: "var(--text-h)",
   fontSize: 22,
   fontWeight: 800,
   letterSpacing: 0,
@@ -572,7 +571,7 @@ const modalTitleStyle = {
 
 const modalTextStyle = {
   margin: "8px 0 18px",
-  color: "#64748b",
+  color: "var(--auth-muted)",
   fontSize: 14,
   lineHeight: 1.6,
 };
@@ -589,8 +588,8 @@ const secondaryButtonStyle = {
   padding: "12px 18px",
   borderRadius: 12,
   border: "1px solid #cbd5e1",
-  background: "white",
-  color: "#334155",
+  background: "var(--auth-input-bg)",
+  color: "var(--text)",
   fontWeight: 700,
   fontSize: 14,
   cursor: "pointer",
