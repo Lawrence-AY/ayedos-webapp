@@ -1,6 +1,7 @@
 // src/lib/apiClient.js
 export const DEFAULT_API_PATH_PREFIX = '/api';
-const DEFAULT_TIMEOUT_MS = 45000;
+const DEFAULT_TIMEOUT_MS = 15000;
+const DEFAULT_RETRY_ATTEMPTS = 2;
 const RETRYABLE_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
 const TOKEN_STORAGE_KEYS = {
   accessToken: 'ayedos_accessToken',
@@ -292,7 +293,9 @@ export async function apiRequest(path, { method = 'GET', body, accessToken, sess
     }
   };
 
-  for (let attempt = 0; attempt <= (shouldRetry ? 1 : 0); attempt += 1) {
+  const maxAttempt = shouldRetry ? DEFAULT_RETRY_ATTEMPTS : 0;
+
+  for (let attempt = 0; attempt <= maxAttempt; attempt += 1) {
     try {
       response = await runFetch(url, attempt);
     } catch (error) {
@@ -301,7 +304,7 @@ export async function apiRequest(path, { method = 'GET', body, accessToken, sess
         try {
           response = await runFetch(normalizedPath, attempt);
         } catch (fallbackError) {
-          if (attempt < 1 && shouldRetry && fallbackError.kind !== 'cancelled') {
+          if (attempt < maxAttempt && shouldRetry && fallbackError.kind !== 'cancelled') {
             await wait(getBackoffMs(attempt));
             continue;
           }
@@ -310,7 +313,7 @@ export async function apiRequest(path, { method = 'GET', body, accessToken, sess
             { kind: fallbackError.kind || 'network', url, method, cause: fallbackError }
           );
         }
-      } else if (attempt < 1 && shouldRetry && error.kind !== 'cancelled') {
+      } else if (attempt < maxAttempt && shouldRetry && error.kind !== 'cancelled') {
         await wait(getBackoffMs(attempt));
         continue;
       } else {
@@ -321,7 +324,7 @@ export async function apiRequest(path, { method = 'GET', body, accessToken, sess
       }
     }
 
-    if (attempt < 1 && shouldRetry && RETRYABLE_STATUSES.has(response.status)) {
+    if (attempt < maxAttempt && shouldRetry && RETRYABLE_STATUSES.has(response.status)) {
       await wait(getBackoffMs(attempt));
       continue;
     }

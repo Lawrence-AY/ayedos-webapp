@@ -30,6 +30,7 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
   const [waitingStatus, setWaitingStatus] = useState('waiting');
   const [progress, setProgress] = useState(0);
   const pollingInterval = useRef(null);
+  const progressInterval = useRef(null);
 
   const REGISTRATION_FEE = 1;
 
@@ -52,6 +53,7 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
   useEffect(() => {
     return () => {
       if (pollingInterval.current) clearInterval(pollingInterval.current);
+      if (progressInterval.current) clearInterval(progressInterval.current);
     };
   }, []);
 
@@ -126,12 +128,17 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
   const startPolling = (checkoutId, appId, rawPhone) => {
   if (pollingInterval.current) clearInterval(pollingInterval.current);
   const formattedPhone = formatPhoneForBackend(rawPhone);
+  const startedAt = Date.now();
+  let inFlight = false;
 
-  pollingInterval.current = setInterval(async () => {
+  const checkPaymentStatus = async () => {
+    if (inFlight) return;
+    inFlight = true;
     try {
       const result = await apiRequest(`/api/stk-status?checkoutRequestId=${encodeURIComponent(checkoutId)}`, {
         method: 'GET',
         accessToken,
+        timeoutMs: 8000,
       });
       const data = unwrapEnvelopeData(result.json);
 
@@ -160,23 +167,41 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
 
         if (verifyRes.ok) {
           await markOnboardingComplete();
+          if (progressInterval.current) clearInterval(progressInterval.current);
           setProgress(100);
           setWaitingStatus('success');
           setTimeout(() => {
             setShowWaitingDialog(false);
             setLoading(false);
             onPaymentSuccess();
-          }, 1500);
+          }, 500);
         } else {
           throw new Error('Verification failed on server');
         }
       } else if (data && data.status === 'failed') {
-        // ... handle failure
+        clearInterval(pollingInterval.current);
+        pollingInterval.current = null;
+        if (progressInterval.current) clearInterval(progressInterval.current);
+        setWaitingStatus('failed');
+        setError('Payment failed or was cancelled. Please try again.');
+        setLoading(false);
+      } else if (Date.now() - startedAt > 90 * 1000) {
+        clearInterval(pollingInterval.current);
+        pollingInterval.current = null;
+        if (progressInterval.current) clearInterval(progressInterval.current);
+        setWaitingStatus('failed');
+        setError('Payment confirmation is taking too long. If you paid, use the receipt option to complete onboarding.');
+        setLoading(false);
       }
     } catch {
       // Don't necessarily clear interval on a single network glitch
+    } finally {
+      inFlight = false;
     }
-  }, 3000); // 3 seconds is safer than 2
+  };
+
+  checkPaymentStatus();
+  pollingInterval.current = setInterval(checkPaymentStatus, 1500);
 };
 
   // STK Push flow
@@ -187,17 +212,25 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
     setProgress(0);
     setLoading(true);
 
-    const progressInterval = setInterval(() => {
-      setProgress((prev) => Math.min(prev + 3, 90));
+    progressInterval.current = setInterval(() => {
+      setProgress((prev) => Math.min(prev + 5, 94));
     }, 200);
 
     try {
       const phone = formatPhoneForBackend(stkPhone);
-      const workerRes = await fetch('https://kcb-mpesa.simrion.workers.dev/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, amount: REGISTRATION_FEE.toString() }),
-      });
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), 12000);
+      let workerRes;
+      try {
+        workerRes = await fetch('https://kcb-mpesa.simrion.workers.dev/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone, amount: REGISTRATION_FEE.toString() }),
+          signal: controller.signal,
+        });
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
       const workerData = await workerRes.json();
       if (!workerRes.ok || !workerData.success) {
         throw new Error(workerData.error || 'STK push initiation failed');
@@ -207,13 +240,11 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
       const appId = await createApplication();
       startPolling(checkoutId, appId, stkPhone);
     } catch (err) {
-      clearInterval(progressInterval);
+      if (progressInterval.current) clearInterval(progressInterval.current);
       setWaitingStatus('failed');
-      setError(err.message);
+      setError(err.name === 'AbortError' ? 'Payment prompt service timed out. Please try again.' : err.message);
       setLoading(false);
       setTimeout(() => setShowWaitingDialog(false), 3000);
-    } finally {
-      clearInterval(progressInterval);
     }
   };
 

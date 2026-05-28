@@ -187,13 +187,13 @@ export default function Register() {
       >
         <div
           style={{
-            background: "rgba(255, 255, 255, 0.95)",
-            colorScheme: "light",
+            background: "var(--auth-card-bg)",
+            color: "var(--text)",
             backdropFilter: "blur(4px)",
             borderRadius: 20,
             padding: "40px",
-            boxShadow: "0 20px 40px rgba(0, 0, 0, 0.06)",
-            border: "1px solid rgba(226, 232, 240, 0.8)",
+            boxShadow: "var(--auth-card-shadow)",
+            border: "1px solid var(--auth-card-border)",
           }}
         >
           {/* Logo Section */}
@@ -315,7 +315,7 @@ export default function Register() {
             </button>
           </form>
           <AlertDialog open={otpDialogOpen} onOpenChange={setOtpDialogOpen}>
-            <AlertDialogContent className="bg-white text-slate-950">
+            <AlertDialogContent className="bg-white text-slate-950 dark:bg-slate-900 dark:text-slate-50">
               <AlertDialogHeader>
                 <AlertDialogTitle>Verify your email</AlertDialogTitle>
               </AlertDialogHeader>
@@ -385,11 +385,11 @@ export default function Register() {
 const inputStyle = {
   width: "100%",
   padding: "14px 16px",
-  border: "1px solid #e2e8f0",
+  border: "1px solid var(--auth-input-border)",
   borderRadius: 12,
   fontSize: 15,
-  background: "#f8fafc",
-  color: "#1e293b",
+  background: "var(--auth-input-bg)",
+  color: "var(--text)",
   boxSizing: "border-box",
 };
 
@@ -438,7 +438,7 @@ const timerTextStyle = {
 const mutedTextStyle = {
   marginTop: 20,
   textAlign: "center",
-  color: "#64748b",
+  color: "var(--auth-muted)",
   fontSize: 14,
 };
 

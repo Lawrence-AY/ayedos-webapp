@@ -11,7 +11,7 @@ const STORAGE_KEYS = {
   otpSession: 'ayedos_loginOtpSession',
 }
 
-const INACTIVITY_TIMEOUT_MS = 2 * 60 * 1000
+const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000
 const AUTH_SYNC_INTERVAL_MS = 30 * 1000
 const OTP_SESSION_TTL_MS = 10 * 60 * 1000
 const OTP_RESEND_COOLDOWN_MS = 60 * 1000
@@ -153,11 +153,13 @@ export function AuthProvider({ children }) {
     })
   }, [persistAuth])
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (overrideRefreshToken) => {
+    const tokenForRefresh = overrideRefreshToken || refreshToken || localStorage.getItem(STORAGE_KEYS.refreshToken)
+    const activeSessionId = sessionId || localStorage.getItem(STORAGE_KEYS.sessionId)
     const res = await apiRequest('/api/auth/refresh', {
       method: 'POST',
-      body: refreshToken ? { refreshToken } : {},
-      sessionId,
+      body: tokenForRefresh ? { refreshToken: tokenForRefresh } : {},
+      sessionId: activeSessionId,
     })
 
     if (!res.ok) {
@@ -166,7 +168,8 @@ export function AuthProvider({ children }) {
 
     const data = unwrapEnvelopeData(res.json) // expected: tokens { accessToken, refreshToken }
     const nextAccessToken = data?.accessToken ?? null
-    const nextRefreshToken = data?.refreshToken ?? null
+    const nextRefreshToken = data?.refreshToken ?? tokenForRefresh ?? null
+    const nextSessionId = data?.sessionId ?? activeSessionId ?? null
 
     if (!nextAccessToken) {
       await loadCurrentUser(null)
@@ -175,7 +178,8 @@ export function AuthProvider({ children }) {
 
       setAccessToken(nextAccessToken)
       setRefreshToken(nextRefreshToken)
-      persistAuth({ accessToken: nextAccessToken, refreshToken: nextRefreshToken })
+      setSessionId(nextSessionId)
+      persistAuth({ accessToken: nextAccessToken, refreshToken: nextRefreshToken, sessionId: nextSessionId })
 
     await loadCurrentUser(nextAccessToken)
   }, [loadCurrentUser, persistAuth, refreshToken, sessionId])
@@ -453,7 +457,7 @@ export function AuthProvider({ children }) {
       } catch {
         // If current token is invalid/expired, try refresh
         try {
-          await refresh()
+          await refresh(localStorage.getItem(STORAGE_KEYS.refreshToken))
           if (!cancelled) setIsLoading(false)
         } catch (e) {
           if (!cancelled) {

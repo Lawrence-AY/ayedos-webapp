@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { PiggyBank, X } from "lucide-react";
+import { X } from "lucide-react";
 import { getContributionStatus, initiateContribution } from "../../features/member/memberService.js";
 
 const promptOptions = [

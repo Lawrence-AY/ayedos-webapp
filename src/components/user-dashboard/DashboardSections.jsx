@@ -1,12 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  ArrowDownLeft,
   ArrowUpRight,
   BadgeCheck,
   Bell,
   BriefcaseBusiness,
-  CalendarClock,
   Camera,
   CheckCircle2,
   Clock3,
@@ -27,7 +25,6 @@ import {
   ReceiptText,
   RefreshCw,
   Search,
-  Send,
   ShieldCheck,
   Smartphone,
   TrendingUp,
@@ -522,7 +519,6 @@ function TransactionsTable({ transactions, limit = null, showViewAll = false, pa
               <tbody className="divide-y divide-slate-100">
                 {rows.map((transaction, index) => {
                   const amount = Number(transaction.amount || transaction.value || 0);
-                  const type = normalizeStatus(transaction.type || transaction.transactionType);
 const description = transaction.description ?? "";
                   const createdAt = transaction.createdAt || transaction.date;
                   const mpesaReference = transaction.mpesaReference || transaction.mpesaReceipt || transaction.checkoutRequestId || transaction.merchantRequestId || transaction.reference;
@@ -1509,9 +1505,7 @@ function SimplePage({ eyebrow, title, description, icon: Icon, children }) {
       <SectionHeader eyebrow={eyebrow} title={title} description={description} />
       <Surface className="p-8">
         <div className="flex flex-col gap-5 md:flex-row md:items-start">
-          <div className="grid h-14 w-14 shrink-0 place-items-center rounded-lg bg-emerald-50 text-emerald-700">
-            <Icon size={27} />
-          </div>
+          
           <div className="min-w-0 flex-1">{children}</div>
         </div>
       </Surface>
@@ -1580,29 +1574,13 @@ function PortfolioPage({ stats, transactions, shares, search, user, showValues, 
           </div>
         </Surface>
 
-        <ReadOnlyPortfolioDetails user={user} showSensitive={showValues} />
+        <ReadOnlyPortfolioDetails />
       </div>
     </div>
   );
 }
 
-function ReadOnlyPortfolioDetails({ user, showSensitive }) {
-  const details = [
-    ["Member name", user?.name || [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "-"],
-    ["Email", user?.email || "-"],
-    ["Phone", user?.phone || "-"],
-    ["National ID", user?.nationalId || user?.Member?.nationalId || "-"],
-    ["Member number", user?.Member?.memberNumber || "-"],
-    ["Membership type", user?.Member?.type || "Member"],
-  ];
-
-  const renderValue = (value) =>
-    showSensitive ? (
-      value
-    ) : (
-      <span className="inline-block text-slate-950 blur-sm">{value}</span>
-    );
-
+function ReadOnlyPortfolioDetails() {
   return (
     <Surface className="p-5 hidden">
        
