@@ -523,7 +523,7 @@ function TransactionsTable({ transactions, limit = null, showViewAll = false, pa
                 {rows.map((transaction, index) => {
                   const amount = Number(transaction.amount || transaction.value || 0);
                   const type = normalizeStatus(transaction.type || transaction.transactionType);
-                   const description= (transaction.description || transaction.transactionDescription || "");
+const description = transaction.description ?? "";
                   const createdAt = transaction.createdAt || transaction.date;
                   const mpesaReference = transaction.mpesaReference || transaction.mpesaReceipt || transaction.checkoutRequestId || transaction.merchantRequestId || transaction.reference;
                   return (
@@ -645,13 +645,7 @@ function DashboardOverview({ stats, transactions, memberName, user, notification
       helper: `${stats.activeLoans} active loan${stats.activeLoans === 1 ? "" : "s"}`,
       tone: "amber",
     },
-    {
-      label: "Monthly Contributions",
-      value: formatCurrency(stats.monthlyContributions),
-      icon: CalendarClock,
-     
-      tone: "slate",
-    },
+    
   ];
 
   return (
@@ -1558,7 +1552,7 @@ function PortfolioPage({ stats, transactions, shares, search, user, showValues, 
             icon={WalletCards}
             label={item.label}
             value={item.value}
-            helper="Blurred for privacy"
+            
             tone={item.tone}
             blur={!showValues}
           />
@@ -1610,24 +1604,9 @@ function ReadOnlyPortfolioDetails({ user, showSensitive }) {
     );
 
   return (
-    <Surface className="p-5">
-      <div className="mb-5 flex items-center gap-3">
-        <div className="grid h-10 w-10 place-items-center rounded-lg bg-slate-100 text-slate-700">
-          <WalletCards size={20} />
-        </div>
-        <div>
-          <h5 className="text-base font-semibold tracking-normal text-slate-950">Portfolio details</h5>
-          <p className="text-sm text-slate-500">Read-only member details from backend records.</p>
-        </div>
-      </div>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {details.map(([label, value]) => (
-          <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</p>
-            <p className="mt-1 text-sm font-semibold text-slate-950">{renderValue(value)}</p>
-          </div>
-        ))}
-      </div>
+    <Surface className="p-5 hidden">
+       
+        
     </Surface>
   );
 }
@@ -1797,7 +1776,7 @@ function SavingsPage({ stats, transactions = [], accessToken, onRefresh, showVal
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         <StatCard icon={PiggyBank} label="Savings balance" value={formatCurrency(stats.totalSavings)} trend="Paid" tone="emerald" blur={!showValues} />
-        <StatCard icon={ArrowDownLeft} label="Monthly deposits" value={formatCurrency(stats.monthlyContributions)} trend="Paid" helper="Current month deposits" tone="blue" blur={!showValues} />
+<StatCard icon={WalletCards} label="Share capital" value={formatCurrency(stats.shareCapital)} trend="Equity" tone="blue" blur={!showValues} />
       </div>
       <SavingsContributionForm
         accessToken={accessToken}
