@@ -73,6 +73,49 @@ export async function getMyTransactions(accessToken, filters = {}) {
   return unwrapEnvelopeData(res.json)
 }
 
+export async function searchDashboard(q, accessToken, filters = {}) {
+  const queryParams = new URLSearchParams({
+    q,
+    type: 'all',
+    limit: '8',
+    ...filters,
+  }).toString()
+  const res = await apiRequest(`/api/search?${queryParams}`, { method: 'GET', accessToken, cacheTtlMs: 15000 })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to search dashboard')
+  return {
+    results: unwrapEnvelopeData(res.json) || {},
+    meta: res.json?.meta || {},
+  }
+}
+
+export async function getMyNotifications(accessToken, filters = {}) {
+  const queryParams = new URLSearchParams(filters).toString()
+  const url = queryParams ? `/api/notifications?${queryParams}` : '/api/notifications'
+  const res = await apiRequest(url, { method: 'GET', accessToken, cache: false })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to fetch notifications')
+  return unwrapEnvelopeData(res.json)
+}
+
+export async function markNotificationRead(id, accessToken) {
+  const res = await apiRequest(`/api/notifications/${id}/read`, {
+    method: 'POST',
+    accessToken,
+    cache: false,
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to mark notification as read')
+  return unwrapEnvelopeData(res.json)
+}
+
+export async function markAllNotificationsRead(accessToken) {
+  const res = await apiRequest('/api/notifications/read-all', {
+    method: 'POST',
+    accessToken,
+    cache: false,
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to mark notifications as read')
+  return unwrapEnvelopeData(res.json)
+}
+
 // Guarantors
 export async function getMyGuarantees(accessToken) {
   const res = await apiRequest('/api/member/guarantees', { method: 'GET', accessToken })

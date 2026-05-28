@@ -7,8 +7,12 @@ import TopNavbar from "../components/layout/TopNavbar.jsx";
 import { getDashboardPath } from "../utils/dashboardRoutes.js";
 import {
   getMyLoans,
+  getMyNotifications,
   getMyShares,
   getMyTransactions,
+  markAllNotificationsRead,
+  markNotificationRead,
+  searchDashboard,
 } from "../features/member/memberService.js";
 import { getAuthSessions } from "../services/authService.js";
 import DashboardOverview from "../components/user-dashboard/DashboardOverview.jsx";
@@ -35,6 +39,7 @@ export default function UserDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [search, setSearch] = useState("");
+  const [remoteSearch, setRemoteSearch] = useState({ loading: false, error: "", results: null, query: "" });
   const [showValues, setShowValues] = useState(false);
   const [data, setData] = useState({
     transactions: [],
@@ -57,6 +62,7 @@ export default function UserDashboard() {
         getMyLoans(accessToken),
         getMyShares(accessToken),
         getAuthSessions(accessToken),
+        getMyNotifications(accessToken),
       ]);
       const sessions = results[3].status === "fulfilled" && Array.isArray(results[3].value) ? results[3].value : [];
 
@@ -64,7 +70,7 @@ export default function UserDashboard() {
         transactions: results[0].status === "fulfilled" && Array.isArray(results[0].value) ? results[0].value : [],
         loans: results[1].status === "fulfilled" && Array.isArray(results[1].value) ? results[1].value : [],
         shares: results[2].status === "fulfilled" && Array.isArray(results[2].value) ? results[2].value : [],
-        notifications: [],
+        notifications: results[4].status === "fulfilled" && Array.isArray(results[4].value) ? results[4].value : [],
         activeSessions: sessions.filter((session) => String(session.status || "").toUpperCase() === "ACTIVE"),
         loginHistory: sessions.map((session) => ({
           date: session.date ? new Date(session.date).toLocaleString() : "-",
@@ -99,6 +105,34 @@ export default function UserDashboard() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
+
+  useEffect(() => {
+    const query = search.trim();
+    if (!accessToken || query.length < 2) {
+      setRemoteSearch({ loading: false, error: "", results: null, query });
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(async () => {
+      setRemoteSearch((current) => ({ ...current, loading: true, error: "", query }));
+      try {
+        const payload = await searchDashboard(query, accessToken, { limit: 8 });
+        if (!controller.signal.aborted) {
+          setRemoteSearch({ loading: false, error: "", results: payload.results, query });
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setRemoteSearch({ loading: false, error: error?.message || "Search is using local dashboard data.", results: null, query });
+        }
+      }
+    }, 250);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [accessToken, search]);
 
   const stats = useMemo(() => {
     const successfulTransactions = data.transactions.filter((transaction) => {
@@ -161,7 +195,7 @@ export default function UserDashboard() {
   function renderContent() {
     if (loading) return <SkeletonDashboard />;
     if (search.trim()) {
-      return <SearchResultsPage search={search.trim()} data={data} stats={stats} user={user} showValues={showValues} />;
+      return <SearchResultsPage search={search.trim()} data={data} stats={stats} user={user} showValues={showValues} remoteSearch={remoteSearch} />;
     }
     if (isDashboardHome) {
       return (
@@ -233,7 +267,17 @@ export default function UserDashboard() {
       return (
         <div className="space-y-6">
           <SectionHeader eyebrow="Notifications"  />
-          <NotificationsPanel items={data.notifications} />
+          <NotificationsPanel
+            items={data.notifications}
+            onMarkRead={async (id) => {
+              await markNotificationRead(id, accessToken);
+              await loadDashboardData({ showLoading: false });
+            }}
+            onMarkAllRead={async () => {
+              await markAllNotificationsRead(accessToken);
+              await loadDashboardData({ showLoading: false });
+            }}
+          />
         </div>
       );
     }
@@ -284,7 +328,7 @@ export default function UserDashboard() {
             if (window.innerWidth >= 1024) setSidebarCollapsed((current) => !current);
             else setSidebarOpen((current) => !current);
           }}
-          unreadCount={data.notifications.length}
+          unreadCount={data.notifications.filter((notification) => !notification.isRead && !notification.readAt).length}
           searchValue={search}
           onSearchChange={setSearch}
         />

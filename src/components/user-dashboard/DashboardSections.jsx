@@ -5,6 +5,7 @@ import {
   BadgeCheck,
   Bell,
   BriefcaseBusiness,
+  Calculator,
   Camera,
   CheckCircle2,
   Clock3,
@@ -383,7 +384,8 @@ function ProfileCompletion({ user }) {
   );
 }
 
-function NotificationsPanel({ items = [], compact = false }) {
+function NotificationsPanel({ items = [], compact = false, onMarkRead, onMarkAllRead }) {
+  const unreadCount = items.filter((notice) => !notice.readAt && !notice.isRead).length;
   return (
     <Surface className="p-5">
       <div className="mb-4 flex items-center justify-between">
@@ -391,9 +393,20 @@ function NotificationsPanel({ items = [], compact = false }) {
           <h5 className="text-base font-semibold tracking-normal text-slate-950">
             Notifications
           </h5>
-          <p className="text-sm text-slate-500">Security and account alerts</p>
+          <p className="text-sm text-slate-500">{unreadCount} unread security, payment, and loan alert{unreadCount === 1 ? "" : "s"}</p>
         </div>
-        <Bell size={20} className="text-slate-500" />
+        <div className="flex items-center gap-2">
+          {unreadCount > 0 && onMarkAllRead ? (
+            <button
+              type="button"
+              onClick={onMarkAllRead}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Mark all read
+            </button>
+          ) : null}
+          <Bell size={20} className="text-slate-500" />
+        </div>
       </div>
       {items.length === 0 ? (
         <EmptyState
@@ -403,29 +416,44 @@ function NotificationsPanel({ items = [], compact = false }) {
         />
       ) : (
       <div className={compact ? "space-y-3" : "grid gap-3 md:grid-cols-2"}>
-        {items.map((notice) => (
+        {items.map((notice) => {
+          const isRead = Boolean(notice.readAt || notice.isRead);
+          const tone = notice.severity || notice.tone;
+          return (
           <div
             key={notice.id}
-            className="rounded-lg border border-slate-200 bg-slate-50 p-4"
+            className={`rounded-lg border p-4 ${isRead ? "border-slate-200 bg-slate-50" : "border-emerald-200 bg-emerald-50/60"}`}
           >
             <div className="flex items-start gap-3">
               <span
                 className={`mt-1 h-2.5 w-2.5 rounded-full ${
-                  notice.tone === "success"
+                  tone === "success"
                     ? "bg-emerald-500"
-                    : notice.tone === "warning"
+                    : tone === "warning" || tone === "critical"
                       ? "bg-amber-500"
                       : "bg-sky-500"
                 }`}
               />
-              <div>
+              <div className="min-w-0 flex-1">
                 <p className="font-semibold text-slate-900">{notice.title}</p>
                 <p className="mt-1 text-sm leading-5 text-slate-600">{notice.body}</p>
-                <p className="mt-2 text-xs font-medium text-slate-500">{notice.time}</p>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <p className="text-xs font-medium text-slate-500">{notice.time ? new Date(notice.time).toLocaleString() : ""}</p>
+                  {!isRead && onMarkRead ? (
+                    <button type="button" onClick={() => onMarkRead(notice.id)} className="text-xs font-semibold text-emerald-700 hover:text-emerald-900">
+                      Mark read
+                    </button>
+                  ) : null}
+                  {notice.actionUrl ? (
+                    <Link to={notice.actionUrl} className="text-xs font-semibold text-slate-700 hover:text-slate-950">
+                      View details
+                    </Link>
+                  ) : null}
+                </div>
               </div>
             </div>
           </div>
-        ))}
+        )})}
       </div>
       )}
     </Surface>
@@ -1485,15 +1513,124 @@ function LoansTable({ loans }) {
   );
 }
 
-function LoanCalculator({ product, amount, duration, totalInterest, monthlyRepayment }) {
+function LoanCalculator({ product, amount, duration }) {
+  const [calculator, setCalculator] = useState({
+    amount: Math.max(1000, amount || 10000),
+    duration: Math.max(1, duration || product.duration),
+    extraMonthly: 0,
+  });
+  const safeAmount = Math.min(Math.max(Number(calculator.amount || 0), 1000), product.max);
+  const safeDuration = Math.min(Math.max(Number(calculator.duration || 1), 1), product.duration);
+  const extraMonthly = Math.max(Number(calculator.extraMonthly || 0), 0);
+  const totalInterest = safeAmount * (product.interestRate / 100) * safeDuration;
+  const totalRepayable = safeAmount + totalInterest;
+  const monthlyRepayment = safeDuration ? totalRepayable / safeDuration : 0;
+  const boostedPayment = monthlyRepayment + extraMonthly;
+  const monthsWithExtra = boostedPayment ? Math.ceil(totalRepayable / boostedPayment) : safeDuration;
+  const savedMonths = Math.max(safeDuration - monthsWithExtra, 0);
+  const affordabilityScore = Math.max(0, Math.min(100, 100 - (monthlyRepayment / Math.max(safeAmount, 1)) * 100));
+
   return (
-    <Surface className="p-5">
-      <h5 className="text-base font-semibold tracking-normal text-slate-950">Loan calculator</h5>
-      <div className="mt-4 grid gap-4 md:grid-cols-4">
-        <StatCard icon={Landmark} label="Product" value={product.name} trend="Selected" helper="Based on request form" tone="blue" />
-        <StatCard icon={WalletCards} label="Principal" value={formatCurrency(amount)} trend="Estimate" helper={`Max ${formatCurrency(product.max)}`} tone="emerald" />
-        <StatCard icon={TrendingUp} label="Total interest" value={formatCurrency(totalInterest)} trend={`${product.interestRate}%`} helper={`${duration} months`} tone="amber" />
-        <StatCard icon={CreditCard} label="Monthly repayment" value={formatCurrency(monthlyRepayment)} trend="Estimate" helper="Before fees or penalties" tone="slate" />
+    <Surface className="overflow-hidden">
+      <div className="grid gap-0 lg:grid-cols-[1.15fr_0.85fr]">
+        <div className="p-5 sm:p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h5 className="text-base font-semibold tracking-normal text-slate-950">Interactive loan calculator</h5>
+              <p className="mt-1 text-sm text-slate-500">Tune amount, duration, and optional extra payments before applying.</p>
+            </div>
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-emerald-50 text-emerald-700">
+              <Calculator size={20} />
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-5">
+            <label className="grid gap-3">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="font-semibold text-slate-700">Principal</span>
+                <span className="font-bold text-slate-950">{formatCurrency(safeAmount)}</span>
+              </div>
+              <input
+                type="range"
+                min="1000"
+                max={product.max}
+                step="1000"
+                value={safeAmount}
+                onChange={(event) => setCalculator((current) => ({ ...current, amount: event.target.value }))}
+                className="accent-emerald-600"
+              />
+              <div className="flex justify-between text-xs font-medium text-slate-500">
+                <span>KES 1,000</span>
+                <span>{formatCurrency(product.max)}</span>
+              </div>
+            </label>
+
+            <label className="grid gap-3">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="font-semibold text-slate-700">Duration</span>
+                <span className="font-bold text-slate-950">{safeDuration} months</span>
+              </div>
+              <input
+                type="range"
+                min="1"
+                max={product.duration}
+                step="1"
+                value={safeDuration}
+                onChange={(event) => setCalculator((current) => ({ ...current, duration: event.target.value }))}
+                className="accent-sky-600"
+              />
+              <div className="flex justify-between text-xs font-medium text-slate-500">
+                <span>1 month</span>
+                <span>{product.duration} months</span>
+              </div>
+            </label>
+
+            <label className="grid gap-3">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="font-semibold text-slate-700">Extra monthly payment</span>
+                <span className="font-bold text-slate-950">{formatCurrency(extraMonthly)}</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max={Math.max(5000, Math.round(monthlyRepayment))}
+                step="500"
+                value={extraMonthly}
+                onChange={(event) => setCalculator((current) => ({ ...current, extraMonthly: event.target.value }))}
+                className="accent-amber-500"
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="border-t border-slate-200 bg-slate-50 p-5 sm:p-6 lg:border-l lg:border-t-0">
+          <div className="rounded-lg border border-slate-200 bg-white p-5">
+            <p className="text-sm font-semibold text-slate-500">{product.name}</p>
+            <p className="mt-2 text-3xl font-semibold tracking-normal text-slate-950">{formatCurrency(monthlyRepayment)}</p>
+            <p className="mt-1 text-sm text-slate-500">Estimated monthly repayment</p>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+            <div className="rounded-lg border border-slate-200 bg-white p-4">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-700"><TrendingUp size={16} /> Interest</div>
+              <p className="mt-2 text-xl font-semibold text-slate-950">{formatCurrency(totalInterest)}</p>
+              <p className="mt-1 text-xs text-slate-500">{product.interestRate}% monthly for {safeDuration} months</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-white p-4">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-700"><Clock3 size={16} /> Payoff impact</div>
+              <p className="mt-2 text-xl font-semibold text-slate-950">{savedMonths ? `${savedMonths} months faster` : "Standard schedule"}</p>
+              <p className="mt-1 text-xs text-slate-500">With {formatCurrency(extraMonthly)} extra per month</p>
+            </div>
+          </div>
+          <div className="mt-4">
+            <div className="mb-2 flex justify-between text-xs font-semibold text-slate-500">
+              <span>Payment comfort</span>
+              <span>{Math.round(affordabilityScore)}%</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+              <div className="h-full rounded-full bg-emerald-600" style={{ width: `${affordabilityScore}%` }} />
+            </div>
+          </div>
+        </div>
       </div>
     </Surface>
   );
@@ -1589,26 +1726,29 @@ function ReadOnlyPortfolioDetails() {
   );
 }
 
-function SearchResultsPage({ search, data, stats, user, showValues }) {
+function SearchResultsPage({ search, data, stats, user, showValues, remoteSearch }) {
+  const remote = remoteSearch?.results || {};
   const resultGroups = [
     {
       title: "Transactions",
       icon: ReceiptText,
-      items: data.transactions.filter((item) => matchesSearch(item, search)),
+      items: remote.transactions || data.transactions.filter((item) => matchesSearch(item, search)),
       render: (item) => `${normalizeStatus(item.type || item.transactionType || "Transaction")} - ${formatCurrency(item.amount)} - ${item.reference || item.status || item.id || ""}`,
       to: "transactions",
     },
     {
       title: "Loans",
       icon: FileText,
-      items: data.loans.filter((item) => matchesSearch(item, search)),
-      render: (item) => `${normalizeStatus(item.type || "Loan")} - ${formatCurrency(item.balance || item.principal)} - ${normalizeStatus(item.status)}`,
+      items: remote.loans || data.loans.filter((item) => matchesSearch(item, search)),
+      render: (item) => `${normalizeStatus(item.type || "Loan")} - ${formatCurrency(item.balance || item.principal || item.amount)} - ${normalizeStatus(item.status)}`,
       to: "loans",
     },
     {
       title: "Shares and Savings",
       icon: PiggyBank,
-      items: data.shares.filter((item) => matchesSearch(item, search)),
+      items: [...(remote.shareAccounts || []), ...(remote.savingsAccounts || [])].length
+        ? [...(remote.shareAccounts || []), ...(remote.savingsAccounts || [])]
+        : data.shares.filter((item) => matchesSearch(item, search)),
       render: (item) => `${item.type || "Share record"} - ${formatCurrency(item.totalInvested || item.shares || item.amount)} - ${item.status || ""}`,
       to: "savings",
     },
@@ -1618,6 +1758,13 @@ function SearchResultsPage({ search, data, stats, user, showValues }) {
       items: [...data.activeSessions, ...data.loginHistory].filter((item) => matchesSearch(item, search)),
       render: (item) => `${item.device || item.deviceName || "Device"} - ${item.location || ""} ${item.ip || ""} - ${item.status || item.event || ""}`,
       to: "security",
+    },
+    {
+      title: "Notifications",
+      icon: Bell,
+      items: data.notifications.filter((item) => matchesSearch(item, search)),
+      render: (item) => `${item.title || "Notification"} - ${item.body || ""}`,
+      to: "notifications",
     },
     {
       title: "Profile",
@@ -1635,8 +1782,13 @@ function SearchResultsPage({ search, data, stats, user, showValues }) {
       <SectionHeader
         eyebrow="Search"
         title={`Search results for "${search}"`}
-        description={`${totalResults} result${totalResults === 1 ? "" : "s"} found across dashboard data, records, profile, and security events.`}
+        description={`${totalResults} result${totalResults === 1 ? "" : "s"} found across dashboard data, records, notifications, profile, and security events.`}
       />
+      {remoteSearch?.loading || remoteSearch?.error ? (
+        <div className={`rounded-lg border px-4 py-3 text-sm font-medium ${remoteSearch.error ? "border-amber-200 bg-amber-50 text-amber-800" : "border-sky-200 bg-sky-50 text-sky-800"}`}>
+          {remoteSearch.error || "Searching live dashboard records..."}
+        </div>
+      ) : null}
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard icon={Search} label="Matches" value={totalResults} trend="Live" helper="Updates as data refreshes" tone="blue" />
         <StatCard icon={WalletCards} label="Balance" value={formatCurrency(stats.balance)} trend="Context" helper="Current account context" tone="emerald" blur={!showValues} />
