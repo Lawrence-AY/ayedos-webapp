@@ -46,22 +46,17 @@ export default function TopNavbar({
   }, [theme]);
 
   return (
-    <header className="sticky top-0 z-20 border-b border-emerald-900/10 bg-white/82 px-4 py-3 shadow-[0_12px_35px_rgba(15,23,42,0.04)] backdrop-blur-xl transition-colors duration-200 dark:border-slate-800 dark:bg-slate-950/90 sm:px-6 lg:px-8">
-      <div className="mx-auto flex w-full max-w-[1500px] items-center gap-3">
+    <header className="sticky top-0 z-20 border-b border-emerald-900/10 bg-white/82 px-4 py-3  backdrop-blur-xl transition-colors duration-200 dark:border-slate-800 dark:bg-slate-950/90 sm:px-6 lg:px-8">
+      <div className="mx-auto flex w-full max-w-375 items-center gap-3">
         <button
           type="button"
           onClick={onToggleSidebar}
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-emerald-900/10 bg-white text-slate-700 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-emerald-800 dark:hover:bg-emerald-950/30 dark:hover:text-emerald-400"
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-emerald-900/10 bg-white text-slate-700  transition duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-emerald-800 dark:hover:bg-emerald-950/30 dark:hover:text-emerald-400"
           aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
         >
-          <Menu size={21} />
+          <Menu className="text-[#8cc63f]"  size={21} />
         </button>
-        <div className="hidden min-w-0 md:block">
-          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">AYEDOS SACCO</p>
-          <p className="truncate text-sm font-semibold capitalize text-slate-700 dark:text-slate-200">
-            {crumbs.length ? crumbs.join(" / ") : "Secure dashboard"}
-          </p>
-        </div>
+      
 
         <div className="relative ml-0 min-w-0 flex-1 md:ml-4">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={18} />
@@ -70,7 +65,8 @@ export default function TopNavbar({
             value={searchValue}
             onChange={(event) => onSearchChange?.(event.target.value)}
             placeholder="Search transactions, loans, statements..."
-            className="h-11 w-full rounded-lg border border-emerald-900/10 bg-white/86 pl-10 pr-4 text-sm text-slate-900 shadow-sm outline-none transition duration-200 placeholder:text-slate-400 hover:border-emerald-200 hover:bg-white focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100 dark:border-slate-800 dark:bg-slate-900/50 dark:text-white dark:placeholder:text-slate-500 dark:hover:border-slate-700 dark:hover:bg-slate-900 dark:focus:border-emerald-500 dark:focus:bg-slate-900 dark:focus:ring-emerald-950/30"
+            className="h-11 w-full rounded-lg border border-emerald-900/10 bg-white/86 pl-10 pr-4 text-sm text-slate-900 
+            outline-none transition duration-200 placeholder:text-slate-400 hover:border-emerald-200 hover:bg-white focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100 dark:border-slate-800 dark:bg-slate-900/50 dark:text-white dark:placeholder:text-slate-500 dark:hover:border-slate-700 dark:hover:bg-slate-900 dark:focus:border-emerald-500 dark:focus:bg-slate-900 dark:focus:ring-emerald-950/30"
           />
         </div>
 
@@ -78,10 +74,11 @@ export default function TopNavbar({
           <button
             type="button"
             onClick={onNotificationClick || (() => navigate("/dashboard/user/notifications"))}
-            className="relative grid h-11 w-11 place-items-center rounded-lg border border-emerald-900/10 bg-white text-slate-700 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-emerald-800 dark:hover:bg-emerald-950/30 dark:hover:text-emerald-400"
+            className="relative grid h-11 w-11 place-items-center rounded-lg border border-emerald-900/10 bg-white text-slate-700
+            transition duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700  dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-emerald-800 dark:hover:bg-emerald-950/30 dark:hover:text-emerald-400"
             aria-label="Open notifications"
           >
-            <Bell size={19} />
+            <Bell className="text-[#8cc63f]"  size={19} />
             {unreadCount > 0 ? (
               <span className="absolute right-2 top-2 grid min-h-4 min-w-4 place-items-center rounded-full bg-rose-600 px-1 text-[10px] font-bold leading-none text-white">
                 {unreadCount}
@@ -92,17 +89,17 @@ export default function TopNavbar({
           <button
             type="button"
             onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
-            className="hidden h-11 w-11 place-items-center rounded-lg border border-emerald-900/10 bg-white text-slate-700 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-emerald-800 dark:hover:bg-emerald-950/30 dark:hover:text-emerald-400 sm:grid"
+            className="hidden h-11 w-11 place-items-center rounded-lg border border-emerald-900/10 bg-white text-slate-700  transition duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-emerald-800 dark:hover:bg-emerald-950/30 dark:hover:text-emerald-400 sm:grid"
             aria-label="Toggle theme"
           >
-            {theme === "dark" ? <Sun size={19} /> : <Moon size={19} />}
+            {theme === "dark" ? <Sun className="text-[#8cc63f]" size={19} /> : <Moon className="text-[#8cc63f]" size={19} />}
           </button>
 
           <div className="relative">
             <button
               type="button"
               onClick={() => setMenuOpen((current) => !current)}
-              className="flex h-11 items-center gap-2 rounded-lg border border-emerald-900/10 bg-white px-2.5 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-slate-50 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-emerald-800 dark:hover:bg-slate-800"
+              className="flex h-11 items-center gap-2 rounded-lg border border-emerald-900/10 bg-white px-2.5 text-left  transition duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-slate-50  dark:border-slate-800 dark:bg-slate-900 dark:hover:border-emerald-800 dark:hover:bg-slate-800"
               aria-label="Open profile menu"
             >
               <span className="grid h-8 w-8 place-items-center overflow-hidden rounded-lg bg-slate-950 text-xs font-bold text-white dark:bg-slate-700 dark:text-white">
@@ -135,7 +132,7 @@ export default function TopNavbar({
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 8, scale: 0.98 }}
                 transition={{ duration: 0.16 }}
-                className="absolute right-0 mt-2 w-64 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_24px_70px_rgba(15,23,42,0.18)] dark:border-slate-800 dark:bg-slate-950"
+                className="absolute right-0 mt-2 w-64 overflow-hidden rounded-lg border border-slate-200 bg-white  dark:border-slate-800 dark:bg-slate-950"
               >
                 <div className="border-b border-slate-100 p-4 dark:border-slate-800">
                   <p className="font-semibold text-slate-950 dark:text-white">{name}</p>

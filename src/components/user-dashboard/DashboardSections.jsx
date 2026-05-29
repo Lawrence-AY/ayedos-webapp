@@ -90,8 +90,8 @@ const LOAN_PRODUCTS = [
 
 function formatCurrency(value, options = {}) {
   const {
-    minimumFractionDigits = 0,
-    maximumFractionDigits = 0,
+    minimumFractionDigits = 2,
+    maximumFractionDigits = 2,
   } = options;
   const amount = Math.abs(Number(value || 0));
   return `KES ${amount.toLocaleString(undefined, {
@@ -255,10 +255,10 @@ function SkeletonDashboard() {
 
 function StatCard({ icon: Icon, label, value, trend, helper, tone = "emerald", blur = false }) {
   const tones = {
-    emerald: "bg-emerald-50 text-emerald-700",
-    blue: "bg-sky-50 text-sky-700",
-    amber: "bg-amber-50 text-amber-700",
-    slate: "bg-slate-100 text-slate-700",
+    emerald: "bg-gray-100/30",
+    blue: "bg-gray-100/30",
+    amber: "bg-gray-100/30",
+    slate: "bg-gray-100/30",
   };
 
   const displayValue = blur ? (
@@ -271,7 +271,8 @@ function StatCard({ icon: Icon, label, value, trend, helper, tone = "emerald", b
     <Surface className="group p-5 hover:-translate-y-1">
       <div className="flex items-start justify-between gap-4">
         <div className={`grid h-11 w-11 place-items-center rounded-lg transition duration-200 group-hover:scale-110 ${tones[tone]}`}>
-          <Icon size={21} />
+          <Icon size={21} 
+          className="text-[#8cc63f]/90 font-light"/>
         </div>
          
       </div>
@@ -314,7 +315,8 @@ function QuickActions() {
             className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800"
           >
             <span className="flex min-w-0 items-center gap-3">
-              <action.icon size={18} />
+              <action.icon size={18}
+              className="text-[#8cc63f]" />
               <span className="truncate">{action.label}</span>
             </span>
             <ArrowUpRight size={16} />
@@ -340,6 +342,8 @@ function ProfileCompletion({ user }) {
   const completed = checks.filter((item) => item.complete).length;
   const completion = Math.round((completed / checks.length) * 100);
   const missing = checks.filter((item) => !item.complete);
+
+  if (completion >= 100) return null;
 
   return (
     <Surface className="p-5">
@@ -385,76 +389,164 @@ function ProfileCompletion({ user }) {
 }
 
 function NotificationsPanel({ items = [], compact = false, onMarkRead, onMarkAllRead }) {
+  const [activeTab, setActiveTab] = useState("all");
   const unreadCount = items.filter((notice) => !notice.readAt && !notice.isRead).length;
+  const tabs = [
+    { key: "all", label: "All" },
+    { key: "unread", label: `Unread (${unreadCount})` },
+    { key: "read", label: "Read" },
+  ];
+  const filteredItems = items.filter((notice) => {
+    if (activeTab === "unread") return !notice.readAt && !notice.isRead;
+    if (activeTab === "read") return Boolean(notice.readAt || notice.isRead);
+    return true;
+  });
+
+  // Helper: format time relative to now (like WhatsApp)
+  const formatRelativeTime = (time) => {
+    if (!time) return "";
+    const date = new Date(time);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins}m`;
+    if (diffHours < 24) return `${diffHours}h`;
+    if (diffDays === 1) return "Yesterday";
+    return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  };
+
+  // Helper: get initials from title
+  const getInitial = (title) => title?.charAt(0).toUpperCase() || "?";
+
   return (
     <Surface className="p-5">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h5 className="text-base font-semibold tracking-normal text-slate-950">
-            Notifications
-          </h5>
-          <p className="text-sm text-slate-500">{unreadCount} unread security, payment, and loan alert{unreadCount === 1 ? "" : "s"}</p>
+      <div className="mb-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h5 className="text-base font-semibold tracking-normal text-slate-950">
+              Notifications
+            </h5>
+          </div>
+          <div className="flex items-center gap-2">
+            {unreadCount > 0 && onMarkAllRead ? (
+              <button
+                type="button"
+                onClick={onMarkAllRead}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Mark all read
+              </button>
+            ) : null}
+            <Bell size={20} className="text-[#8cc63f]" />
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          {unreadCount > 0 && onMarkAllRead ? (
+        <div className="mt-4 flex border-b border-slate-200 pb-3">
+          {tabs.map((tab) => (
             <button
+              key={tab.key}
               type="button"
-              onClick={onMarkAllRead}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+              onClick={() => setActiveTab(tab.key)}
+              className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                activeTab === tab.key
+                  ? "bg-slate-950 text-white"
+                  : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+              }`}
             >
-              Mark all read
+              {tab.label}
             </button>
-          ) : null}
-          <Bell size={20} className="text-slate-500" />
+          ))}
         </div>
       </div>
-      {items.length === 0 ? (
+
+      {/* WhatsApp‑style chat list */}
+      {filteredItems.length === 0 ? (
         <EmptyState
+        className="text-[#8cc63f]"
           icon={Bell}
           title="No notifications"
           description="Loan, deposit, profile, and security notifications will appear here when available."
         />
       ) : (
-      <div className={compact ? "space-y-3" : "grid gap-3 md:grid-cols-2"}>
-        {items.map((notice) => {
-          const isRead = Boolean(notice.readAt || notice.isRead);
-          const tone = notice.severity || notice.tone;
-          return (
-          <div
-            key={notice.id}
-            className={`rounded-lg border p-4 ${isRead ? "border-slate-200 bg-slate-50" : "border-emerald-200 bg-emerald-50/60"}`}
-          >
-            <div className="flex items-start gap-3">
-              <span
-                className={`mt-1 h-2.5 w-2.5 rounded-full ${
-                  tone === "success"
-                    ? "bg-emerald-500"
-                    : tone === "warning" || tone === "critical"
-                      ? "bg-amber-500"
-                      : "bg-sky-500"
-                }`}
-              />
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold text-slate-900">{notice.title}</p>
-                <p className="mt-1 text-sm leading-5 text-slate-600">{notice.body}</p>
-                <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <p className="text-xs font-medium text-slate-500">{notice.time ? new Date(notice.time).toLocaleString() : ""}</p>
-                  {!isRead && onMarkRead ? (
-                    <button type="button" onClick={() => onMarkRead(notice.id)} className="text-xs font-semibold text-emerald-700 hover:text-emerald-900">
-                      Mark read
-                    </button>
-                  ) : null}
-                  {notice.actionUrl ? (
-                    <Link to={notice.actionUrl} className="text-xs font-semibold text-slate-700 hover:text-slate-950">
-                      View details
-                    </Link>
-                  ) : null}
+        <div className="flex flex-col">
+          {filteredItems.map((notice) => {
+            const isRead = Boolean(notice.readAt || notice.isRead);
+            const tone = notice.severity || notice.tone;
+            // Keep the coloured dot for tone (optional – you can remove if not needed)
+            const toneDotColor =
+              tone === "success"
+                ? "bg-emerald-500"
+                : tone === "warning" || tone === "critical"
+                ? "bg-amber-500"
+                : "bg-sky-500";
+
+            return (
+              <div
+                key={notice.id}
+                className={`
+                  group flex items-start gap-3 py-3 border-b border-slate-100
+                  ${!isRead ? "bg-emerald-50/30" : ""}
+                  hover:bg-slate-50 transition-colors
+                `}
+              >
+                {/* Avatar circle with initial */}
+                <div className="flex-shrink-0 mt-0.5">
+                  <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-medium text-sm">
+                    {getInitial(notice.title)}
+                  </div>
                 </div>
+
+                {/* Content area */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p
+                      className={`text-sm font-semibold truncate ${
+                        !isRead ? "text-slate-900" : "text-slate-700"
+                      }`}
+                    >
+                      {notice.title}
+                    </p>
+                    <span className="text-[11px] text-slate-400 whitespace-nowrap">
+                      {formatRelativeTime(notice.time)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">
+                    {notice.body}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-3 mt-2">
+                    {!isRead && onMarkRead && (
+                      <button
+                        type="button"
+                        onClick={() => onMarkRead(notice.id)}
+                        className="text-xs font-medium text-emerald-600 hover:text-emerald-700 transition"
+                      >
+                        Mark read
+                      </button>
+                    )}
+                    {notice.actionUrl && (
+                      <Link
+                        to={notice.actionUrl}
+                        className="text-xs font-medium text-slate-500 hover:text-slate-700 transition"
+                      >
+                        View details →
+                      </Link>
+                    )}
+                  </div>
+                </div>
+
+                {/* Unread green dot (WhatsApp style) */}
+                {!isRead && (
+                  <div className="flex-shrink-0 self-center">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                  </div>
+                )}
               </div>
-            </div>
-          </div>
-        )})}
-      </div>
+            );
+          })}
+        </div>
       )}
     </Surface>
   );
@@ -516,6 +608,7 @@ function TransactionsTable({ transactions, limit = null, showViewAll = false, pa
       {rows.length === 0 ? (
         <EmptyState
           icon={ReceiptText}
+          className="text-[#8cc63f]"
           title="No transactions yet"
           description="Your deposits, repayments, and transfers will appear here."
         />
@@ -547,7 +640,7 @@ function TransactionsTable({ transactions, limit = null, showViewAll = false, pa
               <tbody className="divide-y divide-slate-100">
                 {rows.map((transaction, index) => {
                   const amount = Number(transaction.amount || transaction.value || 0);
-const description = transaction.description ?? "";
+                  const description = getTransactionPromptLabel(transaction);
                   const createdAt = transaction.createdAt || transaction.date;
                   const mpesaReference = transaction.mpesaReference || transaction.mpesaReceipt || transaction.checkoutRequestId || transaction.merchantRequestId || transaction.reference;
                   return (
@@ -620,7 +713,8 @@ function EmptyState({ icon: Icon, title, description }) {
   return (
     <div className="grid place-items-center px-6 py-16 text-center">
       <div className="grid h-14 w-14 place-items-center rounded-lg bg-slate-100 text-slate-500">
-        <Icon size={26} />
+        <Icon size={26} 
+        className="text-[#8cc63f]" />
       </div>
       <h3 className="mt-4 text-base font-semibold text-slate-950">{title}</h3>
       <p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">{description}</p>
@@ -687,14 +781,16 @@ function DashboardOverview({ stats, transactions, memberName, user, notification
               to={getDashboardPath("MEMBER", "loans")}
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/20 px-4 py-3 text-sm font-semibold text-slate-950 transition "
             >
-              <FileText size={17} />
+              <FileText size={17} 
+              className="text-[#8cc63f]" />
               Apply loan
             </Link>
             <Link
               to={getDashboardPath("MEMBER", "security")}
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/20 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
             >
-              <ShieldCheck size={17} />
+              <ShieldCheck size={17}
+              className="text-[#8cc63f]" />
               Review security
             </Link>
             <button
@@ -715,6 +811,7 @@ function DashboardOverview({ stats, transactions, memberName, user, notification
             key={card.label}
             {...card}
             blur={!showValues}
+            
           />
         ))}
       </div>
@@ -757,29 +854,47 @@ function DashboardOverview({ stats, transactions, memberName, user, notification
   );
 }
 
-function Field({ label, name, value, onChange, type = "text", error, as = "input" }) {
+function Field({ label, name, value, onChange, type = "text", error, as = "input", options = [], suffix = null }) {
   const controlClass =
     "mt-2 w-full rounded-lg border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100";
 
   return (
     <label className="block">
       <span className="text-sm font-semibold text-slate-700">{label}</span>
-      {as === "textarea" ? (
-        <textarea
-          className={`${controlClass} min-h-24 resize-y`}
-          name={name}
-          value={value}
-          onChange={onChange}
-        />
-      ) : (
-        <input
-          className={controlClass}
-          type={type}
-          name={name}
-          value={value}
-          onChange={onChange}
-        />
-      )}
+      <div className="relative">
+        {as === "textarea" ? (
+          <textarea
+            className={`${controlClass} min-h-24 resize-y`}
+            name={name}
+            value={value}
+            onChange={onChange}
+          />
+        ) : as === "select" ? (
+          <select
+            className={controlClass}
+            name={name}
+            value={value}
+            onChange={onChange}
+          >
+            {options.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        ) : (
+          <input
+            className={`${controlClass} ${suffix ? 'pr-12' : ''}`}
+            type={type}
+            name={name}
+            value={value}
+            onChange={onChange}
+          />
+        )}
+        {suffix ? (
+          <div className="pointer-events-auto absolute inset-y-0 right-3 flex items-center">
+            {suffix}
+          </div>
+        ) : null}
+      </div>
       {error ? <span className="mt-1 block text-xs font-medium text-rose-600">{error}</span> : null}
     </label>
   );
@@ -1060,7 +1175,7 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
   </div>
 
   {/* Employment information – editable */}
-  <EditableSection title="Employment information" icon={BriefcaseBusiness}>
+  <EditableSection title="Employment information" icon={BriefcaseBusiness} className="text-[#8cc63f]">
     <Field label="Employer" name="employer" value={form.employer} onChange={update} />
     <Field label="Job Title" name="jobTitle" value={form.jobTitle} onChange={update} />
     <Field label="Monthly Income" name="monthlyIncome" value={form.monthlyIncome} onChange={update} type="number" />
@@ -1068,9 +1183,25 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
   </EditableSection>
 
   {/* Next of kin – editable */}
-  <EditableSection id="next-of-kin" title="Next of kin" icon={UsersRound}>
+  <EditableSection id="next-of-kin" title="Next of kin" icon={UsersRound} className="text-[#8cc63f]">
     <Field label="Name" name="nextOfKinName" value={form.nextOfKinName} onChange={update} error={errors.nextOfKinName} />
-    <Field label="Relationship" name="nextOfKinRelationship" value={form.nextOfKinRelationship} onChange={update} error={errors.nextOfKinRelationship} />
+    <Field
+      label="Relationship"
+      name="nextOfKinRelationship"
+      as="select"
+      value={form.nextOfKinRelationship}
+      onChange={update}
+      error={errors.nextOfKinRelationship}
+      options={[
+        { label: "Select relationship", value: "" },
+        { label: "Spouse", value: "Spouse" },
+        { label: "Parent", value: "Parent" },
+        { label: "Sibling", value: "Sibling" },
+        { label: "Child", value: "Child" },
+        { label: "Friend", value: "Friend" },
+        { label: "Other", value: "Other" },
+      ]}
+    />
     <Field label="Phone Number" name="nextOfKinPhone" value={form.nextOfKinPhone} onChange={update} error={errors.nextOfKinPhone} />
   </EditableSection>
 
@@ -1094,7 +1225,8 @@ function EditableSection({ id, title, icon: Icon, children }) {
     <Surface id={id} className="scroll-mt-24 p-5">
       <div className="mb-5 flex items-center gap-3">
         <div className="grid h-10 w-10 place-items-center rounded-lg bg-slate-100 text-slate-700">
-          <Icon size={20} />
+          <Icon size={20}
+          className="text-[#8cc63f]" />
         </div>
         <h5 className="text-base font-semibold tracking-normal text-slate-950">{title}</h5>
       </div>
@@ -1109,6 +1241,9 @@ function SecuritySection({ user, accessToken, activeSessions = [], loginHistory 
     newPassword: "",
     confirmPassword: "",
   });
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [message, setMessage] = useState(null);
 
   function updatePassword(event) {
@@ -1189,9 +1324,54 @@ function SecuritySection({ user, accessToken, activeSessions = [], loginHistory 
           ) : null}
 
           <form className="space-y-4" onSubmit={handlePasswordSubmit}>
-            <Field label="Current password" name="currentPassword" type="password" value={passwordForm.currentPassword} onChange={updatePassword} />
-            <Field label="New password" name="newPassword" type="password" value={passwordForm.newPassword} onChange={updatePassword} />
-            <Field label="Confirm new password" name="confirmPassword" type="password" value={passwordForm.confirmPassword} onChange={updatePassword} />
+            <Field
+              label="Current password"
+              name="currentPassword"
+              type={showCurrentPassword ? "text" : "password"}
+              value={passwordForm.currentPassword}
+              onChange={updatePassword}
+              suffix={
+                <button
+                  type="button"
+                  onClick={() => setShowCurrentPassword((current) => !current)}
+                  className="text-xs font-semibold text-slate-500 hover:text-slate-900"
+                >
+                  {showCurrentPassword ? "Hide" : "Show"}
+                </button>
+              }
+            />
+            <Field
+              label="New password"
+              name="newPassword"
+              type={showNewPassword ? "text" : "password"}
+              value={passwordForm.newPassword}
+              onChange={updatePassword}
+              suffix={
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword((current) => !current)}
+                  className="text-xs font-semibold text-slate-500 hover:text-slate-900"
+                >
+                  {showNewPassword ? "Hide" : "Show"}
+                </button>
+              }
+            />
+            <Field
+              label="Confirm new password"
+              name="confirmPassword"
+              type={showConfirmPassword ? "text" : "password"}
+              value={passwordForm.confirmPassword}
+              onChange={updatePassword}
+              suffix={
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((current) => !current)}
+                  className="text-xs font-semibold text-slate-500 hover:text-slate-900"
+                >
+                  {showConfirmPassword ? "Hide" : "Show"}
+                </button>
+              }
+            />
             <button className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
               <LockKeyhole size={17} />
               Update password
@@ -1203,7 +1383,7 @@ function SecuritySection({ user, accessToken, activeSessions = [], loginHistory 
           <Surface className="p-5">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h5 className="text-base font-semibold tracking-normal text-slate-950">Two-factor authentication</h5>
+                <h5 className="text-base font-semibold tracking-normal text-slate-950">Multi-factor authentication</h5>
                 <p className="mt-1 text-sm text-slate-500">Authenticator and SMS verification will be available in a future release.</p>
               </div>
               <button
@@ -1225,6 +1405,7 @@ function SecuritySection({ user, accessToken, activeSessions = [], loginHistory 
           {activeSessions.length === 0 ? (
             <EmptyState
               icon={MonitorSmartphone}
+              className="text-[#8cc63f]"
               title="No active sessions"
               description="Trusted devices will appear here after successful sign in."
             />
@@ -1276,6 +1457,7 @@ function SecuritySection({ user, accessToken, activeSessions = [], loginHistory 
           {visibleLoginHistory.length === 0 ? (
             <EmptyState
               icon={Clock3}
+              className="text-[#8cc63f]"
               title="No login history"
               description="Recent login and security events will appear here when available."
             />
@@ -1354,6 +1536,18 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
 
   async function requestLoan(event) {
     event.preventDefault();
+    if (requestedAmount <= 0) {
+      setMessage({ type: "error", text: "Enter a valid loan amount before submitting." });
+      return;
+    }
+    if (!selectedProduct) {
+      setMessage({ type: "error", text: "Select a valid loan product." });
+      return;
+    }
+    if (selectedProduct.requiresFullShareCapital && stats.shareCapitalRemaining > 0) {
+      setMessage({ type: "error", text: "This loan product requires that your minimum share capital is fully paid." });
+      return;
+    }
     try {
       await applyForLoan({
         type: loanForm.type,
@@ -1392,9 +1586,11 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
         }
       />
       <div className="grid gap-4 md:grid-cols-3">
-        <StatCard icon={FileText} label="Active loans" value={activeLoans.length} trend="Live" helper="Approved or currently active facilities" tone="blue" />
-        <StatCard icon={CreditCard} label="Outstanding balance" value={formatCurrency(totalBalance)} trend="-4.1%" helper="Estimated from loan records" tone="amber" blur={!showValues} />
-        <StatCard icon={Clock3} label="Next repayment" value="-" trend="Pending" helper="Repayment schedule will appear when available" tone="slate" />
+        <StatCard icon={FileText} className="text-[#8cc63f]" 
+         label="Active loans" value={activeLoans.length} trend="Live" helper="Approved or currently active facilities" tone="blue" />
+        <StatCard icon={CreditCard} className="text-[#8cc63f]"
+        label="Outstanding balance" value={formatCurrency(totalBalance)} trend="-4.1%" helper="Estimated from loan records" tone="amber" blur={!showValues} />
+        <StatCard icon={Clock3} className="text-[#8cc63f]" label="Next repayment" value="-" trend="Pending" helper="Repayment schedule will appear when available" tone="slate" />
       </div>
       {message ? (
         <div className={`rounded-lg border px-4 py-3 text-sm font-medium ${message.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800"}`}>
@@ -1790,16 +1986,17 @@ function SearchResultsPage({ search, data, stats, user, showValues, remoteSearch
         </div>
       ) : null}
       <div className="grid gap-4 md:grid-cols-3">
-        <StatCard icon={Search} label="Matches" value={totalResults} trend="Live" helper="Updates as data refreshes" tone="blue" />
-        <StatCard icon={WalletCards} label="Balance" value={formatCurrency(stats.balance)} trend="Context" helper="Current account context" tone="emerald" blur={!showValues} />
-        <StatCard icon={MonitorSmartphone} label="Sessions" value={data.activeSessions.length} trend="Protected" helper="Only one active device is allowed" tone="slate" />
+        <StatCard icon={Search} className="text-[#8cc63f]" label="Matches" value={totalResults} trend="Live" helper="Updates as data refreshes" tone="blue" />
+        <StatCard icon={WalletCards} className="text-[#8cc63f]" label="Balance" value={formatCurrency(stats.balance)} trend="Context" helper="Current account context" tone="emerald" blur={!showValues} />
+        <StatCard icon={MonitorSmartphone} className="text-[#8cc63f]" label="Sessions" value={data.activeSessions.length} trend="Protected" helper="Only one active device is allowed" tone="slate" />
       </div>
       <div className="grid gap-5 xl:grid-cols-2">
         {resultGroups.map((group) => (
           <Surface key={group.title} className="overflow-hidden">
             <div className="flex items-center gap-3 border-b border-slate-200 p-5">
               <div className="grid h-10 w-10 place-items-center rounded-lg bg-slate-100 text-slate-700">
-                <group.icon size={20} />
+                <group.icon size={20} 
+                className="text-[#8cc63f]"/>
               </div>
               <div>
                 <h5 className="text-base font-semibold tracking-normal text-slate-950">{group.title}</h5>
@@ -1807,7 +2004,8 @@ function SearchResultsPage({ search, data, stats, user, showValues, remoteSearch
               </div>
             </div>
             {group.items.length === 0 ? (
-              <EmptyState icon={group.icon} title="No matches" description="Try a name, status, amount, reference, device, IP, location, or page term." />
+              <EmptyState icon={group.icon} className="text-[#8cc63f]"
+              title="No matches" description="Try a name, status, amount, reference, device, IP, location, or page term." />
             ) : (
               <div className="divide-y divide-slate-100">
                 {group.items.slice(0, 8).map((item, index) => (
@@ -1830,6 +2028,7 @@ function SearchResultsPage({ search, data, stats, user, showValues, remoteSearch
 
 function ReportsPage({ accessToken }) {
   const [reportType, setReportType] = useState("portfolio");
+  const [duration, setDuration] = useState("all");
   const [message, setMessage] = useState(null);
   const [sending, setSending] = useState(false);
 
@@ -1838,7 +2037,7 @@ function ReportsPage({ accessToken }) {
     setSending(true);
     setMessage(null);
     try {
-      await emailMemberReport(reportType, accessToken);
+      await emailMemberReport(reportType, accessToken, duration === "all" ? undefined : Number(duration));
       setMessage({ type: "success", text: "Report request sent. Check your registered email." });
     } catch (error) {
       setMessage({ type: "error", text: error?.message || "Failed to request report." });
@@ -1859,7 +2058,7 @@ function ReportsPage({ accessToken }) {
             {message.text}
           </div>
         ) : null}
-        <form onSubmit={requestReport} className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+        <form onSubmit={requestReport} className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,240px)_auto] md:items-end">
           <label className="text-sm font-semibold text-slate-700">
             Report type
             <select value={reportType} onChange={(event) => setReportType(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-200 px-3.5 py-3 text-sm">
@@ -1867,6 +2066,15 @@ function ReportsPage({ accessToken }) {
               <option value="transactions">Transaction statement</option>
               <option value="loans">Loan statement</option>
               <option value="savings">Savings and share capital report</option>
+            </select>
+          </label>
+          <label className="text-sm font-semibold text-slate-700">
+            Report duration
+            <select value={duration} onChange={(event) => setDuration(event.target.value)} className="mt-2 w-full rounded-lg border border-slate-200 px-3.5 py-3 text-sm">
+              <option value="all">All time</option>
+              <option value="3">Last 3 months</option>
+              <option value="6">Last 6 months</option>
+              <option value="12">Last 12 months</option>
             </select>
           </label>
           <button disabled={sending} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60">
@@ -1905,8 +2113,8 @@ function SavingsPage({ stats, transactions = [], accessToken, onRefresh, showVal
         </button>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
-        <StatCard icon={PiggyBank} label="Savings balance" value={formatCurrency(stats.totalSavings)} trend="Paid" tone="emerald" blur={!showValues} />
-<StatCard icon={WalletCards} label="Share capital" value={formatCurrency(stats.shareCapital)} trend="Equity" tone="blue" blur={!showValues} />
+        <StatCard icon={PiggyBank} className="text-[#8cc63f]" label="Savings balance" value={formatCurrency(stats.totalSavings)} trend="Paid" tone="emerald" blur={!showValues} />
+<StatCard icon={WalletCards} className="text-[#8cc63f]" label="Share capital" value={formatCurrency(stats.shareCapital)} trend="Equity" tone="blue" blur={!showValues} />
       </div>
       <SavingsContributionForm
         accessToken={accessToken}

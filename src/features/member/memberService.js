@@ -168,11 +168,16 @@ export async function getContributionStatus(transactionId, accessToken) {
   }
 }
 
-export async function emailMemberReport(reportType, accessToken) {
+export async function emailMemberReport(reportType, accessToken, duration) {
+  const body = { reportType };
+  if (duration !== undefined && duration !== null && duration !== 'all') {
+    body.duration = Number(duration);
+  }
+
   const res = await apiRequest('/api/member/reports/email', {
     method: 'POST',
     accessToken,
-    body: { reportType },
+    body,
   })
   if (!res.ok) throw new Error(res.json?.message || 'Failed to email report')
   return unwrapEnvelopeData(res.json)
