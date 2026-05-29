@@ -200,16 +200,7 @@ export default function UserDashboard() {
     if (isDashboardHome) {
       return (
         <div className="space-y-6">
-        <DashboardHero
-          eyebrow="Member banking workspace"
-          title={`Welcome back, ${memberName}`}
-          description="Track savings, share capital, loans, transactions, and account security from one secure AYEDOS SACCO dashboard."
-          metrics={[
-            { label: "Savings", value: formatCurrency(stats.totalSavings) },
-            { label: "Share capital", value: formatCurrency(stats.shareCapital) },
-            { label: "Active loans", value: stats.activeLoans },
-          ]}
-        />
+      
         <DashboardOverview
           stats={stats}
           transactions={data.transactions.filter((transaction) => matchesSearch(transaction, search))}
