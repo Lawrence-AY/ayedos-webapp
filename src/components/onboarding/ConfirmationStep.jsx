@@ -1,21 +1,21 @@
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { CheckCircle2, Receipt } from 'lucide-react';
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { CheckCircle2, Receipt } from "lucide-react";
 
-export const ConfirmationStep = ({ mpesaReference  }) => {
+export const ConfirmationStep = ({ mpesaReference }) => {
   const navigate = useNavigate();
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      navigate('/dashboard');  
+      navigate("/dashboard");
     }, 5000);
 
     return () => clearTimeout(timer);
   }, [navigate]);
 
-  const handleGoToDashboard = () => {  
-    navigate('/dashboard');
+  const handleGoToDashboard = () => {
+    navigate("/dashboard");
   };
 
   return (
@@ -32,12 +32,13 @@ export const ConfirmationStep = ({ mpesaReference  }) => {
             <div className="mt-4 bg-green-50 border border-green-200 rounded-xl p-4 mx-auto max-w-xs">
               <div className="flex items-center justify-center gap-2 mb-2">
                 <Receipt className="w-5 h-5 text-green-600" />
-                <span className="text-sm font-semibold text-green-700">M-Pesa Reference Code</span>
+                <span className="text-sm font-semibold text-green-700">
+                  M-Pesa Reference Code
+                </span>
               </div>
               <p className="text-xl font-mono font-bold text-green-900 tracking-widest break-all">
                 {mpesaReference}
               </p>
-               s
             </div>
           )}
 
