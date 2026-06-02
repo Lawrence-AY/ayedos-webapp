@@ -2519,41 +2519,6 @@ function SimplePage({ eyebrow, title, description, icon: Icon, children }) {
   );
 }
 
-<<<<<<< Updated upstream
-function PortfolioPage({
-  stats,
-  transactions,
-  shares,
-  search,
-  user,
-  showValues,
-  onToggleValues,
-}) {
-  const filteredTransactions = transactions.filter((transaction) =>
-    matchesSearch(transaction, search),
-  );
-  const portfolioStats = [
-    {
-      label: "Estimated account value",
-      value: formatCurrency(stats.balance),
-      tone: "emerald",
-    },
-    {
-      label: "Share capital",
-      value: formatCurrency(stats.shareCapital),
-      tone: "blue",
-    },
-    {
-      label: "Loan balance",
-      value: formatCurrency(stats.loanBalance),
-      tone: "amber",
-    },
-    {
-      label: "This month",
-      value: formatCurrency(stats.monthlyContributions),
-      tone: "slate",
-    },
-=======
 const SACCO_UTILIZATION_ALLOCATIONS = [
   {
     label: "Member loan disbursements",
@@ -2630,7 +2595,6 @@ function PortfolioPage({ stats, transactions, shares, search, user, showValues, 
     { label: "Share capital", value: formatCurrency(stats.shareCapital), helper: "Your ownership stake in the SACCO.", icon: Landmark, tone: "blue" },
     { label: "Money in use", value: formatCurrency(pooledFunds), helper: "Dummy SACCO pool mapped across utilization areas.", icon: TrendingUp, tone: "amber" },
     { label: "This month", value: formatCurrency(stats.monthlyContributions), helper: "Recent member contribution activity.", icon: PiggyBank, tone: "slate" },
->>>>>>> Stashed changes
   ];
   const displayValue = (value) => showValues ? value : <span className="inline-block blur-sm">KES 000,000.00</span>;
 
@@ -2654,10 +2618,6 @@ function PortfolioPage({ stats, transactions, shares, search, user, showValues, 
         }
       />
 
-<<<<<<< Updated upstream
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.6fr)]">
-        <ReadOnlyPortfolioDetails />
-=======
       <Surface className="overflow-hidden">
         <div className="grid gap-0 lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
           <div className="p-5 sm:p-6">
@@ -2803,13 +2763,8 @@ function PortfolioPage({ stats, transactions, shares, search, user, showValues, 
             </div>
           </Surface>
         </div>
->>>>>>> Stashed changes
       </div>
 
-<<<<<<< Updated upstream
-function ReadOnlyPortfolioDetails() {
-  return <Surface className="p-5 hidden"></Surface>;
-=======
       <Surface className="p-5">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="max-w-2xl">
@@ -2865,7 +2820,6 @@ function ReadOnlyPortfolioDetails() {
       </Surface>
     </div>
   );
->>>>>>> Stashed changes
 }
 
 function SearchResultsPage({
