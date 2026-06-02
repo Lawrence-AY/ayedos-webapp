@@ -8,13 +8,13 @@ export const ConfirmationStep = ({ mpesaReference  }) => {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      navigate('/dashboard');
+      navigate('/dashboard');  
     }, 5000);
 
     return () => clearTimeout(timer);
   }, [navigate]);
 
-  const handleGoToDashboard = () => {
+  const handleGoToDashboard = () => {  
     navigate('/dashboard');
   };
 
