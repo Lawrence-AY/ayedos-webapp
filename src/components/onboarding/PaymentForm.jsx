@@ -27,7 +27,7 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
   const [mpesaReferenceDisplay, setMpesaReferenceDisplay] = useState(null);
   const pollingInterval = useRef(null);
   const progressInterval = useRef(null);
-
+ s
   const REGISTRATION_FEE = 1;
 
   // Helper: format phone to 254XXXXXXXXX
@@ -501,7 +501,7 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
         >
           <div className="flex flex-col text-left">
             <span className="text-xs font-light">Next</span>
-            <span className="font-semibold">Confirm Payment</span>
+            <span className="font-semibold">Make Payment</span>
           </div>
           <GrLinkNext />
         </Button>
@@ -512,7 +512,7 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
         <DialogContent className="rounded-2xl max-w-sm text-center" hideCloseButton>
           <div className="py-6 flex flex-col items-center gap-4">
             {waitingStatus === 'waiting' && (
-              <>
+              <> 
                 <Phone className="w-16 h-16 text-[#8cc63f]" />
                 <h3 className="text-lg font-semibold">Confirm Payment on Your Phone</h3>
                 <p className="text-gray-500 text-sm">Please check your phone and enter M-PESA PIN.</p>

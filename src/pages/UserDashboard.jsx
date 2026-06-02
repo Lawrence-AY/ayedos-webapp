@@ -282,8 +282,8 @@ export default function UserDashboard() {
     if (path.includes("/support")) {
       return (
         <SimplePage eyebrow="Support"  icon={Bell}>
-          <div className="grid gap-3 md:grid-cols-3">
-            {["Request statement", "Report login issue", "Contact loans desk"].map((item) => (
+          <div className="grid gap-12 md:grid-cols-3">
+            {["Request statement", "Contact loans desk"].map((item) => (
               <button key={item} className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-4 text-left text-sm font-semibold text-slate-800 transition hover:bg-emerald-50">
                 {item}
               </button>

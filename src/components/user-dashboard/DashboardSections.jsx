@@ -2532,40 +2532,84 @@ function SimplePage({ eyebrow, title, description, icon: Icon, children }) {
   );
 }
 
-function PortfolioPage({
-  stats,
-  transactions,
-  shares,
-  search,
-  user,
-  showValues,
-  onToggleValues,
-}) {
-  const filteredTransactions = transactions.filter((transaction) =>
-    matchesSearch(transaction, search),
-  );
+const SACCO_UTILIZATION_ALLOCATIONS = [
+  {
+    label: "Member loan disbursements",
+    description: "Working capital, emergency, education, and development loans issued to members.",
+    amount: 9800000,
+    percent: 49,
+    icon: FileText,
+    status: "Active lending",
+  },
+  {
+    label: "Liquidity reserve",
+    description: "Cash kept available for withdrawals, approved payouts, and short-term SACCO obligations.",
+    amount: 4200000,
+    percent: 21,
+    icon: Landmark,
+    status: "Protected reserve",
+  },
+  {
+    label: "Fixed income investments",
+    description: "Low-risk deposits and treasury-style instruments used to earn stable returns for members.",
+    amount: 3000000,
+    percent: 15,
+    icon: TrendingUp,
+    status: "Earning returns",
+  },
+  {
+    label: "Welfare and emergency fund",
+    description: "Member support pool for welfare claims, urgent needs, and community assistance.",
+    amount: 1600000,
+    percent: 8,
+    icon: UsersRound,
+    status: "Member support",
+  },
+  {
+    label: "Operations and compliance",
+    description: "Audit, payment processing, member records, security, and service delivery costs.",
+    amount: 900000,
+    percent: 5,
+    icon: ShieldCheck,
+    status: "Governed spend",
+  },
+  {
+    label: "Technology improvement",
+    description: "Digital onboarding, dashboards, reporting, and payment reliability improvements.",
+    amount: 500000,
+    percent: 2,
+    icon: MonitorSmartphone,
+    status: "In progress",
+  },
+];
+
+const SACCO_IMPACT_METRICS = [
+  { label: "Members financed", value: "126", helper: "Across emergency, welfare, education, and development loans." },
+  { label: "Average approval time", value: "2.4 days", helper: "For complete applications with verified member details." },
+  { label: "Portfolio yield", value: "11.8%", helper: "Estimated annual return from lending and low-risk placements." },
+  { label: "Reserve coverage", value: "4.6 months", helper: "Operating runway held for liquidity and member protection." },
+];
+
+const SACCO_PROJECTS = [
+  { title: "Education loan cycle", amount: 2100000, status: "Disbursed", date: "May 2026", progress: 82 },
+  { title: "Member emergency advances", amount: 1450000, status: "Revolving", date: "May 2026", progress: 64 },
+  { title: "Treasury deposit placement", amount: 3000000, status: "Maturing Aug 2026", date: "Apr 2026", progress: 55 },
+  { title: "Digital records upgrade", amount: 500000, status: "Implementation", date: "Jun 2026", progress: 38 },
+];
+
+function PortfolioPage({ stats, transactions, shares, search, user, showValues, onToggleValues }) {
+  const filteredTransactions = transactions.filter((transaction) => matchesSearch(transaction, search));
+  const visibleTransactions = filteredTransactions.slice(0, 4);
+  const activeShareRecords = shares.filter((share) => matchesSearch(share, search)).length;
+  const pooledFunds = SACCO_UTILIZATION_ALLOCATIONS.reduce((sum, item) => sum + item.amount, 0);
+  const memberName = user?.name || [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Member";
   const portfolioStats = [
-    {
-      label: "Estimated account value",
-      value: formatCurrency(stats.balance),
-      tone: "emerald",
-    },
-    {
-      label: "Share capital",
-      value: formatCurrency(stats.shareCapital),
-      tone: "blue",
-    },
-    {
-      label: "Loan balance",
-      value: formatCurrency(stats.loanBalance),
-      tone: "amber",
-    },
-    {
-      label: "This month",
-      value: formatCurrency(stats.monthlyContributions),
-      tone: "slate",
-    },
+    { label: "Member value", value: formatCurrency(stats.balance), helper: "Your current SACCO account position.", icon: WalletCards, tone: "emerald" },
+    { label: "Share capital", value: formatCurrency(stats.shareCapital), helper: "Your ownership stake in the SACCO.", icon: Landmark, tone: "blue" },
+    { label: "Money in use", value: formatCurrency(pooledFunds), helper: "Dummy SACCO pool mapped across utilization areas.", icon: TrendingUp, tone: "amber" },
+    { label: "This month", value: formatCurrency(stats.monthlyContributions), helper: "Recent member contribution activity.", icon: PiggyBank, tone: "slate" },
   ];
+  const displayValue = (value) => showValues ? value : <span className="inline-block blur-sm">KES 000,000.00</span>;
 
   return (
     <div className="space-y-6">
@@ -2587,15 +2631,208 @@ function PortfolioPage({
         }
       />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.6fr)]">
-        <ReadOnlyPortfolioDetails />
+      <Surface className="overflow-hidden">
+        <div className="grid gap-0 lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
+          <div className="p-5 sm:p-6">
+            <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+              <div className="max-w-2xl">
+                <p className="text-sm font-semibold uppercase tracking-normal text-[#8cc63f]">Member fund visibility</p>
+                <h4 className="mt-2 text-2xl font-semibold tracking-normal text-slate-950">
+                  See how SACCO money is being utilized
+                </h4>
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  {memberName}, this dummy portfolio view shows how member deposits, savings, and share capital can be pooled into loans, reserves, investments, welfare support, operations, and digital improvements.
+                </p>
+              </div>
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
+                Last updated: Jun 2026
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {portfolioStats.map((item) => (
+                <div key={item.label} className="rounded-lg border border-slate-200 bg-white p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="grid h-10 w-10 place-items-center rounded-lg bg-slate-100">
+                      <item.icon size={18} className="text-[#8cc63f]" />
+                    </div>
+                    <p className="text-sm font-semibold text-slate-600">{item.label}</p>
+                  </div>
+                  <p className="mt-4 text-xl font-semibold tracking-normal text-slate-950">
+                    {displayValue(item.value)}
+                  </p>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">{item.helper}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="border-t border-slate-200 bg-slate-50 p-5 sm:p-6 lg:border-l lg:border-t-0">
+            <div className="rounded-lg border border-slate-200 bg-white p-5">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold text-slate-500">Total mapped pool</p>
+                  <p className="mt-2 text-3xl font-semibold tracking-normal text-slate-950">{displayValue(formatCurrency(pooledFunds))}</p>
+                </div>
+                <WalletCards size={28} className="text-[#8cc63f]" />
+              </div>
+              <div className="mt-5 h-3 overflow-hidden rounded-full bg-slate-100">
+                <div className="h-full rounded-full bg-[#8cc63f]" style={{ width: "100%" }} />
+              </div>
+              <p className="mt-3 text-xs leading-5 text-slate-500">
+                Dummy data for demonstration. Replace with audited SACCO ledger data when backend portfolio reporting is ready.
+              </p>
+            </div>
+          </div>
+        </div>
+      </Surface>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
+        <Surface className="p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h5 className="text-base font-semibold tracking-normal text-slate-950">Fund allocation</h5>
+              <p className="mt-1 text-sm text-slate-500">A clear breakdown of where the SACCO pool is currently assigned.</p>
+            </div>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+              {activeShareRecords} share record{activeShareRecords === 1 ? "" : "s"}
+            </span>
+          </div>
+          <div className="mt-5 space-y-4">
+            {SACCO_UTILIZATION_ALLOCATIONS.map((item) => (
+              <div key={item.label} className="rounded-lg border border-slate-200 bg-white p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex gap-3">
+                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-slate-100">
+                      <item.icon size={18} className="text-[#8cc63f]" />
+                    </div>
+                    <div>
+                      <h6 className="text-sm font-semibold text-slate-950">{item.label}</h6>
+                      <p className="mt-1 text-xs leading-5 text-slate-500">{item.description}</p>
+                    </div>
+                  </div>
+                  <div className="text-left sm:text-right">
+                    <p className="text-sm font-semibold text-slate-950">{displayValue(formatCurrency(item.amount))}</p>
+                    <p className="text-xs font-semibold text-[#8cc63f]">{item.percent}%</p>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <div className="mb-2 flex items-center justify-between text-xs font-semibold text-slate-500">
+                    <span>{item.status}</span>
+                    <span>{item.percent}% utilized</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-full rounded-full bg-[#8cc63f]" style={{ width: `${item.percent}%` }} />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Surface>
+
+        <div className="space-y-4">
+          <Surface className="p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h5 className="text-base font-semibold tracking-normal text-slate-950">Member impact</h5>
+                <p className="mt-1 text-sm text-slate-500">What the pooled funds are helping the SACCO achieve.</p>
+              </div>
+              <BadgeCheck size={22} className="text-[#8cc63f]" />
+            </div>
+            <div className="mt-5 grid gap-3">
+              {SACCO_IMPACT_METRICS.map((metric) => (
+                <div key={metric.label} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-normal text-slate-500">{metric.label}</p>
+                  <p className="mt-1 text-2xl font-semibold tracking-normal text-slate-950">{metric.value}</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">{metric.helper}</p>
+                </div>
+              ))}
+            </div>
+          </Surface>
+
+          <Surface className="p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h5 className="text-base font-semibold tracking-normal text-slate-950">Active utilization</h5>
+                <p className="mt-1 text-sm text-slate-500">Recent dummy programs and placements.</p>
+              </div>
+              <ReceiptText size={22} className="text-[#8cc63f]" />
+            </div>
+            <div className="mt-5 space-y-3">
+              {SACCO_PROJECTS.map((project) => (
+                <div key={project.title} className="rounded-lg border border-slate-200 bg-white p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-950">{project.title}</p>
+                      <p className="mt-1 text-xs text-slate-500">{project.date} - {project.status}</p>
+                    </div>
+                    <p className="text-sm font-semibold text-slate-950">{displayValue(formatCurrency(project.amount))}</p>
+                  </div>
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-full rounded-full bg-[#8cc63f]" style={{ width: `${project.progress}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Surface>
+        </div>
       </div>
+
+      <Surface className="p-5">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-2xl">
+            <h5 className="text-base font-semibold tracking-normal text-slate-950">Recent member money movement</h5>
+            <p className="mt-1 text-sm text-slate-500">
+              Your own transactions remain visible beside the wider SACCO utilization story, so members can connect personal contributions with pooled impact.
+            </p>
+          </div>
+          <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
+            {filteredTransactions.length} matching transaction{filteredTransactions.length === 1 ? "" : "s"}
+          </span>
+        </div>
+        {visibleTransactions.length === 0 ? (
+          <EmptyState
+            icon={ReceiptText}
+            title="No matching transactions"
+            description="Savings, share capital, loan repayments, and other member activity will appear here."
+          />
+        ) : (
+          <div className="mt-5 overflow-hidden rounded-lg border border-slate-200">
+            <table className="min-w-full divide-y divide-slate-100">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">Activity</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">Amount</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">Status</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {visibleTransactions.map((transaction, index) => (
+                  <tr key={transaction.id || transaction.reference || index}>
+                    <td className="px-5 py-4 text-sm font-semibold text-slate-900">
+                      {getTransactionPromptLabel(transaction)}
+                    </td>
+                    <td className="px-5 py-4 text-sm text-slate-700">
+                      {displayValue(formatCurrency(transaction.amount))}
+                    </td>
+                    <td className="px-5 py-4 text-sm">
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClass(transaction.status)}`}>
+                        {normalizeStatus(transaction.status)}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4 text-sm text-slate-500">
+                      {transaction.createdAt ? new Date(transaction.createdAt).toLocaleDateString() : "-"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Surface>
     </div>
   );
-}
-
-function ReadOnlyPortfolioDetails() {
-  return <Surface className="p-5 hidden"></Surface>;
 }
 
 function SearchResultsPage({
