@@ -2005,10 +2005,23 @@ function LoansPage({
       );
   }
 
+  const scrollToApplication = () => {
+    const el = document.getElementById("loan-product-select");
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      // Wait a moment for scroll to finish or use preventScroll to avoid jumps
+      el.focus({ preventScroll: true });
+    }
+  };
+
   return (
     <div className="space-y-6">
+      <LoanProducts stats={stats} />
       <EligibilityChecks stats={stats} />
-      <button className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-4 text-sm font-semibold text-white transition hover:bg-slate-900">
+      <button
+        onClick={scrollToApplication}
+        className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-4 text-sm font-semibold text-white transition hover:bg-slate-900"
+      >
         <Plus className="text-[#8cc63f]" size={18} />
         New application
       </button>
@@ -2059,6 +2072,7 @@ function LoansPage({
             <label className="text-sm font-semibold text-slate-700">
               Loan product
               <select
+                id="loan-product-select"
                 value={loanForm.type}
                 onChange={(event) =>
                   setLoanForm((current) => ({
@@ -2148,8 +2162,6 @@ function LoansPage({
         </Surface>
       </div>
 
-      <LoansTable loans={rows} />
-      <LoanProducts stats={stats} />
       <LoanCalculator
         product={selectedProduct}
         amount={requestedAmount}
@@ -2157,6 +2169,7 @@ function LoansPage({
         totalInterest={totalInterest}
         monthlyRepayment={monthlyRepayment}
       />
+      <LoansTable loans={rows} />
     </div>
   );
 }
@@ -2357,7 +2370,7 @@ function LoanCalculator({ product, amount, duration }) {
                 applying.
               </p>
             </div>
-            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-emerald-50 text-emerald-700">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-[8cc63f]/50 ">
               <Calculator className="text-[#8cc63f]" size={20} />
             </div>
           </div>
@@ -2382,7 +2395,7 @@ function LoanCalculator({ product, amount, duration }) {
                     amount: event.target.value,
                   }))
                 }
-                className="accent-emerald-600"
+                className="bg-[#8cc63f]"
               />
               <div className="flex justify-between text-xs font-medium text-slate-500">
                 <span>KES 1,000</span>
@@ -2409,7 +2422,7 @@ function LoanCalculator({ product, amount, duration }) {
                     duration: event.target.value,
                   }))
                 }
-                className="accent-sky-600"
+                className="bg-[#8cc63f]"
               />
               <div className="flex justify-between text-xs font-medium text-slate-500">
                 <span>1 month</span>
@@ -2438,7 +2451,7 @@ function LoanCalculator({ product, amount, duration }) {
                     extraMonthly: event.target.value,
                   }))
                 }
-                className="accent-amber-500"
+                className="bg-[#8cc63f]"
               />
             </label>
           </div>
@@ -2489,7 +2502,7 @@ function LoanCalculator({ product, amount, duration }) {
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-slate-200">
               <div
-                className="h-full rounded-full bg-emerald-600"
+                className="h-full rounded-full bg-[#8cc63f]"
                 style={{ width: `${affordabilityScore}%` }}
               />
             </div>
