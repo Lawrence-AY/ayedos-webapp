@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { CheckCircle2, Receipt } from 'lucide-react';
 
-export const ConfirmationStep = ({ mpesaReference, onReset }) => {
+export const ConfirmationStep = ({ mpesaReference  }) => {
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -37,9 +37,7 @@ export const ConfirmationStep = ({ mpesaReference, onReset }) => {
               <p className="text-xl font-mono font-bold text-green-900 tracking-widest break-all">
                 {mpesaReference}
               </p>
-              <p className="text-xs text-green-600 mt-2">
-                Keep this reference for your records
-              </p>
+               s
             </div>
           )}
 
@@ -55,11 +53,7 @@ export const ConfirmationStep = ({ mpesaReference, onReset }) => {
         <Button onClick={handleGoToDashboard} className="mt-4">
           Go to Dashboard Now
         </Button>
-        {onReset && (
-          <Button onClick={onReset} variant="outline" className="mt-4">
-            Start New Registration
-          </Button>
-        )}
+        s
       </div>
     </div>
   );
