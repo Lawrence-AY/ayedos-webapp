@@ -68,7 +68,7 @@ export async function buyShares(data, accessToken) {
 export async function getMyTransactions(accessToken, filters = {}) {
   const queryParams = new URLSearchParams(filters).toString()
   const url = queryParams ? `/api/member/transactions?${queryParams}` : '/api/member/transactions'
-  const res = await apiRequest(url, { method: 'GET', accessToken })
+  const res = await apiRequest(url, { method: 'GET', accessToken, cache: false })
   if (!res.ok) throw new Error(res.json?.message || 'Failed to fetch transactions')
   return unwrapEnvelopeData(res.json)
 }
@@ -160,6 +160,7 @@ export async function getContributionStatus(transactionId, accessToken) {
   const res = await apiRequest(`/api/member/contributions/${transactionId}/status`, {
     method: 'GET',
     accessToken,
+    cache: false,
   })
   if (!res.ok) throw new Error(res.json?.message || 'Failed to fetch contribution status')
   return {

@@ -10,12 +10,12 @@ export const StepIndicator = ({ currentStep }) => {
   ];
 
   return (
-    <div className="flex justify-between mb-8">
+    <div className="flex justify-between mb-8 gap-1">
       {steps.map((step) => (
-        <div key={step.number} className="flex-1 text-center">
+        <div key={step.number} className="flex-1 text-center min-w-0">
           <div
             className={`
-              w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2 transition-all
+              w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center mx-auto mb-1 sm:mb-2 transition-all
               ${
                 currentStep > step.number
                   ? 'bg-green-500 text-white'
@@ -26,13 +26,13 @@ export const StepIndicator = ({ currentStep }) => {
             `}
           >
             {currentStep > step.number ? (
-              <CheckCircle2 className="w-5 h-5" />
+              <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5" />
             ) : (
               step.number
             )}
           </div>
           <p
-            className={`text-sm ${
+            className={`text-xs sm:text-sm truncate px-1 ${
               currentStep === step.number
                 ? 'font-medium text-primary'
                 : 'text-muted-foreground'

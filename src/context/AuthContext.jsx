@@ -1,5 +1,6 @@
 import { createContext, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiRequest, unwrapEnvelopeData, getApiBaseUrl, getApiErrorMessage, isApiDebugEnabled, clearApiCache } from '../lib/apiClient'
+import { decryptData, encryptData, isEncryptedData } from '../lib/storageCrypto'
 
 const AuthContext = createContext(null)
 
@@ -65,7 +66,7 @@ export function AuthProvider({ children }) {
   const refreshPromiseRef = useRef(null)
   const lastUserLoadAtRef = useRef(0)
 
-  const loadStoredAuth = useCallback(() => {
+  const loadStoredAuth = useCallback(async () => {
     try {
       const storedAccessToken = localStorage.getItem(STORAGE_KEYS.accessToken)
       const storedRefreshToken = localStorage.getItem(STORAGE_KEYS.refreshToken)
@@ -77,7 +78,17 @@ export function AuthProvider({ children }) {
       setAccessToken(storedAccessToken || null)
       setRefreshToken(storedRefreshToken || null)
       setSessionId(storedSessionId || null)
-      setUser(storedUser ? JSON.parse(storedUser) : null)
+      const decryptedUser = storedUser ? await decryptData(storedUser) : null
+      const nextUser = decryptedUser && typeof decryptedUser === 'object'
+        ? decryptedUser
+        : storedUser
+          ? JSON.parse(storedUser)
+          : null
+      setUser(nextUser)
+      if (nextUser && !isEncryptedData(storedUser)) {
+        const encryptedUser = await encryptData(nextUser)
+        if (encryptedUser) localStorage.setItem(STORAGE_KEYS.user, encryptedUser)
+      }
       setOtpSession(nextOtpSession)
       if (!nextOtpSession) sessionStorage.removeItem(STORAGE_KEYS.otpSession)
     } catch {
@@ -89,7 +100,7 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
-  const persistAuth = useCallback((next) => {
+  const persistAuth = useCallback(async (next) => {
     try {
       if (typeof next.accessToken !== 'undefined') {
         if (next.accessToken) localStorage.setItem(STORAGE_KEYS.accessToken, next.accessToken)
@@ -104,7 +115,8 @@ export function AuthProvider({ children }) {
         else localStorage.removeItem(STORAGE_KEYS.sessionId)
       }
       if (typeof next.user !== 'undefined') {
-        if (next.user) localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(getPersistableUser(next.user)))
+        const encryptedUser = next.user ? await encryptData(getPersistableUser(next.user)) : null
+        if (encryptedUser) localStorage.setItem(STORAGE_KEYS.user, encryptedUser)
         else localStorage.removeItem(STORAGE_KEYS.user)
       }
     } catch {
@@ -141,6 +153,7 @@ export function AuthProvider({ children }) {
         method: 'GET',
         accessToken: resolvedToken,
         sessionId,
+        cache: !force,
         cacheTtlMs: 2 * 60 * 1000,
       })
 
@@ -476,7 +489,7 @@ export function AuthProvider({ children }) {
       setIsLoading(true)
       setAuthError(null)
 
-      loadStoredAuth()
+      await loadStoredAuth()
 
       const hasTokens = Boolean(localStorage.getItem(STORAGE_KEYS.accessToken))
 
@@ -496,7 +509,7 @@ export function AuthProvider({ children }) {
           if (!cancelled) setIsLoading(false)
         } catch (e) {
           if (!cancelled) {
-            setAuthError(e?.message || 'Authentication expired')
+            setAuthError(null)
             clearLocalAuth()
             setIsLoading(false)
           }
@@ -542,7 +555,7 @@ export function AuthProvider({ children }) {
         await loadCurrentUser(accessToken)
       } catch (error) {
         if (cancelled) return
-        setAuthError(error?.message || 'Authentication expired')
+        setAuthError(null)
         clearLocalAuth()
       }
     }
@@ -564,7 +577,7 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const handleAuthExpired = () => {
-      setAuthError('Your session has expired. Please sign in again.')
+      setAuthError(null)
       clearLocalAuth()
     }
     const handleAuthRefreshed = (event) => {

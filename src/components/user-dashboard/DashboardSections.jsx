@@ -203,27 +203,12 @@ function matchesSearch(value, search) {
   return searchTextFrom(value).toLowerCase().includes(term);
 }
 
-function SectionHeader({ eyebrow, title, description, action }) {
-  return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-      <div>
-        {eyebrow ? (
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
-            {eyebrow}
-          </p>
-        ) : null}
-        <h4 className="mt-2 text-2xl font-semibold tracking-normal text-slate-950 sm:text-3xl">
-          {title}
-        </h4>
-        {description ? (
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            {description}
-          </p>
-        ) : null}
-      </div>
+function SectionHeader({ action }) {
+  return action ? (
+    <div className="flex justify-end">
       {action}
     </div>
-  );
+  ) : null;
 }
 
 function Surface({ children, className = "" }) {
@@ -388,8 +373,9 @@ function ProfileCompletion({ user }) {
   );
 }
 
-function NotificationsPanel({ items = [], compact = false, onMarkRead, onMarkAllRead }) {
+function NotificationsPanel({ items = [], compact = false, paginate = false, pageSize = 10, onMarkRead, onMarkAllRead }) {
   const [activeTab, setActiveTab] = useState("all");
+  const [page, setPage] = useState(1);
   const unreadCount = items.filter((notice) => !notice.readAt && !notice.isRead).length;
   const tabs = [
     { key: "all", label: "All" },
@@ -401,6 +387,20 @@ function NotificationsPanel({ items = [], compact = false, onMarkRead, onMarkAll
     if (activeTab === "read") return Boolean(notice.readAt || notice.isRead);
     return true;
   });
+  const totalPages = paginate ? Math.max(1, Math.ceil(filteredItems.length / pageSize)) : 1;
+  const visibleItems = paginate
+    ? filteredItems.slice((page - 1) * pageSize, page * pageSize)
+    : compact
+      ? filteredItems.slice(0, 5)
+      : filteredItems;
+
+  useEffect(() => {
+    setPage(1);
+  }, [activeTab]);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
 
   // Helper: format time relative to now (like WhatsApp)
   const formatRelativeTime = (time) => {
@@ -472,17 +472,8 @@ function NotificationsPanel({ items = [], compact = false, onMarkRead, onMarkAll
         />
       ) : (
         <div className="flex flex-col">
-          {filteredItems.map((notice) => {
+          {visibleItems.map((notice) => {
             const isRead = Boolean(notice.readAt || notice.isRead);
-            const tone = notice.severity || notice.tone;
-            // Keep the coloured dot for tone (optional – you can remove if not needed)
-            const toneDotColor =
-              tone === "success"
-                ? "bg-emerald-500"
-                : tone === "warning" || tone === "critical"
-                ? "bg-amber-500"
-                : "bg-sky-500";
-
             return (
               <div
                 key={notice.id}
@@ -548,6 +539,15 @@ function NotificationsPanel({ items = [], compact = false, onMarkRead, onMarkAll
           })}
         </div>
       )}
+      {paginate && totalPages > 1 ? (
+        <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
+          <p className="text-xs font-semibold text-slate-500">Page {page} of {totalPages}</p>
+          <div className="flex gap-2">
+            <button type="button" disabled={page === 1} onClick={() => setPage((current) => current - 1)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50">Previous</button>
+            <button type="button" disabled={page === totalPages} onClick={() => setPage((current) => current + 1)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50">Next</button>
+          </div>
+        </div>
+      ) : null}
     </Surface>
   );
 }
@@ -596,7 +596,7 @@ function TransactionsTable({ transactions, limit = null, showViewAll = false, pa
           disabled={!accessToken || exporting}
           className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
         >
-          <Download size={16} />
+          <Download   className="text-[#8cc63f]" size={16} />
           {exporting ? "Sending..." : "Email export"}
         </button>
       </div>
@@ -798,7 +798,7 @@ function DashboardOverview({ stats, transactions, memberName, user, notification
               onClick={onToggleValues}
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/20"
             >
-              {showValues ? <EyeOff size={16} /> : <Eye size={16} />}
+              {showValues ? <EyeOff   className="text-[#8cc63f]" size={16} /> : <Eye   className="text-[#8cc63f]" size={16} />}
              
             </button>
           </div>
@@ -843,7 +843,7 @@ function DashboardOverview({ stats, transactions, memberName, user, notification
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.8fr)]">
         <div className="space-y-5">
           <TransactionsTable transactions={transactions} limit={5} showViewAll accessToken={accessToken} />
-          <NotificationsPanel items={notifications} />
+          <NotificationsPanel items={notifications} compact />
         </div>
         <div className="space-y-5">
           <QuickActions />
@@ -1106,7 +1106,8 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
           {preview ? (
             <img src={preview} alt="Profile preview" className="h-full w-full object-cover" />
           ) : (
-            <UserRound size={32} />
+            <UserRound
+              className="text-[#8cc63f]" size={32} />
           )}
         </div>
         <div>
@@ -1115,7 +1116,9 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
         </div>
       </div>
       <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
-        <Camera size={17} />
+        <Camera 
+          className="text-[#8cc63f]"
+          size={17} />
         Upload photo
         <input type="file" accept="image/*" className="sr-only" onChange={handleImage} />
       </label>
@@ -1125,7 +1128,8 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
   {/* Personal information – read‑only */}
   <div className="rounded-lg border p-6 space-y-4">
     <div className="flex items-center gap-2">
-      <UserRound className="h-5 w-5 text-muted-foreground" />
+      <UserRound
+        className="text-[#8cc63f] h-5 w-5" />
       <h3 className="text-lg font-semibold">Personal information</h3>
     </div>
 
@@ -1211,7 +1215,7 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
       disabled={saving}
       className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
     >
-      {saving ? <RefreshCw className="animate-spin" size={17} /> : <CheckCircle2 size={17} />}
+      {saving ? <RefreshCw   className="text-[#8cc63f] animate-spin" size={17} /> : <CheckCircle2  className="text-[#8cc63f]" size={17} />}
       {saving ? "Saving changes" : "Save changes"}
     </button>
   </div>
@@ -1309,7 +1313,8 @@ function SecuritySection({ user, accessToken, activeSessions = [], loginHistory 
         <Surface className="p-5">
           <div className="mb-5 flex items-center gap-3">
             <div className="grid h-10 w-10 place-items-center rounded-lg bg-slate-100 text-slate-700">
-              <KeyRound size={20} />
+              <KeyRound
+                className="text-[#8cc63f]" size={20} />
             </div>
             <div>
               <h5 className="text-base font-semibold tracking-normal text-slate-950">Change password</h5>
@@ -1390,7 +1395,8 @@ function SecuritySection({ user, accessToken, activeSessions = [], loginHistory 
                 disabled
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-500"
               >
-                <Fingerprint size={17} />
+                <Fingerprint
+                className="text-[#8cc63f]" size={17} />
                 Coming soon
               </button>
             </div>
@@ -1415,12 +1421,14 @@ function SecuritySection({ user, accessToken, activeSessions = [], loginHistory 
               <div key={session.id || `${session.device}-${session.ip}`} className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-start gap-3">
                   <div className="grid h-10 w-10 place-items-center rounded-lg bg-slate-100 text-slate-600">
-                    <MonitorSmartphone size={19} />
+                    <MonitorSmartphone
+                      className="text-[#8cc63f]" size={19} />
                   </div>
                   <div>
                     <p className="font-semibold text-slate-950">{session.device}</p>
                     <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500">
-                      <MapPin size={14} />
+                      <MapPin 
+                        className="text-[#8cc63f]" size={14} />
                       {session.location}
                       <span>{session.ip}</span>
                     </p>
@@ -1580,7 +1588,9 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
         
         action={
           <button className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 py-3 text-sm font-semibold text-white">
-            <Plus size={17} />
+            <Plus
+              className="text-[#8cc63f]"
+               size={17} />
             New application
           </button>
         }
@@ -1611,7 +1621,9 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
             <Field label="Amount" name="amount" type="number" value={loanForm.amount} onChange={(event) => setLoanForm((current) => ({ ...current, amount: event.target.value }))} />
             <Field label="Duration (months)" name="duration" type="number" value={loanForm.duration} onChange={(event) => setLoanForm((current) => ({ ...current, duration: event.target.value }))} />
             <button className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white">
-              <FileText size={17} />
+              <FileText
+                className="text-[#8cc63f]"
+                 size={17} />
               Request loan
             </button>
           </form>
@@ -1628,7 +1640,8 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
             </label>
             <Field label="Repayment amount" name="repayAmount" type="number" value={repayAmount} onChange={(event) => setRepayAmount(event.target.value)} />
             <button disabled={!selectedRepayLoanId || !repayAmount} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-3 text-sm font-semibold text-emerald-800 disabled:opacity-60">
-              <CreditCard size={17} />
+              <CreditCard
+                className="text-[#8cc63f]" size={17} />
               Start repayment
             </button>
           </form>
@@ -1697,7 +1710,7 @@ function LoansTable({ loans }) {
         <h5 className="text-base font-semibold tracking-normal text-slate-950">My loan records</h5>
         <p className="text-sm text-slate-500">Requests, approvals, active balances, and repayments.</p>
       </div>
-      {loans.length === 0 ? <EmptyState icon={FileText} title="No loans found" description="Loan requests and repayments will appear here." /> : (
+      {loans.length === 0 ? <EmptyState   className="text-[#8cc63f]" icon={FileText} title="No loans found" description="Loan requests and repayments will appear here." /> : (
         <div className="overflow-x-auto">
           <table className="min-w-[720px]">
             <thead><tr className="bg-slate-50"><th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">Type</th><th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">Amount</th><th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">Balance</th><th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">Status</th><th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">Date</th></tr></thead>
@@ -1736,7 +1749,7 @@ function LoanCalculator({ product, amount, duration }) {
               <p className="mt-1 text-sm text-slate-500">Tune amount, duration, and optional extra payments before applying.</p>
             </div>
             <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-emerald-50 text-emerald-700">
-              <Calculator size={20} />
+              <Calculator   className="text-[#8cc63f]" size={20} />
             </div>
           </div>
 
@@ -1835,7 +1848,9 @@ function LoanCalculator({ product, amount, duration }) {
 function SimplePage({ eyebrow, title, description, icon: Icon, children }) {
   return (
     <div className="space-y-6">
-      <SectionHeader eyebrow={eyebrow} title={title} description={description} />
+      {eyebrow || title || description ? (
+        <SectionHeader eyebrow={eyebrow} title={title} description={description} />
+      ) : null}
       <Surface className="p-8">
         <div className="flex flex-col gap-5 md:flex-row md:items-start">
           
@@ -1866,46 +1881,16 @@ function PortfolioPage({ stats, transactions, shares, search, user, showValues, 
             onClick={onToggleValues}
             className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
           >
-            {showValues ? <EyeOff size={16} /> : <Eye size={16} />}
-            {showValues ? "Hide data" : "Show data"}
+            {showValues ? <EyeOff   className="text-[#8cc63f]" size={16} /> : <Eye   className="text-[#8cc63f]" size={16} />}
+            
           </button>
         )}
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {portfolioStats.map((item) => (
-          <StatCard
-            key={item.label}
-            icon={WalletCards}
-            label={item.label}
-            value={item.value}
-            
-            tone={item.tone}
-            blur={!showValues}
-          />
-        ))}
-      </div>
+      
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.6fr)]">
-        <Surface className="p-5">
-          <div className="mb-5 flex items-center justify-between gap-3">
-            <div>
-              <h5 className="text-base font-semibold tracking-normal text-slate-950">Portfolio summary</h5>
-              <p className="text-sm text-slate-500">Your latest SACCO holdings and activity.</p>
-            </div>
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{filteredTransactions.length} transactions</span>
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Member contributions</p>
-              <p className="mt-2 text-2xl font-semibold text-slate-950">{showValues ? formatCurrency(stats.monthlyContributions) : <span className="inline-block text-slate-950 blur-sm">{formatCurrency(stats.monthlyContributions)}</span>}</p>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Active loans</p>
-              <p className="mt-2 text-2xl font-semibold text-slate-950">{showValues ? stats.activeLoans : <span className="inline-block text-slate-950 blur-sm">{stats.activeLoans}</span>}</p>
-            </div>
-          </div>
-        </Surface>
+        
 
         <ReadOnlyPortfolioDetails />
       </div>
@@ -2078,7 +2063,7 @@ function ReportsPage({ accessToken }) {
             </select>
           </label>
           <button disabled={sending} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60">
-            <MailCheck size={17} />
+            <MailCheck   className="text-[#8cc63f]" size={17} />
             {sending ? "Sending..." : "Email report"}
           </button>
         </form>
@@ -2095,7 +2080,7 @@ function SavingsPage({ stats, transactions = [], accessToken, onRefresh, showVal
   });
 
   return (
-    <SimplePage eyebrow="Deposit" icon={PiggyBank}>
+    <SimplePage icon={PiggyBank}>
       {message ? (
         <div className={`mb-4 rounded-lg border px-4 py-3 text-sm font-medium ${message.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800"}`}>
           {message.text}
@@ -2108,7 +2093,7 @@ function SavingsPage({ stats, transactions = [], accessToken, onRefresh, showVal
           onClick={onToggleValues}
           className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
         >
-          {showValues ? <EyeOff size={16} /> : <Eye size={16} />}
+          {showValues ? <EyeOff   className="text-[#8cc63f]" size={16} /> : <Eye   className="text-[#8cc63f]" size={16} />}
           
         </button>
       </div>

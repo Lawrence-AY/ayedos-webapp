@@ -1,4 +1,4 @@
-import { useContext } from "react";
+import { useContext, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -20,6 +20,16 @@ import { AuthContext } from "../../context/AuthContext.jsx";
 import { getDashboardPath } from "../../utils/dashboardRoutes.js";
 import dashboardLogo from "../../assets/Dashboard.png";
 import dashboardLogoDark from "../../assets/Dashboard-dark.png";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const memberNavItems = [
   { label: "Dashboard", suffix: "", exact: true, icon: LayoutDashboard },
@@ -74,12 +84,15 @@ const navItems = {
   MEMBER: memberNavItems,
 };
 
-function NavLinkItem({ to, label, icon: Icon, exact = false, onClick, collapsed = false }) {
+function NavLinkItem({ to, label, icon: Icon, exact = false, onClick, onClearSearch, collapsed = false }) {
   return (
     <NavLink
       to={to}
       end={exact}
-      onClick={onClick}
+      onClick={() => {
+        onClearSearch?.();
+        onClick?.();
+      }}
       className={({ isActive }) =>
         [
           `group relative flex items-center gap-3 rounded-lg px-3.5 py-3 text-sm font-semibold transition-all duration-200 ${
@@ -113,14 +126,16 @@ function NavLinkItem({ to, label, icon: Icon, exact = false, onClick, collapsed 
   );
 }
 
-export default function Sidebar({ open = false, onClose, collapsed = false }) {
+export default function Sidebar({ open = false, onClose, collapsed = false, onClearSearch }) {
   const { user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
+  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const role = String(user?.role || "MEMBER").toUpperCase();
   const items = navItems[role] || navItems.MEMBER;
 
   async function handleLogout() {
     await logout();
+    setLogoutDialogOpen(false);
     navigate("/login", { replace: true });
   }
 
@@ -145,9 +160,9 @@ export default function Sidebar({ open = false, onClose, collapsed = false }) {
         }`}
       >
         {/* Header */}
-        <div className="flex min-h-20 items-center justify-between gap-3 border-b border-emerald-900/10 px-5 dark:border-slate-800">
+        <div className="flex min-h-17 items-center justify-between gap-3 border-b border-emerald-900/10 px-5 dark:border-slate-800">
          <div className="flex min-w-0 items-center gap-2">
-  <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-white   ring-1 ring-emerald-900/10 dark:bg-slate-900 dark:ring-slate-800">
+  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg    dark:bg-slate-900 dark:ring-slate-800">
     {/* Light mode logo */}
     <img 
       src={dashboardLogo}
@@ -197,6 +212,7 @@ export default function Sidebar({ open = false, onClose, collapsed = false }) {
               icon={item.icon}
               exact={item.exact}
               onClick={onClose}
+              onClearSearch={onClearSearch}
               collapsed={collapsed}
             />
           ))}
@@ -207,7 +223,7 @@ export default function Sidebar({ open = false, onClose, collapsed = false }) {
            
           <button
             type="button"
-            onClick={handleLogout}
+            onClick={() => setLogoutDialogOpen(true)}
             className="group flex w-full items-center gap-3 rounded-lg px-3.5 py-3 text-sm font-semibold text-slate-600 transition-all duration-200 hover:bg-rose-50 hover:text-rose-700 dark:text-slate-300 dark:hover:bg-rose-950/30 dark:hover:text-rose-400"
           >
             <LogOut
@@ -219,6 +235,22 @@ export default function Sidebar({ open = false, onClose, collapsed = false }) {
           </button>
         </div>
       </motion.aside>
+      <AlertDialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle
+        >Confirm logout</AlertDialogTitle>
+            <AlertDialogDescription>
+           
+              Are you sure you want to log out of your AYEDOS SACCO account?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleLogout}>Logout</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
