@@ -24,12 +24,10 @@ import ReportsPage from "../components/user-dashboard/ReportsPage.jsx";
 import SavingsPage from "../components/user-dashboard/SavingsPage.jsx";
 import SearchResultsPage from "../components/user-dashboard/SearchResultsPage.jsx";
 import SecuritySection from "../components/user-dashboard/SecuritySection.jsx";
-import SectionHeader from "../components/user-dashboard/SectionHeader.jsx";
 import SimplePage from "../components/user-dashboard/SimplePage.jsx";
 import SkeletonDashboard from "../components/user-dashboard/SkeletonDashboard.jsx";
 import TransactionsTable from "../components/user-dashboard/TransactionsTable.jsx";
 import { MIN_SHARE_CAPITAL, matchesSearch, normalizeStatus } from "../components/user-dashboard/dashboardUtils.js";
-import { DashboardHero, formatCurrency } from "../components/dashboard/EnterpriseDashboard.jsx";
 
 export default function UserDashboard() {
   const location = useLocation();
@@ -62,7 +60,7 @@ export default function UserDashboard() {
         getMyLoans(accessToken),
         getMyShares(accessToken),
         getAuthSessions(accessToken),
-        getMyNotifications(accessToken),
+        getMyNotifications(accessToken, { limit: 100 }),
       ]);
       const sessions = results[3].status === "fulfilled" && Array.isArray(results[3].value) ? results[3].value : [];
 
@@ -200,16 +198,7 @@ export default function UserDashboard() {
     if (isDashboardHome) {
       return (
         <div className="space-y-6">
-        <DashboardHero
-          eyebrow="Member banking workspace"
-          title={`Welcome back, ${memberName}`}
-          description="Track savings, share capital, loans, transactions, and account security from one secure AYEDOS SACCO dashboard."
-          metrics={[
-            { label: "Savings", value: formatCurrency(stats.totalSavings) },
-            { label: "Share capital", value: formatCurrency(stats.shareCapital) },
-            { label: "Active loans", value: stats.activeLoans },
-          ]}
-        />
+      
         <DashboardOverview
           stats={stats}
           transactions={data.transactions.filter((transaction) => matchesSearch(transaction, search))}
@@ -226,8 +215,6 @@ export default function UserDashboard() {
     if (path.includes("/transactions")) {
       return (
         <div className="space-y-6">
-          <SectionHeader eyebrow="Transactions" 
-         />
           <TransactionsTable
             transactions={data.transactions.filter((transaction) => matchesSearch(transaction, search))}
             accessToken={accessToken}
@@ -266,9 +253,10 @@ export default function UserDashboard() {
     if (path.includes("/notifications")) {
       return (
         <div className="space-y-6">
-          <SectionHeader eyebrow="Notifications"  />
           <NotificationsPanel
             items={data.notifications}
+            paginate
+            pageSize={10}
             onMarkRead={async (id) => {
               await markNotificationRead(id, accessToken);
               await loadDashboardData({ showLoading: false });
@@ -294,8 +282,8 @@ export default function UserDashboard() {
     if (path.includes("/support")) {
       return (
         <SimplePage eyebrow="Support"  icon={Bell}>
-          <div className="grid gap-3 md:grid-cols-3">
-            {["Request statement", "Report login issue", "Contact loans desk"].map((item) => (
+          <div className="grid gap-12 md:grid-cols-3">
+            {["Request statement", "Contact loans desk"].map((item) => (
               <button key={item} className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-4 text-left text-sm font-semibold text-slate-800 transition hover:bg-emerald-50">
                 {item}
               </button>
@@ -320,7 +308,7 @@ export default function UserDashboard() {
 
   return (
     <div className="enterprise-shell">
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} collapsed={sidebarCollapsed} />
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} collapsed={sidebarCollapsed} onClearSearch={() => setSearch('')} />
       <main className={`min-h-screen transition-all ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-62"}`}>
         <TopNavbar
           sidebarOpen={sidebarOpen}

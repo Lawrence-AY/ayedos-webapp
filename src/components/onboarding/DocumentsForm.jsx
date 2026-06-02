@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 import { ArrowLeft } from 'lucide-react';
 import { FileUpload } from './FileUpload';
 import { GrLinkNext } from "react-icons/gr";
@@ -7,17 +8,19 @@ import { GrLinkNext } from "react-icons/gr";
 export const DocumentsForm = ({
   formData,
   onFileChange,
+  idType,
+  idDocument,
+  onIdDocumentChange,
   isLoading,
   onSubmit,
   onBack,
 }) => {
   const { idFile, photoFile } = formData;
 
-  // State for preview URLs
   const [idPreview, setIdPreview] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
+  const [docPreview, setDocPreview] = useState(null);
 
-  // Generate preview URLs when files change
   useEffect(() => {
     if (idFile && idFile instanceof File) {
       const url = URL.createObjectURL(idFile);
@@ -38,11 +41,52 @@ export const DocumentsForm = ({
     }
   }, [photoFile]);
 
+  useEffect(() => {
+    if (idDocument && idDocument instanceof File) {
+      const url = URL.createObjectURL(idDocument);
+      setDocPreview(url);
+      return () => URL.revokeObjectURL(url);
+    } else {
+      setDocPreview(null);
+    }
+  }, [idDocument]);
+
   return (
     <form onSubmit={onSubmit} className="space-y-5">
-      {/* Two upload columns side by side */}
-      <div className="flex gap-4">
-        {/* ID Front Column */}
+      {/* Identity Document Upload (for Passport / Driver's License) */}
+      {(idType === 'passport' || idType === 'driverlicense') && (
+        <div className="space-y-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <Label htmlFor="idDocument">
+            Upload {idType === 'passport' ? 'Passport' : "Driver's License"} <span className="text-destructive">*</span>
+          </Label>
+          <FileUpload
+            label={`Upload ${idType === 'passport' ? 'Passport' : "Driver's License"} (.jpeg, .png, .jpg, .pdf)`}
+            accept=".pdf,.jpeg,.jpg,.png"
+            onFileChange={(file) => onIdDocumentChange?.('idDocument', file)}
+            required
+            file={idDocument}
+          />
+          {docPreview && (
+            <div className="mt-2">
+              <p className="text-sm text-gray-600 mb-1">Preview:</p>
+              {idDocument?.type?.startsWith('image/') ? (
+                <img
+                  src={docPreview}
+                  alt="Document Preview"
+                  className="w-full max-h-40 rounded-lg border shadow-sm object-contain bg-white"
+                />
+              ) : (
+                <div className="w-full max-h-40 rounded-lg border shadow-sm p-4 bg-white text-center">
+                  <p className="text-sm text-gray-600">PDF file selected: {idDocument?.name}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Two upload columns */}
+      <div className="flex flex-col sm:flex-row gap-4">
         <div className="flex-1">
           <FileUpload
             label="Upload ID Front (.jpeg, .png, .jpg)"
@@ -62,8 +106,6 @@ export const DocumentsForm = ({
             </div>
           )}
         </div>
-
-        {/* ID Back Column */}
         <div className="flex-1">
           <FileUpload
             label="ID Back (.jpeg, .png, .jpg)"
@@ -85,8 +127,8 @@ export const DocumentsForm = ({
         </div>
       </div>
 
-      {/* Buttons with gap‑4 and consistent styling */}
-      <div className="flex justify-between gap-4">
+      {/* Buttons - uniform styling */}
+      <div className="flex flex-col sm:flex-row justify-between gap-4">
         <Button
           type="button"
           className="p-2 h-13 bg-[#003a16] text-white rounded-md flex items-center justify-center gap-2"

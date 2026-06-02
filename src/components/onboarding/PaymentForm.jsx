@@ -4,34 +4,30 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { GrLinkNext } from 'react-icons/gr';
-import { ArrowLeft, Phone, Receipt, Loader2, XCircle, CircleCheck, Info } from 'lucide-react';
+import { ArrowLeft, Phone, Receipt, XCircle, CircleCheck, Info } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
 } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
-import { apiRequest, unwrapEnvelopeData } from '../../lib/apiClient';
+import { apiRequest, unwrapEnvelopeData, getApiErrorMessage } from '../../lib/apiClient';
 import { AuthContext } from '../../context/AuthContext.jsx';
 
 export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, userData }) => {
-  const { accessToken, loadCurrentUser } = useContext(AuthContext);
+  const { accessToken, loadCurrentUser, updateCurrentUser } = useContext(AuthContext);
 
   const [paymentMethod, setPaymentMethod] = useState('stk');
   const [stkPhone, setStkPhone] = useState('');
   const [mpesaReceipt, setMpesaReceipt] = useState('');
   const [error, setError] = useState('');
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [showWaitingDialog, setShowWaitingDialog] = useState(false);
   const [waitingStatus, setWaitingStatus] = useState('waiting');
   const [progress, setProgress] = useState(0);
+  const [mpesaReferenceDisplay, setMpesaReferenceDisplay] = useState(null);
   const pollingInterval = useRef(null);
   const progressInterval = useRef(null);
-
+ s
   const REGISTRATION_FEE = 1;
 
   // Helper: format phone to 254XXXXXXXXX
@@ -57,8 +53,19 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
     };
   }, []);
 
+  // Convert file to base64 for sending to backend
+  const fileToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      if (!file) return resolve(null);
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
   // Build application payload for POST /api/applications
-  const buildApplicationPayload = () => {
+  const buildApplicationPayload = async () => {
     const fullName = [userData.firstName, userData.secondName, userData.surname]
       .filter(Boolean)
       .join(' ')
@@ -71,23 +78,38 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
     else if (userData.occupation === 'Student') membershipType = 'STUDENT';
     else if (userData.occupation === 'Retired') membershipType = 'RETIRED';
 
-    return {
+    // Determine identityNumber based on idType
+    let identityNumber = userData.nationalId;
+    if (userData.idType === 'passport') identityNumber = userData.passportNumber;
+    if (userData.idType === 'driverlicense') identityNumber = userData.driverLicenseNumber;
+
+    // Base64 encode identity document if present
+    let idDocumentBase64 = null;
+    if (userData.idDocument instanceof File) {
+      idDocumentBase64 = await fileToBase64(userData.idDocument);
+    }
+
+    const application = {
       name: fullName,
       email: userData.email,
       phone: formatPhoneForBackend(userData.phone),
-      nationalId: userData.nationalId,
-      kraPin: userData.kraPin || null,
+      identityType: userData.idType || 'national',
+      identityNumber: identityNumber || userData.nationalId || '',
+      idDocument: idDocumentBase64,
       occupation: userData.occupation || null,
       address: userData.poBox ? `${userData.poBox}, ${userData.county}, ${userData.subCounty}` : null,
       type: membershipType,
       consentGiven: userData.termsAccepted,
     };
+    if (userData.kraPin?.trim()) application.kraPin = userData.kraPin.trim();
+    return application;
   };
 
   const createApplication = async () => {
+    const payload = await buildApplicationPayload();
     const res = await apiRequest('/api/applications', {
       method: 'POST',
-      body: buildApplicationPayload(),
+      body: payload,
       accessToken,
     });
     if (!res.ok) throw new Error(res.json?.message || 'Application creation failed');
@@ -102,111 +124,126 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
       .join(' ')
       .trim();
 
+    let identityNumber = userData.nationalId;
+    if (userData.idType === 'passport') identityNumber = userData.passportNumber;
+    if (userData.idType === 'driverlicense') identityNumber = userData.driverLicenseNumber;
+
+    const profile = {
+      name: fullName,
+      phone: formatPhoneForBackend(userData.phone),
+      nationalId: identityNumber || userData.nationalId,
+      occupation: userData.occupation || '',
+      address: userData.poBox ? `${userData.poBox}, ${userData.county}, ${userData.subCounty}` : '',
+      consentGiven: Boolean(userData.termsAccepted),
+      consentGivenAt: new Date().toISOString(),
+    };
+    if (userData.kraPin?.trim()) profile.kraPin = userData.kraPin.trim();
+
     const res = await apiRequest('/api/member/profile', {
       method: 'PUT',
       accessToken,
-      body: {
-        name: fullName,
-        phone: formatPhoneForBackend(userData.phone),
-        nationalId: userData.nationalId,
-        kraPin: userData.kraPin || null,
-        occupation: userData.occupation || null,
-        address: userData.poBox ? `${userData.poBox}, ${userData.county}, ${userData.subCounty}` : null,
-        consentGiven: Boolean(userData.termsAccepted),
-        consentGivenAt: new Date().toISOString(),
-      },
+      body: profile,
     });
 
     if (!res.ok) {
       throw new Error(res.json?.message || 'Could not finalize onboarding profile');
     }
 
-    await loadCurrentUser?.(accessToken);
+    updateCurrentUser?.(unwrapEnvelopeData(res.json));
+    await loadCurrentUser?.(accessToken, { force: true });
   };
 
   // Poll STK status and verify payment when paid
   const startPolling = (checkoutId, appId, rawPhone) => {
-  if (pollingInterval.current) clearInterval(pollingInterval.current);
-  const formattedPhone = formatPhoneForBackend(rawPhone);
-  const startedAt = Date.now();
-  let inFlight = false;
+    if (pollingInterval.current) clearInterval(pollingInterval.current);
+    const formattedPhone = formatPhoneForBackend(rawPhone);
+    const startedAt = Date.now();
+    let inFlight = false;
 
-  const checkPaymentStatus = async () => {
-    if (inFlight) return;
-    inFlight = true;
-    try {
-      const result = await apiRequest(`/api/stk-status?checkoutRequestId=${encodeURIComponent(checkoutId)}`, {
-        method: 'GET',
-        accessToken,
-        timeoutMs: 8000,
-      });
-      const data = unwrapEnvelopeData(result.json);
-
-      // Ensure data exists and status is paid
-      if (data && data.status === 'paid') {
-        clearInterval(pollingInterval.current);
-        pollingInterval.current = null;
-
-        // Ensure we actually have a receipt number before calling verify
-        const receipt = data.mpesaReceipt;
-        if (!receipt) {
-           return; 
-        }
-
-        const payload = {
-          paymentReference: receipt,
-          phone: formattedPhone,
-          checkoutRequestId: checkoutId // Added for the updated backend logic
-        };
-
-        const verifyRes = await apiRequest(`/api/applications/${appId}/verify-payment`, {
-          method: 'POST',
-          body: payload,
+    const checkPaymentStatus = async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const result = await apiRequest(`/api/stk-status?checkoutRequestId=${encodeURIComponent(checkoutId)}`, {
+          method: 'GET',
           accessToken,
+          timeoutMs: 8000,
+          cache: false,
         });
+        const data = unwrapEnvelopeData(result.json);
 
-        if (verifyRes.ok) {
-          await markOnboardingComplete();
+        // Ensure data exists and status is paid
+        if (data && data.status === 'paid') {
+          clearInterval(pollingInterval.current);
+          pollingInterval.current = null;
+
+          // Ensure we actually have a receipt number before calling verify
+          const receipt = data.mpesaReceipt;
+          if (!receipt) {
+            return;
+          }
+
+          const payload = {
+            paymentReference: receipt,
+            paymentPhone: formattedPhone,
+            checkoutRequestId: checkoutId,
+          };
+
+          const verifyRes = await apiRequest(`/api/applications/${appId}/verify-payment`, {
+            method: 'POST',
+            body: payload,
+            accessToken,
+          });
+
+          if (verifyRes.ok) {
+            await markOnboardingComplete();
+            if (progressInterval.current) clearInterval(progressInterval.current);
+            setProgress(100);
+            setWaitingStatus('success');
+            setMpesaReferenceDisplay(receipt);
+            setTimeout(() => {
+              setShowWaitingDialog(false);
+              setLoading(false);
+              onPaymentSuccess(receipt);
+            }, 1500);
+          } else {
+            throw new Error('Verification failed on server');
+          }
+        } else if (data && data.status === 'failed') {
+          clearInterval(pollingInterval.current);
+          pollingInterval.current = null;
           if (progressInterval.current) clearInterval(progressInterval.current);
-          setProgress(100);
-          setWaitingStatus('success');
-          setTimeout(() => {
-            setShowWaitingDialog(false);
-            setLoading(false);
-            onPaymentSuccess();
-          }, 500);
-        } else {
-          throw new Error('Verification failed on server');
+          setWaitingStatus('failed');
+          setError('Payment failed or was cancelled. Please try again.');
+          setLoading(false);
+        } else if (Date.now() - startedAt > 90 * 1000) {
+          clearInterval(pollingInterval.current);
+          pollingInterval.current = null;
+          if (progressInterval.current) clearInterval(progressInterval.current);
+          setWaitingStatus('failed');
+          setError('Payment confirmation is taking too long. If you paid, use the receipt option to complete onboarding.');
+          setLoading(false);
         }
-      } else if (data && data.status === 'failed') {
-        clearInterval(pollingInterval.current);
-        pollingInterval.current = null;
-        if (progressInterval.current) clearInterval(progressInterval.current);
-        setWaitingStatus('failed');
-        setError('Payment failed or was cancelled. Please try again.');
-        setLoading(false);
-      } else if (Date.now() - startedAt > 90 * 1000) {
-        clearInterval(pollingInterval.current);
-        pollingInterval.current = null;
-        if (progressInterval.current) clearInterval(progressInterval.current);
-        setWaitingStatus('failed');
-        setError('Payment confirmation is taking too long. If you paid, use the receipt option to complete onboarding.');
-        setLoading(false);
+      } catch (err) {
+        const message = getApiErrorMessage(err) || 'Unable to confirm payment status. Please try again.';
+        setError(message);
+      } finally {
+        inFlight = false;
       }
-    } catch {
-      // Don't necessarily clear interval on a single network glitch
-    } finally {
-      inFlight = false;
-    }
+    };
+
+    checkPaymentStatus();
+    pollingInterval.current = setInterval(checkPaymentStatus, 1500);
   };
 
-  checkPaymentStatus();
-  pollingInterval.current = setInterval(checkPaymentStatus, 1500);
-};
-
-  // STK Push flow
+  // STK Push flow - NO confirmation dialog, processes immediately
   const handleStkPayment = async () => {
     setError('');
+    if (!stkPhone.trim()) {
+      toast.error('Please enter your M-PESA phone number');
+      return;
+    }
+
     setShowWaitingDialog(true);
     setWaitingStatus('waiting');
     setProgress(0);
@@ -242,15 +279,21 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
     } catch (err) {
       if (progressInterval.current) clearInterval(progressInterval.current);
       setWaitingStatus('failed');
-      setError(err.name === 'AbortError' ? 'Payment prompt service timed out. Please try again.' : err.message);
+      const message = getApiErrorMessage(err) || (err?.message ?? 'Payment prompt service failed. Please try again.');
+      setError(message);
       setLoading(false);
       setTimeout(() => setShowWaitingDialog(false), 3000);
     }
   };
 
-  // Manual Paybill flow (already paid)
+  // Manual Paybill flow (already paid) - NO confirmation dialog
   const handlePaybillPayment = async () => {
     setError('');
+    if (!mpesaReceipt.trim()) {
+      toast.error('Please enter the M-PESA receipt number');
+      return;
+    }
+
     setLoading(true);
     setProgress(30);
 
@@ -260,9 +303,10 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
 
     try {
       const appId = await createApplication();
+      const receiptValue = mpesaReceipt.trim();
       const payload = {
-        paymentReference: mpesaReceipt.trim(),
-        phone: formatPhoneForBackend(userData.phone),
+        paymentReference: receiptValue,
+        paymentPhone: formatPhoneForBackend(userData.phone),
       };
       const verifyRes = await apiRequest(`/api/applications/${appId}/verify-payment`, {
         method: 'POST',
@@ -273,15 +317,18 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
       await markOnboardingComplete();
       clearInterval(interval);
       setProgress(100);
-      setTimeout(() => onPaymentSuccess(), 500);
+      setMpesaReferenceDisplay(receiptValue);
+      setTimeout(() => onPaymentSuccess(receiptValue), 500);
     } catch (err) {
       clearInterval(interval);
-      setError(err.message || 'Payment registration failed');
+      const message = getApiErrorMessage(err) || (err?.message ?? 'Payment registration failed');
+      setError(message);
       setLoading(false);
     }
   };
 
-  const openConfirmDialog = () => {
+  // Direct submit handler - processes immediately without confirmation dialog
+  const handleSubmit = () => {
     setError('');
     if (paymentMethod === 'stk' && !stkPhone.trim()) {
       toast.error('Please enter your M-PESA phone number');
@@ -291,11 +338,7 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
       toast.error('Please enter the M-PESA receipt number');
       return;
     }
-    setShowConfirmDialog(true);
-  };
 
-  const handleProceed = () => {
-    setShowConfirmDialog(false);
     if (paymentMethod === 'stk') {
       handleStkPayment();
     } else {
@@ -305,18 +348,13 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
 
   return (
     <div className="space-y-6">
-   
-      
-        
-      
-
       {/* Payment Method Selection */}
       <div className="space-y-3">
         <Label className="text-gray-700">Select Payment Method</Label>
         <RadioGroup
           value={paymentMethod}
           onValueChange={setPaymentMethod}
-          className="flex flex-row gap-4"
+          className="flex flex-col sm:flex-row gap-3"
         >
           <div
             className={`flex-1 flex items-center gap-3 p-4 border rounded-xl transition cursor-pointer ${
@@ -328,8 +366,8 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
           >
             <RadioGroupItem value="stk" id="stk" />
             <Label htmlFor="stk" className="flex items-center gap-2 cursor-pointer flex-1">
-              <Phone className="w-5 h-5 text-[#8cc63f]" />
-              <span className="font-medium">Pay via STK Push (M-PESA prompt)</span>
+              <Phone className="w-5 h-5 text-[#8cc63f] shrink-0" />
+              <span className="font-medium text-sm md:text-base">Pay via Mpesa Prompt</span>
             </Label>
           </div>
 
@@ -343,12 +381,24 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
           >
             <RadioGroupItem value="paybill" id="paybill" />
             <Label htmlFor="paybill" className="flex items-center gap-2 cursor-pointer flex-1">
-              <Receipt className="w-5 h-5 text-[#8cc63f]" />
-              <span className="font-medium">Use Paybill </span>
+              <Receipt className="w-5 h-5 text-[#8cc63f] shrink-0" />
+              <span className="font-medium text-sm md:text-base">Use Paybill</span>
             </Label>
           </div>
         </RadioGroup>
       </div>
+
+      {/* M-Pesa Reference display after successful payment */}
+      {mpesaReferenceDisplay && (
+        <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-center">
+          <CircleCheck className="w-6 h-6 text-green-500 mx-auto mb-2" />
+          <p className="text-sm font-semibold text-green-800">Payment Confirmed</p>
+          <p className="text-xs text-green-600 mt-1">M-Pesa Reference Code:</p>
+          <p className="text-lg font-mono font-bold text-green-900 tracking-wider mt-1">
+            {mpesaReferenceDisplay}
+          </p>
+        </div>
+      )}
 
       {/* STK Push Section */}
       {paymentMethod === 'stk' && (
@@ -380,9 +430,9 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
 
       {/* Paybill (Manual) Section */}
       {paymentMethod === 'paybill' && (
-        <div className="space-y-4 bg-gradient-to-r from-[#8cc63f]/10 to-transparent border border-[#8cc63f]/20 rounded-xl p-4">
+        <div className="space-y-4 bg-linear-to-r from-[#8cc63f]/10 to-transparent border border-[#8cc63f]/20 rounded-xl p-4">
           <div className="flex items-start gap-2">
-            <Info className="w-5 h-5 text-[#8cc63f] mt-0.5 flex-shrink-0" />
+            <Info className="w-5 h-5 text-[#8cc63f] mt-0.5 shrink-0" />
             <div className="space-y-2">
               <p className="text-sm font-semibold text-[#8cc63f]">How to pay via M-PESA Paybill:</p>
               <ol className="text-sm text-gray-700 list-decimal list-inside space-y-1 ml-2">
@@ -428,7 +478,7 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
         </div>
       )}
 
-      <div className="flex justify-between gap-4">
+      <div className="flex flex-col sm:flex-row justify-between gap-4">
         <Button
           type="button"
           className="p-2 h-13 bg-[#003a16] text-white rounded-md flex items-center justify-center gap-2"
@@ -446,70 +496,38 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
           type="button"
           className="p-2 h-13 bg-[#8cc63f] text-white rounded-md flex items-center justify-center gap-2"
           size="lg"
-          onClick={openConfirmDialog}
+          onClick={handleSubmit}
           disabled={isLoading}
         >
           <div className="flex flex-col text-left">
             <span className="text-xs font-light">Next</span>
-            <span className="font-semibold">Confirm Payment</span>
+            <span className="font-semibold">Make Payment</span>
           </div>
           <GrLinkNext />
         </Button>
       </div>
-
-      {/* Confirmation Dialog */}
-      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
-        <DialogContent className="rounded-2xl max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-md">Confirm Payment</DialogTitle>
-            <DialogDescription className="text-gray-600">
-              {paymentMethod === 'stk' ? (
-                <>
-                  You will pay <strong>KES {REGISTRATION_FEE}</strong> via STK push to{' '}
-                  <strong>{stkPhone}</strong>.
-                </>
-              ) : (
-                <>
-                  You have confirmed payment with receipt number <strong>{mpesaReceipt}</strong>.
-                </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex gap-3 mt-4">
-            <Button
-              variant="outline"
-              onClick={() => setShowConfirmDialog(false)}
-              className="flex-1 rounded-xl"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleProceed}
-              disabled={isLoading}
-              className="flex-1 bg-[#8cc63f] hover:bg-[#7ab52e] rounded-xl"
-            >
-              {isLoading ? 'Processing...' : 'Proceed'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Waiting Dialog for STK Push */}
       <Dialog open={showWaitingDialog} onOpenChange={() => {}}>
         <DialogContent className="rounded-2xl max-w-sm text-center" hideCloseButton>
           <div className="py-6 flex flex-col items-center gap-4">
             {waitingStatus === 'waiting' && (
-              <>
-                <Loader2 className="w-16 h-16 text-[#8cc63f] animate-spin" />
-                <h3 className="text-lg font-semibold">Awaiting Payment</h3>
+              <> 
+                <Phone className="w-16 h-16 text-[#8cc63f]" />
+                <h3 className="text-lg font-semibold">Confirm Payment on Your Phone</h3>
                 <p className="text-gray-500 text-sm">Please check your phone and enter M-PESA PIN.</p>
-                <Progress value={progress} className="w-full h-2" />
               </>
             )}
             {waitingStatus === 'success' && (
               <>
                 <CircleCheck className="w-16 h-16 text-green-500" />
                 <h3 className="text-lg font-semibold text-green-700">Payment Successful!</h3>
+                {mpesaReferenceDisplay && (
+                  <div className="bg-green-100 rounded-lg p-3 w-full">
+                    <p className="text-xs text-green-600">M-Pesa Reference</p>
+                    <p className="text-base font-mono font-bold text-green-800">{mpesaReferenceDisplay}</p>
+                  </div>
+                )}
                 <p className="text-gray-500 text-sm">Your registration is now complete.</p>
               </>
             )}

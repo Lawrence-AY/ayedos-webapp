@@ -3,19 +3,21 @@ import { Link, useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext.jsx";
 import { getPostLoginPath } from "../utils/dashboardRoutes.js";
 import { getApiBaseUrl, getApiErrorMessage, isApiDebugEnabled } from "../lib/apiClient.js";
-import logo from "../assets/AUTH.png";
 import DotSwarmCanvas from "../components/landing/DotTextCanvas.jsx";
+import dashboardLogo from "../assets/AUTH-LIGHT.png";
+import dashboardLogoDark from "../assets/AUTH-DARK.png";
 import { Eye, EyeOff } from "lucide-react";
-import {
+import { 
   InputOTP,
-  InputOTPGroup,
+  InputOTPGroup, 
+
   InputOTPSlot,
 } from "@/components/ui/input-otp";
 
 const OTP_COOLDOWN_SECONDS = 60;
 
 export default function Login() {
-  const navigate = useNavigate();
+  const navigate = useNavigate(); 
   const {
     login,
     completeLoginOtp,
@@ -226,7 +228,7 @@ export default function Login() {
           zIndex: 1,
           width: "100%",
           maxWidth: 440,
-          padding: "24px",
+          padding: "10px",
           boxSizing: "border-box",
         }}
       >
@@ -248,15 +250,30 @@ export default function Login() {
               marginBottom: 0,
             }}
           >
-            <img
-              src={logo}
-              alt="Logo"
-              style={{
+     {/* Light mode logo */}
+    <img 
+      src={dashboardLogo}
+      alt="AYEDOS Logo" 
+       style={{
                 height: 100,
                 width: "auto",
                 objectFit: "contain",
               }}
-            />
+      className="h-9 w-9 object-contain block dark:hidden" 
+    />
+    {/* Dark mode logo */}
+    <img 
+      src={dashboardLogoDark}
+      alt="AYEDOS Logo" 
+       style={{
+                height: 100,
+                width: "auto",
+                objectFit: "contain",
+              }}
+      className="h-9 w-9 object-contain hidden dark:block" 
+    />
+  
+           
           </div>
 
           <div

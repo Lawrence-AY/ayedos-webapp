@@ -1,4 +1,4 @@
-import { useContext } from "react";
+import { useContext, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -20,6 +20,16 @@ import { AuthContext } from "../../context/AuthContext.jsx";
 import { getDashboardPath } from "../../utils/dashboardRoutes.js";
 import dashboardLogo from "../../assets/Dashboard.png";
 import dashboardLogoDark from "../../assets/Dashboard-dark.png";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const memberNavItems = [
   { label: "Dashboard", suffix: "", exact: true, icon: LayoutDashboard },
@@ -74,21 +84,24 @@ const navItems = {
   MEMBER: memberNavItems,
 };
 
-function NavLinkItem({ to, label, icon: Icon, exact = false, onClick, collapsed = false }) {
+function NavLinkItem({ to, label, icon: Icon, exact = false, onClick, onClearSearch, collapsed = false }) {
   return (
     <NavLink
       to={to}
       end={exact}
-      onClick={onClick}
+      onClick={() => {
+        onClearSearch?.();
+        onClick?.();
+      }}
       className={({ isActive }) =>
         [
           `group relative flex items-center gap-3 rounded-lg px-3.5 py-3 text-sm font-semibold transition-all duration-200 ${
             collapsed ? "justify-center" : ""
           }`,
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8cc63f]",
           isActive
-            ? "bg-white text-emerald-800 shadow-[0_14px_32px_rgba(6,63,42,0.14)] ring-1 ring-emerald-100 dark:bg-slate-900 dark:text-emerald-300 dark:ring-emerald-900/50"
-            : "text-slate-600 hover:bg-white/70 hover:text-slate-950 hover:shadow-sm dark:text-slate-300 dark:hover:bg-slate-900/80 dark:hover:text-white",
+            ? "bg-white text-emerald-800 ring-1 ring-[#8cc63f] dark:bg-slate-900 dark:text-emerald-300 dark:ring-emerald-900/50"
+            : "text-slate-600 hover:bg-white/70 hover:text-slate-950   dark:text-slate-300 dark:hover:bg-slate-900/80 dark:hover:text-white",
         ].join(" ")
       }
     >
@@ -97,12 +110,12 @@ function NavLinkItem({ to, label, icon: Icon, exact = false, onClick, collapsed 
           {isActive ? (
             <motion.span
               layoutId="sidebar-active"
-              className="absolute left-0 top-1/2 h-7 w-1 -translate-y-1/2 rounded-r-full bg-emerald-500"
+              className="absolute left-0 top-1/2 h-7 w-1 -translate-y-1/2 rounded-r-full bg-[#8cc63f]"
               transition={{ type: "spring", stiffness: 380, damping: 34 }}
             />
           ) : null}
       <Icon
-        className="transition duration-200 group-hover:scale-110"
+        className="transition duration-200 group-hover:scale-110 text-[#8cc63f]"
         size={collapsed ? 22 : 18}
         strokeWidth={collapsed ? 2 : 1.8}
       />
@@ -113,14 +126,16 @@ function NavLinkItem({ to, label, icon: Icon, exact = false, onClick, collapsed 
   );
 }
 
-export default function Sidebar({ open = false, onClose, collapsed = false }) {
+export default function Sidebar({ open = false, onClose, collapsed = false, onClearSearch }) {
   const { user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
+  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const role = String(user?.role || "MEMBER").toUpperCase();
   const items = navItems[role] || navItems.MEMBER;
 
   async function handleLogout() {
     await logout();
+    setLogoutDialogOpen(false);
     navigate("/login", { replace: true });
   }
 
@@ -140,20 +155,20 @@ export default function Sidebar({ open = false, onClose, collapsed = false }) {
         animate={{ x: 0, opacity: 1 }}
         className={`fixed inset-y-0 left-0 z-40 flex ${
           collapsed ? "lg:w-20" : "w-62"
-        } flex-col border-r border-emerald-900/10 bg-[linear-gradient(180deg,#f7fbf4_0%,#ffffff_42%,#eef7e9_100%)] shadow-[14px_0_45px_rgba(16,25,35,0.06)] transition-all duration-200 dark:border-slate-800 dark:bg-slate-950 dark:bg-none lg:translate-x-0 ${
+        } flex-col border-r border-emerald-900/10 bg-[linear-gradient(180deg,#f7fbf4_0%,#ffffff_42%,#eef7e9_100%) transition-all duration-200 dark:border-slate-800 dark:bg-slate-950 dark:bg-none lg:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         {/* Header */}
-        <div className="flex min-h-20 items-center justify-between gap-3 border-b border-emerald-900/10 px-5 dark:border-slate-800">
+        <div className="flex min-h-17 items-center justify-between gap-3 border-b border-emerald-900/10 px-5 dark:border-slate-800">
          <div className="flex min-w-0 items-center gap-2">
-  <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-white shadow-sm ring-1 ring-emerald-900/10 dark:bg-slate-900 dark:ring-slate-800">
+  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg    dark:bg-slate-900 dark:ring-slate-800">
     {/* Light mode logo */}
     <img 
       src={dashboardLogo}
       alt="AYEDOS Logo" 
       className="h-9 w-9 object-contain block dark:hidden" 
-    />
+    /> 
     {/* Dark mode logo */}
     <img 
       src={dashboardLogoDark}
@@ -188,9 +203,7 @@ export default function Sidebar({ open = false, onClose, collapsed = false }) {
 
         {/* Navigation - hidden scrollbar */}
         <nav className="flex-1 space-y-1 overflow-y-auto px-4 py-5 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-          <p className={`mb-3 px-3 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400 ${collapsed ? "lg:sr-only" : ""}`}>
-            Workspace
-          </p>
+          
           {items.map((item) => (
             <NavLinkItem
               key={item.suffix || "dashboard"}
@@ -199,6 +212,7 @@ export default function Sidebar({ open = false, onClose, collapsed = false }) {
               icon={item.icon}
               exact={item.exact}
               onClick={onClose}
+              onClearSearch={onClearSearch}
               collapsed={collapsed}
             />
           ))}
@@ -206,13 +220,10 @@ export default function Sidebar({ open = false, onClose, collapsed = false }) {
 
         {/* Footer / Logout */}
         <div className="border-t border-slate-200 p-4 dark:border-slate-800">
-          <div className={`mb-3 rounded-lg bg-emerald-950 px-3 py-3 text-white shadow-sm ${collapsed ? "lg:hidden" : ""}`}>
-            <p className="text-xs font-semibold text-emerald-200">Secure session</p>
-            <p className="mt-1 text-sm font-bold">{role.charAt(0) + role.slice(1).toLowerCase()} portal</p>
-          </div>
+           
           <button
             type="button"
-            onClick={handleLogout}
+            onClick={() => setLogoutDialogOpen(true)}
             className="group flex w-full items-center gap-3 rounded-lg px-3.5 py-3 text-sm font-semibold text-slate-600 transition-all duration-200 hover:bg-rose-50 hover:text-rose-700 dark:text-slate-300 dark:hover:bg-rose-950/30 dark:hover:text-rose-400"
           >
             <LogOut
@@ -224,6 +235,22 @@ export default function Sidebar({ open = false, onClose, collapsed = false }) {
           </button>
         </div>
       </motion.aside>
+      <AlertDialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle
+        >Confirm logout</AlertDialogTitle>
+            <AlertDialogDescription>
+           
+              Are you sure you want to log out of your AYEDOS SACCO account?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleLogout}>Logout</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
