@@ -501,7 +501,7 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
         >
           <div className="flex flex-col text-left">
             <span className="text-xs font-light">Next</span>
-            <span className="font-semibold">Confirm Payment</span>
+            <span className="font-semibold">Make Payment</span>
           </div>
           <GrLinkNext />
         </Button>
