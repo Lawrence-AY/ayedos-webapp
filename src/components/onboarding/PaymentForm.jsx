@@ -512,7 +512,7 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
         <DialogContent className="rounded-2xl max-w-sm text-center" hideCloseButton>
           <div className="py-6 flex flex-col items-center gap-4">
             {waitingStatus === 'waiting' && (
-              <>
+              <> 
                 <Phone className="w-16 h-16 text-[#8cc63f]" />
                 <h3 className="text-lg font-semibold">Confirm Payment on Your Phone</h3>
                 <p className="text-gray-500 text-sm">Please check your phone and enter M-PESA PIN.</p>
