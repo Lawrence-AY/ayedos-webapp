@@ -2,7 +2,7 @@ import axios from 'axios'
 
 export const DEFAULT_API_PATH_PREFIX = '/api'
 
-const DEFAULT_TIMEOUT_MS = 15000
+const DEFAULT_TIMEOUT_MS = 10000
 const DEFAULT_RETRY_ATTEMPTS = 2
 const CACHE_TTL_MS = 60 * 1000
 const RAILWAY_WAKE_DELAY_MS = 1200
@@ -34,6 +34,7 @@ const safeMessagesByStatus = {
   408: 'The server is taking longer than usual to respond. Please try again.',
   429: 'Too many login attempts. Please wait before trying again.',
   500: 'Server error',
+  503: 'Service is temporarily unavailable. Please try again shortly.',
 }
 
 const responseCache = new Map()
@@ -106,9 +107,9 @@ export function getApiErrorMessage(error) {
   if (error.status === 400 || error.code === 'VALIDATION_ERROR') {
     return error.response?.message || safeMessagesByStatus[400]
   }
-  if (error.status >= 500) return safeMessagesByStatus[500]
+  if (error.status >= 500) return safeMessagesByStatus[error.status] || safeMessagesByStatus[500]
 
-  if (error.kind === 'timeout') return 'Server is waking up. Please wait...'
+  if (error.kind === 'timeout') return 'The request timed out. Please try again.'
   if (error.kind === 'network') {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
       return 'Unable to connect. Please check your internet connection.'
@@ -163,6 +164,15 @@ function getStoredAuth() {
   } catch {
     return {}
   }
+}
+
+function getCookie(name) {
+  return document.cookie
+    .split('; ')
+    .find((entry) => entry.startsWith(`${name}=`))
+    ?.split('=')
+    .slice(1)
+    .join('=')
 }
 
 function persistTokens(tokens = {}) {
@@ -243,12 +253,14 @@ api.interceptors.request.use((config) => {
     'X-Device-Id': getOrCreateDeviceId(),
     'X-Device-Name': getDeviceName(),
   }
+  const csrfToken = getCookie('csrfToken')
 
   const accessToken = config.accessToken || (!isPublicAuthPath(normalizedPath) ? storedAuth.accessToken : null)
   const sessionId = config.sessionId || storedAuth.sessionId
 
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`
   if (sessionId) headers['X-Session-Id'] = sessionId
+  if (csrfToken) headers['X-CSRF-Token'] = decodeURIComponent(csrfToken)
 
   if (isApiDebugEnabled()) {
     console.log('[api:request]', {
@@ -283,7 +295,7 @@ api.interceptors.response.use(
     const isTimeout = error.code === 'ECONNABORTED' || String(error.message || '').toLowerCase().includes('timeout')
     const kind = isTimeout ? 'timeout' : 'network'
     const apiError = new ApiError(
-      kind === 'timeout' ? 'Server is waking up. Please wait...' : 'Unable to connect',
+      kind === 'timeout' ? 'The request timed out. Please try again.' : 'Unable to connect',
       {
         kind,
         url: `${config.baseURL || ''}${config.url || ''}`,
@@ -363,6 +375,7 @@ export async function apiRequest(
     skipAuthRefresh = false,
     cache = true,
     cacheTtlMs = CACHE_TTL_MS,
+    idempotencyKey,
   } = {},
 ) {
   const normalizedPath = String(path).startsWith('/') ? path : `/${path}`
@@ -378,7 +391,7 @@ export async function apiRequest(
       ? normalizedPath.slice(DEFAULT_API_PATH_PREFIX.length) || '/'
       : normalizedPath
   const upperMethod = method.toUpperCase()
-  const shouldRetry = retry && upperMethod !== 'DELETE'
+  const shouldRetry = retry && upperMethod === 'GET'
   const maxAttempt = shouldRetry ? DEFAULT_RETRY_ATTEMPTS : 0
   const cacheKey = cache
     ? getCacheKey({
@@ -412,6 +425,7 @@ export async function apiRequest(
           sessionId,
           signal,
           timeout: timeoutMs,
+          headers: idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : undefined,
         })
       } catch (error) {
         if (attempt < maxAttempt && shouldRetry && error.kind !== 'cancelled') {

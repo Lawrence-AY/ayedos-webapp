@@ -15,6 +15,7 @@ const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000
 const AUTH_SYNC_INTERVAL_MS = 5 * 60 * 1000
 const OTP_SESSION_TTL_MS = 10 * 60 * 1000
 const OTP_RESEND_COOLDOWN_MS = 60 * 1000
+const LOGIN_IDEMPOTENCY_KEY = 'ayedos_loginIdempotencyKey'
 
 const getPersistableUser = (user) => {
   if (!user) return null
@@ -221,9 +222,23 @@ export function AuthProvider({ children }) {
   const login = useCallback(
     async ({ email, password }) => {
       setAuthError(null)
+      const normalizedEmail = email.trim().toLowerCase()
+      const storedIdempotency = sessionStorage.getItem(LOGIN_IDEMPOTENCY_KEY)
+      const parsedIdempotency = storedIdempotency ? JSON.parse(storedIdempotency) : null
+      const idempotencyKey = parsedIdempotency?.email === normalizedEmail && parsedIdempotency.expiresAt > Date.now()
+        ? parsedIdempotency.key
+        : globalThis.crypto.randomUUID()
+      sessionStorage.setItem(LOGIN_IDEMPOTENCY_KEY, JSON.stringify({
+        key: idempotencyKey,
+        email: normalizedEmail,
+        expiresAt: Date.now() + OTP_SESSION_TTL_MS,
+      }))
       const res = await apiRequest('/api/auth/login', {
         method: 'POST',
         body: { email, password },
+        idempotencyKey,
+        retry: false,
+        cache: false,
       })
 
       if (!res.ok) {
@@ -263,6 +278,7 @@ export function AuthProvider({ children }) {
       setSessionId(nextSessionId)
       persistAuth({ user: nextUser, accessToken: nextAccessToken, refreshToken: nextRefreshToken, sessionId: nextSessionId })
       clearOtpSession()
+      sessionStorage.removeItem(LOGIN_IDEMPOTENCY_KEY)
 
       return nextUser
     },
@@ -370,6 +386,8 @@ export function AuthProvider({ children }) {
         method: 'POST',
         body: { email: resolvedEmail, otp },
         sessionId: resolvedSessionId || undefined,
+        retry: false,
+        cache: false,
       })
 
       if (!res.ok) {
@@ -394,6 +412,7 @@ export function AuthProvider({ children }) {
       setSessionId(nextSessionId)
       persistAuth({ user: nextUser, accessToken: nextAccessToken, refreshToken: nextRefreshToken, sessionId: nextSessionId })
       clearOtpSession()
+      sessionStorage.removeItem(LOGIN_IDEMPOTENCY_KEY)
 
       return nextUser
     },
@@ -417,6 +436,8 @@ export function AuthProvider({ children }) {
       method: 'POST',
       body: { email: storedOtpSession.email },
       sessionId: storedOtpSession.sessionId || undefined,
+      retry: false,
+      cache: false,
     })
 
     if (!res.ok) {

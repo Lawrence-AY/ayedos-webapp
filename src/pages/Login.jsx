@@ -120,7 +120,9 @@ export default function Login() {
         setSubmitCooldown(seconds);
         setFormError("Too many login attempts. Please wait before trying again.");
       } else if (err?.kind === "timeout") {
-        setFormError("Server is waking up. Please wait...");
+        setFormError("The request timed out. Please try again.");
+      } else if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        setFormError("You appear to be offline. Check your connection and try again.");
       } else {
         setFormError(getApiErrorMessage(err) || err?.message || "Login failed");
       }
