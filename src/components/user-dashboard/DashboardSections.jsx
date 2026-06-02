@@ -34,6 +34,13 @@ import {
   WalletCards,
 } from "lucide-react";
 import {
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip as RechartsTooltip,
+} from "recharts";
+import {
   Table,
   TableHeader,
   TableBody,
@@ -2540,6 +2547,7 @@ const SACCO_UTILIZATION_ALLOCATIONS = [
     percent: 49,
     icon: FileText,
     status: "Active lending",
+    color: "#063f2a",
   },
   {
     label: "Liquidity reserve",
@@ -2548,6 +2556,7 @@ const SACCO_UTILIZATION_ALLOCATIONS = [
     percent: 21,
     icon: Landmark,
     status: "Protected reserve",
+    color: "#8cc63f",
   },
   {
     label: "Fixed income investments",
@@ -2556,6 +2565,7 @@ const SACCO_UTILIZATION_ALLOCATIONS = [
     percent: 15,
     icon: TrendingUp,
     status: "Earning returns",
+    color: "#0f766e",
   },
   {
     label: "Welfare and emergency fund",
@@ -2564,6 +2574,7 @@ const SACCO_UTILIZATION_ALLOCATIONS = [
     percent: 8,
     icon: UsersRound,
     status: "Member support",
+    color: "#65a30d",
   },
   {
     label: "Operations and compliance",
@@ -2572,6 +2583,7 @@ const SACCO_UTILIZATION_ALLOCATIONS = [
     percent: 5,
     icon: ShieldCheck,
     status: "Governed spend",
+    color: "#39414d",
   },
   {
     label: "Technology improvement",
@@ -2580,6 +2592,7 @@ const SACCO_UTILIZATION_ALLOCATIONS = [
     percent: 2,
     icon: MonitorSmartphone,
     status: "In progress",
+    color: "#94a3b8",
   },
 ];
 
@@ -2602,12 +2615,19 @@ function PortfolioPage({ stats, transactions, shares, search, user, showValues, 
   const visibleTransactions = filteredTransactions.slice(0, 4);
   const activeShareRecords = shares.filter((share) => matchesSearch(share, search)).length;
   const pooledFunds = SACCO_UTILIZATION_ALLOCATIONS.reduce((sum, item) => sum + item.amount, 0);
+  const allocationChartData = SACCO_UTILIZATION_ALLOCATIONS.map((item) => ({
+    name: item.label,
+    label: item.label,
+    value: item.percent,
+    percent: item.percent,
+    amount: item.amount,
+    color: item.color,
+  }));
   const memberName = user?.name || [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Member";
   const portfolioStats = [
-    { label: "Member value", value: formatCurrency(stats.balance), helper: "Your current SACCO account position.", icon: WalletCards, tone: "emerald" },
-    { label: "Share capital", value: formatCurrency(stats.shareCapital), helper: "Your ownership stake in the SACCO.", icon: Landmark, tone: "blue" },
-    { label: "Money in use", value: formatCurrency(pooledFunds), helper: "Dummy SACCO pool mapped across utilization areas.", icon: TrendingUp, tone: "amber" },
-    { label: "This month", value: formatCurrency(stats.monthlyContributions), helper: "Recent member contribution activity.", icon: PiggyBank, tone: "slate" },
+    { label: "Your balance", value: formatCurrency(stats.balance), helper: "Current member position" },
+    { label: "Share capital", value: formatCurrency(stats.shareCapital), helper: "Ownership contribution" },
+    { label: "Mapped SACCO pool", value: formatCurrency(pooledFunds), helper: "Dummy utilization total" },
   ];
   const displayValue = (value) => showValues ? value : <span className="inline-block blur-sm">KES 000,000.00</span>;
 
@@ -2632,151 +2652,175 @@ function PortfolioPage({ stats, transactions, shares, search, user, showValues, 
       />
 
       <Surface className="overflow-hidden">
-        <div className="grid gap-0 lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
-          <div className="p-5 sm:p-6">
-            <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
-              <div className="max-w-2xl">
-                <p className="text-sm font-semibold uppercase tracking-normal text-[#8cc63f]">Member fund visibility</p>
-                <h4 className="mt-2 text-2xl font-semibold tracking-normal text-slate-950">
-                  See how SACCO money is being utilized
+        <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_380px]">
+          <div className="p-6 sm:p-7">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-normal text-[#8cc63f]">Portfolio statement</p>
+                <h4 className="mt-2 max-w-2xl text-2xl font-semibold tracking-normal text-slate-950">
+                  SACCO fund utilization
                 </h4>
-                <p className="mt-2 text-sm leading-6 text-slate-500">
-                  {memberName}, this dummy portfolio view shows how member deposits, savings, and share capital can be pooled into loans, reserves, investments, welfare support, operations, and digital improvements.
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+                  {memberName}, this view summarizes how member savings and share capital are pooled into lending, reserves, investments, welfare support, operations, and platform improvements.
                 </p>
               </div>
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
-                Last updated: Jun 2026
-              </div>
+              <span className="w-fit rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-800">
+                Jun 2026
+              </span>
             </div>
 
-            <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-8 grid gap-4 sm:grid-cols-3">
               {portfolioStats.map((item) => (
-                <div key={item.label} className="rounded-lg border border-slate-200 bg-white p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="grid h-10 w-10 place-items-center rounded-lg bg-slate-100">
-                      <item.icon size={18} className="text-[#8cc63f]" />
-                    </div>
-                    <p className="text-sm font-semibold text-slate-600">{item.label}</p>
-                  </div>
-                  <p className="mt-4 text-xl font-semibold tracking-normal text-slate-950">
-                    {displayValue(item.value)}
-                  </p>
-                  <p className="mt-2 text-xs leading-5 text-slate-500">{item.helper}</p>
+                <div key={item.label} className="border-l-2 border-[#8cc63f] pl-4">
+                  <p className="text-xs font-semibold uppercase tracking-normal text-slate-500">{item.label}</p>
+                  <p className="mt-1 text-xl font-semibold tracking-normal text-slate-950">{displayValue(item.value)}</p>
+                  <p className="mt-1 text-xs text-slate-500">{item.helper}</p>
                 </div>
               ))}
             </div>
+
+            <div className="mt-8 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-500">
+              Illustrative portfolio data only. Replace these values with audited SACCO ledger data once the reporting endpoint is connected.
+            </div>
           </div>
 
-          <div className="border-t border-slate-200 bg-slate-50 p-5 sm:p-6 lg:border-l lg:border-t-0">
-            <div className="rounded-lg border border-slate-200 bg-white p-5">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm font-semibold text-slate-500">Total mapped pool</p>
-                  <p className="mt-2 text-3xl font-semibold tracking-normal text-slate-950">{displayValue(formatCurrency(pooledFunds))}</p>
+          <div className="border-t border-slate-200 bg-slate-50 p-6 lg:border-l lg:border-t-0">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-slate-500">Allocation overview</p>
+                <p className="mt-1 text-2xl font-semibold tracking-normal text-slate-950">{displayValue(formatCurrency(pooledFunds))}</p>
+              </div>
+              <WalletCards size={24} className="text-[#8cc63f]" />
+            </div>
+            <div className="relative mt-5 h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={allocationChartData}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={62}
+                    outerRadius={92}
+                    paddingAngle={2}
+                    stroke="#ffffff"
+                    strokeWidth={3}
+                  >
+                    {allocationChartData.map((entry) => (
+                      <Cell key={entry.name} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip
+                    formatter={(value, name, props) => [
+                      `${value}% - ${formatCurrency(props.payload.amount)}`,
+                      name,
+                    ]}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="pointer-events-none absolute inset-0 grid place-items-center">
+                <div className="text-center">
+                  <p className="text-xs font-semibold uppercase tracking-normal text-slate-500">Mapped</p>
+                  <p className="text-2xl font-semibold text-slate-950">100%</p>
                 </div>
-                <WalletCards size={28} className="text-[#8cc63f]" />
               </div>
-              <div className="mt-5 h-3 overflow-hidden rounded-full bg-slate-100">
-                <div className="h-full rounded-full bg-[#8cc63f]" style={{ width: "100%" }} />
-              </div>
-              <p className="mt-3 text-xs leading-5 text-slate-500">
-                Dummy data for demonstration. Replace with audited SACCO ledger data when backend portfolio reporting is ready.
-              </p>
+            </div>
+            <div className="mt-4 grid gap-2">
+              {allocationChartData.map((item) => (
+                <div key={item.name} className="flex items-center justify-between gap-3 text-xs">
+                  <span className="flex min-w-0 items-center gap-2 font-medium text-slate-600">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
+                    <span className="truncate">{item.name}</span>
+                  </span>
+                  <span className="font-semibold text-slate-950">{item.percent}%</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       </Surface>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
-        <Surface className="p-5">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h5 className="text-base font-semibold tracking-normal text-slate-950">Fund allocation</h5>
-              <p className="mt-1 text-sm text-slate-500">A clear breakdown of where the SACCO pool is currently assigned.</p>
-            </div>
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-              {activeShareRecords} share record{activeShareRecords === 1 ? "" : "s"}
-            </span>
+      <Surface className="overflow-hidden">
+        <div className="flex flex-col gap-4 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h5 className="text-base font-semibold tracking-normal text-slate-950">Utilization ledger</h5>
+            <p className="mt-1 text-sm text-slate-500">Official-style breakdown of where the SACCO pool is assigned.</p>
           </div>
-          <div className="mt-5 space-y-4">
+          <span className="w-fit rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+            {activeShareRecords} share record{activeShareRecords === 1 ? "" : "s"}
+          </span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-100">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">Use of funds</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">Purpose</th>
+                <th className="px-5 py-3 text-right text-xs font-semibold uppercase text-slate-500">Amount</th>
+                <th className="px-5 py-3 text-right text-xs font-semibold uppercase text-slate-500">Share</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 bg-white">
             {SACCO_UTILIZATION_ALLOCATIONS.map((item) => (
-              <div key={item.label} className="rounded-lg border border-slate-200 bg-white p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="flex gap-3">
+              <tr key={item.label}>
+                <td className="px-5 py-4">
+                  <div className="flex items-center gap-3">
                     <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-slate-100">
                       <item.icon size={18} className="text-[#8cc63f]" />
                     </div>
                     <div>
-                      <h6 className="text-sm font-semibold text-slate-950">{item.label}</h6>
-                      <p className="mt-1 text-xs leading-5 text-slate-500">{item.description}</p>
+                      <p className="text-sm font-semibold text-slate-950">{item.label}</p>
+                      <p className="mt-1 text-xs text-slate-500">{item.status}</p>
                     </div>
                   </div>
-                  <div className="text-left sm:text-right">
-                    <p className="text-sm font-semibold text-slate-950">{displayValue(formatCurrency(item.amount))}</p>
-                    <p className="text-xs font-semibold text-[#8cc63f]">{item.percent}%</p>
+                </td>
+                <td className="max-w-md px-5 py-4 text-sm leading-6 text-slate-500">{item.description}</td>
+                <td className="px-5 py-4 text-right text-sm font-semibold text-slate-950">{displayValue(formatCurrency(item.amount))}</td>
+                <td className="px-5 py-4 text-right">
+                  <div className="ml-auto w-28">
+                    <div className="mb-1 text-xs font-semibold text-slate-700">{item.percent}%</div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-full rounded-full" style={{ width: `${item.percent}%`, backgroundColor: item.color }} />
+                    </div>
                   </div>
-                </div>
-                <div className="mt-4">
-                  <div className="mb-2 flex items-center justify-between text-xs font-semibold text-slate-500">
-                    <span>{item.status}</span>
-                    <span>{item.percent}% utilized</span>
-                  </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                    <div className="h-full rounded-full bg-[#8cc63f]" style={{ width: `${item.percent}%` }} />
-                  </div>
-                </div>
+                </td>
+              </tr>
+            ))}
+            </tbody>
+          </table>
+        </div>
+      </Surface>
+
+      <Surface className="p-5">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h5 className="text-base font-semibold tracking-normal text-slate-950">Portfolio notes</h5>
+            <p className="mt-1 text-sm text-slate-500">A short operational snapshot without crowding the statement view.</p>
+          </div>
+          <BadgeCheck size={22} className="text-[#8cc63f]" />
+        </div>
+        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2">
+            {SACCO_IMPACT_METRICS.map((metric) => (
+              <div key={metric.label} className="rounded-lg bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-normal text-slate-500">{metric.label}</p>
+                <p className="mt-1 text-xl font-semibold tracking-normal text-slate-950">{metric.value}</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">{metric.helper}</p>
               </div>
             ))}
           </div>
-        </Surface>
-
-        <div className="space-y-4">
-          <Surface className="p-5">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <h5 className="text-base font-semibold tracking-normal text-slate-950">Member impact</h5>
-                <p className="mt-1 text-sm text-slate-500">What the pooled funds are helping the SACCO achieve.</p>
-              </div>
-              <BadgeCheck size={22} className="text-[#8cc63f]" />
-            </div>
-            <div className="mt-5 grid gap-3">
-              {SACCO_IMPACT_METRICS.map((metric) => (
-                <div key={metric.label} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-normal text-slate-500">{metric.label}</p>
-                  <p className="mt-1 text-2xl font-semibold tracking-normal text-slate-950">{metric.value}</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">{metric.helper}</p>
+          <div className="overflow-hidden rounded-lg border border-slate-200">
+            {SACCO_PROJECTS.map((project) => (
+              <div key={project.title} className="flex items-center justify-between gap-4 border-b border-slate-100 px-4 py-3 last:border-b-0">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-slate-950">{project.title}</p>
+                  <p className="mt-1 text-xs text-slate-500">{project.date} - {project.status}</p>
                 </div>
-              ))}
-            </div>
-          </Surface>
-
-          <Surface className="p-5">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <h5 className="text-base font-semibold tracking-normal text-slate-950">Active utilization</h5>
-                <p className="mt-1 text-sm text-slate-500">Recent dummy programs and placements.</p>
+                <p className="shrink-0 text-sm font-semibold text-slate-950">{displayValue(formatCurrency(project.amount))}</p>
               </div>
-              <ReceiptText size={22} className="text-[#8cc63f]" />
-            </div>
-            <div className="mt-5 space-y-3">
-              {SACCO_PROJECTS.map((project) => (
-                <div key={project.title} className="rounded-lg border border-slate-200 bg-white p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-950">{project.title}</p>
-                      <p className="mt-1 text-xs text-slate-500">{project.date} - {project.status}</p>
-                    </div>
-                    <p className="text-sm font-semibold text-slate-950">{displayValue(formatCurrency(project.amount))}</p>
-                  </div>
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
-                    <div className="h-full rounded-full bg-[#8cc63f]" style={{ width: `${project.progress}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Surface>
+            ))}
+          </div>
         </div>
-      </div>
+      </Surface>
 
       <Surface className="p-5">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
