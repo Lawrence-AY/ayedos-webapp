@@ -77,8 +77,10 @@ export const PersonalDetailsForm = ({
     secondName,
     surname,
     email,
+    idType,
     nationalId,
-    kraPin,
+    passportNumber,
+    driverLicenseNumber,
     phone,
     occupation,
     poBox,
@@ -98,15 +100,10 @@ export const PersonalDetailsForm = ({
     }
   }, [onChange, subCounty, subCountiesList]);
 
-  // Handle numeric input for phone and nationalId
-  const handleNumericChange = (field, value) => {
-    const numericValue = value.replace(/\D/g, '');
-    onChange(field, numericValue);
-  };
-
   return (
     <form onSubmit={onSubmit} className="space-y-5">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Name fields */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         <div className="space-y-2">
           <Label htmlFor="firstName">
             First Name <span className="text-destructive">*</span>
@@ -121,9 +118,7 @@ export const PersonalDetailsForm = ({
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="secondName">
-            Second Name
-          </Label>
+          <Label htmlFor="secondName">Second Name</Label>
           <Input
             id="secondName"
             value={secondName}
@@ -147,55 +142,95 @@ export const PersonalDetailsForm = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="space-y-2"  >
+      {/* Email, ID Type, ID Number */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="space-y-2">
           <Label htmlFor="email">
             Email <span className="text-destructive">*</span>
           </Label>
           <Input
-          
             id="email"
             type="email"
             value={email}
             onChange={(e) => onChange('email', e.target.value)}
             placeholder="you@example.com"
-            disabled 
+            disabled
             required
-             
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="nationalId">
-            National ID <span className="text-destructive">*</span>
+          <Label htmlFor="idType">
+            ID Type <span className="text-destructive">*</span>
           </Label>
-          <Input
-            id="nationalId"
-            value={nationalId}
-            onChange={(e) => handleNumericChange('nationalId', e.target.value)}
-            placeholder="e.g., 41345678"
-            disabled={isLoading}
-            minLength={7}
-            maxLength={8}
-            inputMode="numeric"
-            pattern="\d*"
-            required
-          />
+          <Select value={idType || ''} onValueChange={(value) => onChange('idType', value)}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select ID type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectLabel>ID Type</SelectLabel>
+                <SelectItem value="national">National ID</SelectItem>
+                <SelectItem value="passport">Passport</SelectItem>
+                <SelectItem value="driverlicense">Driver's License</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="kraPin">KRA PIN</Label>
-          <Input
-            id="kraPin"
-            value={kraPin}
-            onChange={(e) => onChange('kraPin', e.target.value.toUpperCase())}
-            placeholder="Enter KRA PIN"
-            disabled={isLoading}
-            minLength={11}
-            maxLength={11}
-          />
+          {idType === 'national' && (
+            <>
+              <Label htmlFor="nationalId">
+                National ID <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="nationalId"
+                value={nationalId}
+                onChange={(e) => onChange('nationalId', e.target.value.replace(/\D/g, ''))}
+                placeholder="e.g., 41345678"
+                disabled={isLoading}
+                minLength={7}
+                maxLength={8}
+                inputMode="numeric"
+                pattern="\d*"
+                required
+              />
+            </>
+          )}
+          {idType === 'passport' && (
+            <>
+              <Label htmlFor="passportNumber">
+                Passport Number <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="passportNumber"
+                value={passportNumber}
+                onChange={(e) => onChange('passportNumber', e.target.value.toUpperCase())}
+                placeholder="e.g., A12345678"
+                disabled={isLoading}
+                required
+              />
+            </>
+          )}
+          {idType === 'driverlicense' && (
+            <>
+              <Label htmlFor="driverLicenseNumber">
+                Driver's License <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="driverLicenseNumber"
+                value={driverLicenseNumber}
+                onChange={(e) => onChange('driverLicenseNumber', e.target.value.toUpperCase())}
+                placeholder="e.g., L123456789"
+                disabled={isLoading}
+                required
+              />
+            </>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Contact */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         <div className="space-y-2">
           <Label htmlFor="phone">
             Phone Number <span className="text-destructive">*</span>
@@ -203,7 +238,7 @@ export const PersonalDetailsForm = ({
           <Input
             id="phone"
             value={phone}
-            onChange={(e) => handleNumericChange('phone', e.target.value)}
+            onChange={(e) => onChange('phone', e.target.value.replace(/\D/g, ''))}
             placeholder="e.g., 0712345678"
             disabled={isLoading}
             inputMode="numeric"
@@ -229,7 +264,6 @@ export const PersonalDetailsForm = ({
             </SelectContent>
           </Select>
         </div>
-        {/* PO Box Field */}
         <div className="space-y-2">
           <Label htmlFor="poBox">
             Physical Address (PO Box) <span className="text-destructive">*</span>
@@ -246,7 +280,7 @@ export const PersonalDetailsForm = ({
       </div>
 
       {/* County and Sub-County */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="county">
             County <span className="text-destructive">*</span>
@@ -290,25 +324,25 @@ export const PersonalDetailsForm = ({
         </div>
       </div>
 
-      {/* Terms and Submit */}
-      <div className="flex flex-col md:flex-row items-center justify-between gap-4 mt-6">
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id="terms"
-            checked={termsAccepted}
-            onCheckedChange={(checked) => onChange('termsAccepted', checked)}
-            disabled={isLoading}
-            required
-          />
-          <Label htmlFor="terms" className="text-sm cursor-pointer">
-            I confirm that the information provided is accurate and agree to the{' '}
-            <span className="text-primary font-medium">Terms & Conditions</span>
-          </Label>
-        </div>
+      {/* Terms */}
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id="terms"
+          checked={termsAccepted}
+          onCheckedChange={(checked) => onChange('termsAccepted', checked)}
+          disabled={isLoading}
+          required
+        />
+        <Label htmlFor="terms" className="text-sm cursor-pointer">
+          I confirm that the information provided is accurate and agree to the{' '}
+          <span className="text-primary font-medium">Terms & Conditions</span>
+        </Label>
       </div>
+
+      {/* Submit */}
       <Button
         type="submit"
-        className="p-2 h-13 w-5 bg-[#8cc63f] text-white rounded-md flex items-center justify-center gap-2"
+        className="p-2 h-13 w-full sm:w-auto bg-[#8cc63f] text-white rounded-md flex items-center justify-center gap-2"
         disabled={isLoading || !termsAccepted}
       >
         <div className="flex flex-col text-left">

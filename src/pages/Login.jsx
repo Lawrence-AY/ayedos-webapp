@@ -3,7 +3,6 @@ import { Link, useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext.jsx";
 import { getPostLoginPath } from "../utils/dashboardRoutes.js";
 import { getApiBaseUrl, getApiErrorMessage, isApiDebugEnabled } from "../lib/apiClient.js";
-import logo from "../assets/AUTH.png";
 import DotSwarmCanvas from "../components/landing/DotTextCanvas.jsx";
 import dashboardLogo from "../assets/AUTH-LIGHT.png";
 import dashboardLogoDark from "../assets/AUTH-DARK.png";
@@ -227,7 +226,6 @@ export default function Login() {
           zIndex: 1,
           width: "100%",
           maxWidth: 440,
-          padding: "10px",
           padding: "10px",
           boxSizing: "border-box",
         }}

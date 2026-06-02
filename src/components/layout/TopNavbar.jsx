@@ -1,7 +1,8 @@
 import { useContext, useEffect, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bell, ChevronDown, Menu, Moon, Search, Settings, Shield, Sun, UserRound } from "lucide-react";
+import { useTheme } from "next-themes";
 import { AuthContext } from "../../context/AuthContext.jsx";
 
 function getInitials(name = "User") {
@@ -23,27 +24,14 @@ export default function TopNavbar({
 }) {
   const { user } = useContext(AuthContext);
   const navigate = useNavigate();
-  const location = useLocation();
+  const { resolvedTheme, setTheme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [theme, setTheme] = useState(() => localStorage.getItem("ayedos_theme") || "light");
   const [photoFailed, setPhotoFailed] = useState(false);
   const name = user?.name || "AYEDOS Member";
   const profilePhoto = user?.passportPhotoUrl || user?.profilePhotoUrl || user?.avatarUrl;
-  const crumbs = location.pathname
-    .split("/")
-    .filter(Boolean)
-    .slice(-2)
-    .map((part) => part.replace(/-/g, " "));
-
   useEffect(() => {
     setPhotoFailed(false);
   }, [profilePhoto]);
-
-  useEffect(() => {
-    const isDark = theme === "dark";
-    document.documentElement.classList.toggle("dark", isDark);
-    localStorage.setItem("ayedos_theme", theme);
-  }, [theme]);
 
   return (
     <header className="sticky top-0 z-20 border-b border-emerald-900/10 bg-white/82 px-4 py-3  backdrop-blur-xl transition-colors duration-200 dark:border-slate-800 dark:bg-slate-950/90 sm:px-6 lg:px-8">
@@ -59,7 +47,7 @@ export default function TopNavbar({
       
 
         <div className="relative ml-0 min-w-0 flex-1 md:ml-4">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={18} />
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8cc63f] dark:text-[#8cc63f]" size={18} />
           <input
             type="search"
             value={searchValue}
@@ -88,11 +76,11 @@ export default function TopNavbar({
 
           <button
             type="button"
-            onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+            onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
             className="hidden h-11 w-11 place-items-center rounded-lg border border-emerald-900/10 bg-white text-slate-700  transition duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-emerald-800 dark:hover:bg-emerald-950/30 dark:hover:text-emerald-400 sm:grid"
             aria-label="Toggle theme"
           >
-            {theme === "dark" ? <Sun className="text-[#8cc63f]" size={19} /> : <Moon className="text-[#8cc63f]" size={19} />}
+            {resolvedTheme === "dark" ? <Sun className="text-[#8cc63f]" size={19} /> : <Moon className="text-[#8cc63f]" size={19} />}
           </button>
 
           <div className="relative">
@@ -122,7 +110,7 @@ export default function TopNavbar({
                   {user?.email || "member@ayedos.co.ke"}
                 </span>
               </span>
-              <ChevronDown size={16} className="hidden text-slate-400 dark:text-slate-500 sm:block" />
+              <ChevronDown size={16} className="hidden text-[#8cc63f] dark:text-[#8cc63f] sm:block" />
             </button>
 
             <AnimatePresence>
