@@ -1,6 +1,5 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { Bell } from "lucide-react";
 import { AuthContext } from "../context/AuthContext.jsx";
 import Sidebar from "../components/layout/Sidebar.jsx";
 import TopNavbar from "../components/layout/TopNavbar.jsx";
@@ -24,8 +23,8 @@ import ReportsPage from "../components/user-dashboard/ReportsPage.jsx";
 import SavingsPage from "../components/user-dashboard/SavingsPage.jsx";
 import SearchResultsPage from "../components/user-dashboard/SearchResultsPage.jsx";
 import SecuritySection from "../components/user-dashboard/SecuritySection.jsx";
-import SimplePage from "../components/user-dashboard/SimplePage.jsx";
 import SkeletonDashboard from "../components/user-dashboard/SkeletonDashboard.jsx";
+import SupportPage from "../components/user-dashboard/SupportPage.jsx";
 import TransactionsTable from "../components/user-dashboard/TransactionsTable.jsx";
 import { MIN_SHARE_CAPITAL, matchesSearch, normalizeStatus } from "../components/user-dashboard/dashboardUtils.js";
 
@@ -280,17 +279,7 @@ export default function UserDashboard() {
     }
   
     if (path.includes("/support")) {
-      return (
-        <SimplePage eyebrow="Support"  icon={Bell}>
-          <div className="grid gap-12 md:grid-cols-3">
-            {["Request statement", "Contact loans desk"].map((item) => (
-              <button key={item} className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-4 text-left text-sm font-semibold text-slate-800 transition hover:bg-emerald-50">
-                {item}
-              </button>
-            ))}
-          </div>
-        </SimplePage>
-      );
+      return <SupportPage user={user} />;
     }
     return (
       <DashboardOverview
