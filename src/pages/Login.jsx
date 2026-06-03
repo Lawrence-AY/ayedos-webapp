@@ -41,7 +41,8 @@ export default function Login() {
   const [otpMessage, setOtpMessage] = useState("");
   const [resendingOtp, setResendingOtp] = useState(false);
   const otpInputRef = useRef(null);
-  const autoSubmitTimerRef = useRef(null);
+  const otpVerifyInFlightRef = useRef(false);
+  const otpVerifyAbortRef = useRef(null);
   const maskEmail = (email) => {
   const [localPart, domain] = email.split('@');
   if (!domain) return email;
@@ -51,6 +52,8 @@ export default function Login() {
 };
 
   async function verifyCurrentOtp() {
+    if (otpVerifyInFlightRef.current || otpVerifying) return;
+
     setFormError(null);
 
     const verificationEmail = (email || otpSession?.email || "").trim();
@@ -71,18 +74,27 @@ export default function Login() {
       });
     }
 
+    otpVerifyInFlightRef.current = true;
+    otpVerifyAbortRef.current?.abort();
+    const controller = new AbortController();
+    otpVerifyAbortRef.current = controller;
     setOtpVerifying(true);
     try {
       const verifiedUser = await completeLoginOtp({
         email: verificationEmail,
         otp: code,
         tempToken,
+        signal: controller.signal,
       });
       setOtp("");
       navigate(getPostLoginPath(verifiedUser), { replace: true });
     } catch (err) {
-      setFormError(err?.message || "OTP verification failed");
+      if (err?.name !== "CanceledError" && err?.kind !== "cancelled") {
+        setFormError(err?.message || "OTP verification failed");
+      }
     } finally {
+      otpVerifyInFlightRef.current = false;
+      if (otpVerifyAbortRef.current === controller) otpVerifyAbortRef.current = null;
       setOtpVerifying(false);
     }
   }
@@ -162,17 +174,9 @@ export default function Login() {
     return () => window.clearInterval(timerId);
   }, [submitCooldown]);
 
-  useEffect(() => {
-    window.clearTimeout(autoSubmitTimerRef.current);
-    if (!otpRequired || otpVerifying || !/^\d{6,8}$/.test(otp.trim())) return undefined;
-
-    autoSubmitTimerRef.current = window.setTimeout(() => {
-      verifyCurrentOtp();
-    }, 600);
-
-    return () => window.clearTimeout(autoSubmitTimerRef.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [otp, otpRequired, otpVerifying]);
+  useEffect(() => () => {
+    otpVerifyAbortRef.current?.abort();
+  }, []);
 
   async function handleResendOtp() {
     if (otpCountdown > 0 || resendingOtp || otpVerifying) return;
@@ -449,6 +453,8 @@ export default function Login() {
           <button
             type="button"
             onClick={() => {
+              otpVerifyAbortRef.current?.abort();
+              otpVerifyInFlightRef.current = false;
               setOtpRequired(false);
               setOtp("");
               setOtpCountdown(0);

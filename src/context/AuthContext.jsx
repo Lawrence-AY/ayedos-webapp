@@ -65,6 +65,7 @@ export function AuthProvider({ children }) {
   const [isOnline, setIsOnline] = useState(() => navigator.onLine)
   const loadUserPromiseRef = useRef(null)
   const refreshPromiseRef = useRef(null)
+  const loginOtpVerifyPromiseRef = useRef(null)
   const lastUserLoadAtRef = useRef(0)
 
   const loadStoredAuth = useCallback(async () => {
@@ -375,7 +376,7 @@ export function AuthProvider({ children }) {
   }, [clearOtpSession, persistAuth])
 
   const completeLoginOtp = useCallback(
-    async ({ email, otp, tempToken, sessionId: otpSessionId }) => {
+    async ({ email, otp, tempToken, sessionId: otpSessionId, signal }) => {
       setAuthError(null)
       const storedOtpSession = normalizeOtpSession(otpSession)
       const resolvedEmail = (email || storedOtpSession?.email || '').trim().toLowerCase()
@@ -383,6 +384,11 @@ export function AuthProvider({ children }) {
 
       if (!resolvedEmail) {
         throw new Error('Your login verification session was lost. Please sign in again.')
+      }
+
+      const verificationKey = `${resolvedEmail}:${resolvedSessionId || 'no-session'}:${String(otp || '').trim()}`
+      if (loginOtpVerifyPromiseRef.current?.key === verificationKey) {
+        return loginOtpVerifyPromiseRef.current.promise
       }
 
       if (isApiDebugEnabled()) {
@@ -395,39 +401,52 @@ export function AuthProvider({ children }) {
         })
       }
 
-      const res = await apiRequest('/api/auth/login/verify-otp', {
-        method: 'POST',
-        body: { email: resolvedEmail, otp },
-        sessionId: resolvedSessionId || undefined,
-        retry: false,
-        cache: false,
-      })
+      const verificationPromise = (async () => {
+        const res = await apiRequest('/api/auth/login/verify-otp', {
+          method: 'POST',
+          body: { email: resolvedEmail, otp },
+          sessionId: resolvedSessionId || undefined,
+          signal,
+          retry: false,
+          cache: false,
+        })
 
-      if (!res.ok) {
-        const msg = getApiErrorMessage(res.error) || res.json?.message || `OTP verification failed (status ${res.status})`
-        throw new Error(msg)
+        if (!res.ok) {
+          const msg = getApiErrorMessage(res.error) || res.json?.message || `OTP verification failed (status ${res.status})`
+          throw new Error(msg)
+        }
+
+        const data = unwrapEnvelopeData(res.json)
+        const nextUser = data?.user ?? null
+        const tokens = data?.tokens ?? null
+        const nextAccessToken = tokens?.accessToken ?? null
+        const nextRefreshToken = tokens?.refreshToken ?? null
+        const nextSessionId = data?.sessionId ?? null
+
+        if (!nextUser) {
+          throw new Error('OTP verification succeeded but response shape is unexpected')
+        }
+
+        setUser(nextUser)
+        setAccessToken(nextAccessToken)
+        setRefreshToken(nextRefreshToken)
+        setSessionId(nextSessionId)
+        persistAuth({ user: nextUser, accessToken: nextAccessToken, refreshToken: nextRefreshToken, sessionId: nextSessionId })
+        clearOtpSession()
+        sessionStorage.removeItem(LOGIN_IDEMPOTENCY_KEY)
+
+        return nextUser
+      })()
+
+      loginOtpVerifyPromiseRef.current = { key: verificationKey, promise: verificationPromise }
+
+      try {
+        return await verificationPromise
+      } finally {
+        if (loginOtpVerifyPromiseRef.current?.key === verificationKey) {
+          loginOtpVerifyPromiseRef.current = null
+        }
       }
-
-      const data = unwrapEnvelopeData(res.json)
-      const nextUser = data?.user ?? null
-      const tokens = data?.tokens ?? null
-      const nextAccessToken = tokens?.accessToken ?? null
-      const nextRefreshToken = tokens?.refreshToken ?? null
-      const nextSessionId = data?.sessionId ?? null
-
-      if (!nextUser) {
-        throw new Error('OTP verification succeeded but response shape is unexpected')
-      }
-
-      setUser(nextUser)
-      setAccessToken(nextAccessToken)
-      setRefreshToken(nextRefreshToken)
-      setSessionId(nextSessionId)
-      persistAuth({ user: nextUser, accessToken: nextAccessToken, refreshToken: nextRefreshToken, sessionId: nextSessionId })
-      clearOtpSession()
-      sessionStorage.removeItem(LOGIN_IDEMPOTENCY_KEY)
-
-      return nextUser
     },
     [clearOtpSession, otpSession, persistAuth, sessionId]
   )

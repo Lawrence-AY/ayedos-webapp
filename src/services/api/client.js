@@ -292,6 +292,14 @@ api.interceptors.response.use(
   },
   (error) => {
     const config = error.config || {}
+    if (axios.isCancel(error) || error.code === 'ERR_CANCELED') {
+      return Promise.reject(new ApiError('Request cancelled', {
+        kind: 'cancelled',
+        url: `${config.baseURL || ''}${config.url || ''}`,
+        method: String(config.method || 'GET').toUpperCase(),
+        cause: error,
+      }))
+    }
     const isTimeout = error.code === 'ECONNABORTED' || String(error.message || '').toLowerCase().includes('timeout')
     const kind = isTimeout ? 'timeout' : 'network'
     const apiError = new ApiError(
