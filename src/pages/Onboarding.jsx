@@ -186,7 +186,7 @@ function Onboarding() {
       <Toaster position="top-right" richColors />
       <div style={{ minHeight: '100vh', width: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflowX: 'hidden', padding: '2rem 1rem' }}>
         <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 1280, margin: '0 auto' }}>
-          <div className="glass-card relative z-10 w-full max-w-[1280px] mx-auto rounded-[1.5rem] border border-slate-200/80 bg-white/90 p-4 sm:p-6 md:p-10 shadow-[0_20px_40px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-slate-800/80 dark:bg-slate-950/80">
+          <div className="glass-card relative z-10 w-full max-w-7xl mx-auto rounded-[1.5rem] border border-slate-200/80 bg-white/90 p-4 sm:p-6 md:p-10 shadow-[0_20px_40px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-slate-800/80 dark:bg-slate-950/80">
             <div className="flex justify-center mb-5">
               <img src="/logos/logo-light.png" alt="AYEDOS SACCO Logo" className="h-12 w-auto block dark:hidden" />
               <img src="/logos/logo-dark.png" alt="AYEDOS SACCO Logo" className="h-12 w-auto hidden dark:block" />
