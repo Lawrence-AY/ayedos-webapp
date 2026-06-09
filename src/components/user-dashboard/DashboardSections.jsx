@@ -3148,6 +3148,9 @@ function SavingsPage({
     );
   });
 
+  const displayBalance = (value) =>
+    showValues ? value : <span className="inline-block blur-sm">{value}</span>;
+
   return (
     <SimplePage icon={PiggyBank}>
       {message ? (
@@ -3157,38 +3160,46 @@ function SavingsPage({
           {message.text}
         </div>
       ) : null}
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={onToggleValues}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-        >
-          {showValues ? (
-            <EyeOff className="text-[#8cc63f]" size={16} />
-          ) : (
-            <Eye className="text-[#8cc63f]" size={16} />
-          )}
-        </button>
-      </div>
-      <div className="grid gap-4 md:grid-cols-2">
-        <StatCard
-          icon={PiggyBank}
-          className="text-[#8cc63f]"
-          label="Savings balance"
-          value={formatCurrency(stats.totalSavings)}
-          trend="Paid"
-          tone="emerald"
-          blur={!showValues}
-        />
-        <StatCard
-          icon={WalletCards}
-          className="text-[#8cc63f]"
-          label="Share capital"
-          value={formatCurrency(stats.shareCapital)}
-          trend="Equity"
-          tone="blue"
-          blur={!showValues}
-        />
+      <div className="grid gap-4 md:grid-cols-2 mb-4">
+        <Surface className="group p-5 hover:-translate-y-1">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="grid h-11 w-11 place-items-center rounded-lg bg-gray-100/30 transition duration-200 group-hover:scale-110">
+                <PiggyBank size={21} className="text-[#8cc63f]/90 font-light" />
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onToggleValues}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              {showValues ? (
+                <EyeOff className="text-[#8cc63f]" size={14} />
+              ) : (
+                <Eye className="text-[#8cc63f]" size={14} />
+              )}
+              {showValues ? "Hide" : "Show"}
+            </button>
+          </div>
+          <p className="mt-5 text-sm font-medium text-slate-500">Savings balance</p>
+          <p className="mt-1 text-2xl font-semibold tracking-normal text-slate-950">
+            {displayBalance(formatCurrency(stats.totalSavings))}
+          </p>
+        </Surface>
+        <Surface className="group p-5 hover:-translate-y-1">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="grid h-11 w-11 place-items-center rounded-lg bg-gray-100/30 transition duration-200 group-hover:scale-110">
+                <WalletCards size={21} className="text-[#8cc63f]/90 font-light" />
+              </div>
+            </div>
+            <span className="text-xs font-medium text-slate-400">Share capital</span>
+          </div>
+          <p className="mt-5 text-sm font-medium text-slate-500">Share capital</p>
+          <p className="mt-1 text-2xl font-semibold tracking-normal text-slate-950">
+            {displayBalance(formatCurrency(stats.shareCapital))}
+          </p>
+        </Surface>
       </div>
       <SavingsContributionForm
         accessToken={accessToken}

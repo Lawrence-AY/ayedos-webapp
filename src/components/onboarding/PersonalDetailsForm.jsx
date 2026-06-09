@@ -229,8 +229,23 @@ export const PersonalDetailsForm = ({
         </div>
       </div>
 
-      {/* Contact */}
+      {/* KRA PIN */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="kraPin">
+            KRA PIN <span className="text-destructive">*</span>
+          </Label>
+          <Input
+            id="kraPin"
+            value={formData.kraPin || ''}
+            onChange={(e) => onChange('kraPin', e.target.value.toUpperCase())}
+            placeholder="e.g., A123456789B"
+            disabled={isLoading}
+            minLength={11}
+            maxLength={11}
+            required
+          />
+        </div>
         <div className="space-y-2">
           <Label htmlFor="phone">
             Phone Number <span className="text-destructive">*</span>
@@ -264,6 +279,10 @@ export const PersonalDetailsForm = ({
             </SelectContent>
           </Select>
         </div>
+      </div>
+
+      {/* PO Box */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="poBox">
             Physical Address (PO Box) <span className="text-destructive">*</span>
