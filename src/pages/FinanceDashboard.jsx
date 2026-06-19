@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import {
   Banknote,
@@ -27,6 +27,7 @@ import {
 } from "../features/finance/financeService.js";
 import {
   AnalyticsPanel,
+  ConfirmActionDialog,
   DataTable,
   DashboardHero,
   KpiCard,
@@ -34,6 +35,7 @@ import {
   SectionHeader,
   SkeletonDashboard,
   StatusBadge,
+  exportRowsToCsv,
   formatCurrency,
   formatDate,
   getMonthlySeries,
@@ -113,7 +115,7 @@ function FinanceHome({ data, onVerifyTransaction, globalSearch = "" }) {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {cards.map((card) => (
-          <KpiCard key={card.label} {...card} trend="Live" />
+          <KpiCard key={card.label} {...card} />
         ))}
       </div>
 
@@ -129,7 +131,10 @@ function FinanceHome({ data, onVerifyTransaction, globalSearch = "" }) {
 
 function TransactionsPage({ transactions, embedded = false, onVerifyTransaction, onVoidTransaction, globalSearch = "" }) {
   const [search, setSearch] = useState("");
-  const rows = filterRows(filterRows(transactions, globalSearch, ["id", "type", "description", "status", "reference"]), search, ["id", "type", "description", "status", "reference"]);
+  const rows = useMemo(
+    () => filterRows(filterRows(transactions, globalSearch, ["id", "type", "description", "status", "reference"]), search, ["id", "type", "description", "status", "reference"]),
+    [transactions, globalSearch, search],
+  );
 
   const table = (
     <DataTable
@@ -173,15 +178,21 @@ function TransactionsPage({ transactions, embedded = false, onVerifyTransaction,
   );
 }
 
-function LoansPage({ loans, mode = "all", onApproveLoan, onRejectLoan, onDisburseLoan, globalSearch = "" }) {
+function LoansPage({ loans, mode = "all", onApproveLoan, onRejectLoan, onDisburseLoan, onReviewLoan, globalSearch = "" }) {
   const [search, setSearch] = useState("");
-  const filteredByMode = loans.filter((loan) => {
-    const status = String(loan.status || "").toUpperCase();
-    if (mode === "disbursements") return ["APPROVED", "DISBURSED", "ACTIVE"].includes(status);
-    if (mode === "repayments") return ["ACTIVE", "OVERDUE", "DISBURSED"].includes(status);
-    return true;
-  });
-  const rows = filterRows(filterRows(filteredByMode, globalSearch, ["id", "type", "status", "memberName", "loanType", "memberId"]), search, ["id", "type", "status", "memberName", "loanType", "memberId"]);
+  const filteredByMode = useMemo(
+    () => loans.filter((loan) => {
+      const status = String(loan.status || "").toUpperCase();
+      if (mode === "disbursements") return ["APPROVED", "DISBURSED", "ACTIVE"].includes(status);
+      if (mode === "repayments") return ["ACTIVE", "OVERDUE", "DISBURSED"].includes(status);
+      return true;
+    }),
+    [loans, mode],
+  );
+  const rows = useMemo(
+    () => filterRows(filterRows(filteredByMode, globalSearch, ["id", "type", "status", "memberName", "loanType", "memberId"]), search, ["id", "type", "status", "memberName", "loanType", "memberId"]),
+    [filteredByMode, globalSearch, search],
+  );
 
   return (
     <div className="space-y-6">
@@ -206,7 +217,7 @@ function LoansPage({ loans, mode = "all", onApproveLoan, onRejectLoan, onDisburs
           { key: "id", label: "Action", render: (value) => (
             <div className="flex flex-wrap gap-2">
               {mode === "repayments" ? (
-                <button className="text-sm font-semibold text-emerald-700">Review</button>
+                <button onClick={() => onReviewLoan?.(value)} className="text-sm font-semibold text-emerald-700">Review</button>
               ) : (
                 <>
                   <button onClick={() => onApproveLoan?.(value)} className="text-sm font-semibold text-emerald-700">Approve</button>
@@ -227,7 +238,10 @@ function LoansPage({ loans, mode = "all", onApproveLoan, onRejectLoan, onDisburs
 
 function SavingsPage({ shares, globalSearch = "" }) {
   const [search, setSearch] = useState("");
-  const rows = filterRows(filterRows(shares, globalSearch, ["id", "memberName", "memberId", "status"]), search, ["id", "memberName", "memberId", "status"]);
+  const rows = useMemo(
+    () => filterRows(filterRows(shares, globalSearch, ["id", "memberName", "memberId", "status"]), search, ["id", "memberName", "memberId", "status"]),
+    [shares, globalSearch, search],
+  );
 
   return (
     <div className="space-y-6">
@@ -259,7 +273,10 @@ function SavingsPage({ shares, globalSearch = "" }) {
 
 function DeductionsPage({ deductions, globalSearch = "" }) {
   const [search, setSearch] = useState("");
-  const rows = filterRows(filterRows(deductions, globalSearch, ["id", "memberName", "memberId", "reason", "status"]), search, ["id", "memberName", "memberId", "reason", "status"]);
+  const rows = useMemo(
+    () => filterRows(filterRows(deductions, globalSearch, ["id", "memberName", "memberId", "reason", "status"]), search, ["id", "memberName", "memberId", "reason", "status"]),
+    [deductions, globalSearch, search],
+  );
 
   return (
     <div className="space-y-6">
@@ -289,9 +306,12 @@ function DeductionsPage({ deductions, globalSearch = "" }) {
   );
 }
 
-function DividendsPage({ dividends, globalSearch = "" }) {
+function DividendsPage({ dividends, onReviewDividend, globalSearch = "" }) {
   const [search, setSearch] = useState("");
-  const rows = filterRows(filterRows(dividends, globalSearch, ["id", "memberId", "status"]), search, ["id", "memberId", "status"]);
+  const rows = useMemo(
+    () => filterRows(filterRows(dividends, globalSearch, ["id", "memberId", "status"]), search, ["id", "memberId", "status"]),
+    [dividends, globalSearch, search],
+  );
 
   return (
     <div className="space-y-6">
@@ -311,7 +331,7 @@ function DividendsPage({ dividends, globalSearch = "" }) {
           { key: "sharePercentage", label: "Rate", render: (value) => (value ? `${value}%` : "-") },
           { key: "status", label: "Status", render: (value) => <StatusBadge status={value || "Pending"} /> },
           { key: "declaredAt", label: "Declared", render: formatDate },
-          { key: "id", label: "Action", render: () => <button className="text-sm font-semibold text-emerald-700">Review</button> },
+          { key: "id", label: "Action", render: (value) => <button onClick={() => onReviewDividend?.(value)} className="text-sm font-semibold text-emerald-700">Review</button> },
         ]}
         data={rows}
         emptyTitle="No dividends found"
@@ -322,6 +342,28 @@ function DividendsPage({ dividends, globalSearch = "" }) {
 }
 
 function ReportsPage({ data }) {
+  const exportReport = (filename) => {
+    exportRowsToCsv({
+      filename,
+      rows: [
+        ...data.transactions.map((item) => ({ section: "Transaction", ...item })),
+        ...data.loans.map((item) => ({ section: "Loan", ...item })),
+        ...data.shares.map((item) => ({ section: "Savings", ...item })),
+        ...data.dividends.map((item) => ({ section: "Dividend", ...item })),
+      ],
+      columns: [
+        { key: "section", label: "Section" },
+        { key: "id", label: "ID" },
+        { key: "memberId", label: "Member ID" },
+        { key: "type", label: "Type" },
+        { key: "amount", label: "Amount" },
+        { key: "principal", label: "Principal" },
+        { key: "status", label: "Status" },
+        { key: "createdAt", label: "Created" },
+      ],
+    });
+  };
+
   return (
     <div className="space-y-6">
       <SectionHeader
@@ -330,8 +372,8 @@ function ReportsPage({ data }) {
         description="Generate cash flow, savings, repayment, dividend, and monthly financial summaries."
         action={
           <div className="flex gap-2">
-            <button className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700">Export PDF</button>
-            <button className="rounded-lg bg-slate-950 px-4 py-3 text-sm font-semibold text-white">Export Excel</button>
+            <button type="button" onClick={() => window.print()} className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700">Export PDF</button>
+            <button type="button" onClick={() => exportReport("finance-report.csv")} className="rounded-lg bg-slate-950 px-4 py-3 text-sm font-semibold text-white">Export Excel</button>
           </div>
         }
       />
@@ -353,6 +395,8 @@ export default function FinanceDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
   const [feedback, setFeedback] = useState(null);
+  const [pendingAction, setPendingAction] = useState(null);
+  const [loadError, setLoadError] = useState("");
   const [data, setData] = useState({
     transactions: [],
     loans: [],
@@ -376,6 +420,8 @@ export default function FinanceDashboard() {
       getAllDeductions(accessToken),
     ]);
 
+    const rejected = results.filter((result) => result.status === "rejected");
+    setLoadError(rejected.length ? `${rejected.length} dashboard section${rejected.length === 1 ? "" : "s"} failed to refresh. Showing available data.` : "");
     setData({
       transactions: results[0].status === "fulfilled" && Array.isArray(results[0].value) ? results[0].value : [],
       loans: results[1].status === "fulfilled" && Array.isArray(results[1].value) ? results[1].value : [],
@@ -398,7 +444,9 @@ export default function FinanceDashboard() {
     load();
     if (accessToken) {
       intervalId = window.setInterval(() => {
-        loadDashboardData({ showLoading: false });
+        if (document.visibilityState === "visible") {
+          loadDashboardData({ showLoading: false });
+        }
       }, 120000);
     }
     return () => {
@@ -407,6 +455,12 @@ export default function FinanceDashboard() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
+
+  useEffect(() => {
+    if (!feedback) return undefined;
+    const timeoutId = window.setTimeout(() => setFeedback(null), 6000);
+    return () => window.clearTimeout(timeoutId);
+  }, [feedback]);
 
   async function runAction(action, successMessage) {
     try {
@@ -423,16 +477,40 @@ export default function FinanceDashboard() {
     runAction(() => verifyTransaction(transactionId, accessToken), "Transaction verified successfully");
 
   const handleVoidTransaction = (transactionId) =>
-    runAction(() => voidTransaction(transactionId, "Voided by finance officer", accessToken), "Transaction voided successfully");
+    setPendingAction({
+      title: "Void transaction",
+      description: "Provide a reason before voiding this transaction.",
+      requiresReason: true,
+      action: (reason) => runAction(() => voidTransaction(transactionId, reason, accessToken), "Transaction voided successfully"),
+    });
 
   const handleApproveLoan = (loanId) =>
-    runAction(() => approveLoan(loanId, accessToken), "Loan approved successfully");
+    setPendingAction({
+      title: "Approve loan",
+      description: "This will approve the selected loan for the next workflow step.",
+      action: () => runAction(() => approveLoan(loanId, accessToken), "Loan approved successfully"),
+    });
 
   const handleRejectLoan = (loanId) =>
-    runAction(() => rejectLoan(loanId, "Rejected by finance officer", accessToken), "Loan rejected successfully");
+    setPendingAction({
+      title: "Reject loan",
+      description: "Provide a reason so the decision is recorded clearly.",
+      requiresReason: true,
+      action: (reason) => runAction(() => rejectLoan(loanId, reason, accessToken), "Loan rejected successfully"),
+    });
 
   const handleDisburseLoan = (loanId) =>
-    runAction(() => disburseLoan(loanId, accessToken), "Loan disbursed successfully");
+    setPendingAction({
+      title: "Disburse loan",
+      description: "This will mark the selected loan for disbursement. Confirm the loan details before continuing.",
+      action: () => runAction(() => disburseLoan(loanId, accessToken), "Loan disbursed successfully"),
+    });
+
+  const handleReviewLoan = (loanId) =>
+    setFeedback({ type: "success", message: `Loan ${loanId} selected for repayment review.` });
+
+  const handleReviewDividend = (dividendId) =>
+    setFeedback({ type: "success", message: `Dividend ${dividendId} selected for review.` });
 
   const path = location.pathname;
   const isHome = path === "/dashboard" || path === "/dashboard/" || path === dashboardBasePath || path === `${dashboardBasePath}/`;
@@ -442,10 +520,10 @@ export default function FinanceDashboard() {
     if (isHome) return <FinanceHome data={data} onVerifyTransaction={handleVerifyTransaction} globalSearch={globalSearch} />;
     if (path.includes("/transactions")) return <TransactionsPage transactions={data.transactions} onVerifyTransaction={handleVerifyTransaction} onVoidTransaction={handleVoidTransaction} globalSearch={globalSearch} />;
     if (path.includes("/loan-disbursements") || path.includes("/loans")) return <LoansPage loans={data.loans} mode="disbursements" onApproveLoan={handleApproveLoan} onRejectLoan={handleRejectLoan} onDisburseLoan={handleDisburseLoan} globalSearch={globalSearch} />;
-    if (path.includes("/loan-repayments")) return <LoansPage loans={data.loans} mode="repayments" globalSearch={globalSearch} />;
+    if (path.includes("/loan-repayments")) return <LoansPage loans={data.loans} mode="repayments" onReviewLoan={handleReviewLoan} globalSearch={globalSearch} />;
     if (path.includes("/savings") || path.includes("/shares")) return <SavingsPage shares={data.shares} globalSearch={globalSearch} />;
     if (path.includes("/deductions")) return <DeductionsPage deductions={data.deductions} globalSearch={globalSearch} />;
-    if (path.includes("/dividends")) return <DividendsPage dividends={data.dividends} globalSearch={globalSearch} />;
+    if (path.includes("/dividends")) return <DividendsPage dividends={data.dividends} onReviewDividend={handleReviewDividend} globalSearch={globalSearch} />;
     if (path.includes("/reports")) return <ReportsPage data={data} />;
     if (path.includes("/member-profiles")) {
       return <RoutePlaceholder eyebrow="Member financial profiles" title="Member financial profiles" description="View savings history, share contributions, loan repayment history, salary deductions, and dividend history by member." capabilities={["Savings history", "Share contributions", "Loan repayments", "Salary deductions", "Dividend history"]} />;
@@ -471,14 +549,29 @@ export default function FinanceDashboard() {
           onSearchChange={setGlobalSearch}
         />
         <div className="mx-auto w-full max-w-[1500px] px-4 py-5 sm:px-6 lg:px-8">
+          {loadError ? (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+              {loadError}
+            </div>
+          ) : null}
           {feedback ? (
-            <div className={`mb-4 rounded-lg border px-4 py-3 text-sm font-medium ${feedback.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800"}`}>
-              {feedback.message}
+            <div className={`mb-4 flex items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm font-medium ${feedback.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800"}`}>
+              <span>{feedback.message}</span>
+              <button type="button" onClick={() => setFeedback(null)} className="text-xs font-semibold uppercase tracking-[0.12em]">Close</button>
             </div>
           ) : null}
           {content}
         </div>
       </main>
+      <ConfirmActionDialog
+        action={pendingAction}
+        onClose={() => setPendingAction(null)}
+        onConfirm={async (reason) => {
+          const action = pendingAction;
+          setPendingAction(null);
+          await action?.action(reason);
+        }}
+      />
     </div>
   );
 }
