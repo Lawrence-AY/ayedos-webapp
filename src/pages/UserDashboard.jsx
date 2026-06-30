@@ -241,6 +241,7 @@ export default function UserDashboard() {
       return (
         <ProfileSettings
           user={user}
+          stats={stats}
           accessToken={accessToken}
           onProfileUpdated={(updatedUser) => {
             updateCurrentUser?.(updatedUser);

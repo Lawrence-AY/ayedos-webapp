@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowUpRight,
@@ -17,6 +17,7 @@ import {
   Fingerprint,
   KeyRound,
   Landmark,
+  LogOut,
   LockKeyhole,
   MailCheck,
   MapPin,
@@ -60,6 +61,7 @@ import { getDashboardPath } from "../../utils/dashboardRoutes.js";
 import SavingsContributionForm from "./SavingsContributionForm.jsx";
 import {
   updateMemberProfile,
+  requestMemberOptOut,
   applyForLoan,
   emailMemberReport,
   repayLoan,
@@ -98,6 +100,7 @@ const LOAN_PRODUCTS = [
     max: 50000,
     interestRate: 1,
     duration: 12,
+    defaultRepaymentMonths: 12,
     guarantors: 0,
     requiresFullShareCapital: false,
   },
@@ -106,7 +109,8 @@ const LOAN_PRODUCTS = [
     name: "Education Loan",
     max: 100000,
     interestRate: 1,
-    duration: 12,
+    duration: 24,
+    defaultRepaymentMonths: 18,
     guarantors: 2,
     requiresFullShareCapital: true,
   },
@@ -114,8 +118,9 @@ const LOAN_PRODUCTS = [
     type: "WELFARE",
     name: "Welfare Loan",
     max: 100000,
-    interestRate: 1.5,
+    interestRate: 1,
     duration: 24,
+    defaultRepaymentMonths: 18,
     guarantors: 2,
     requiresFullShareCapital: true,
   },
@@ -123,8 +128,9 @@ const LOAN_PRODUCTS = [
     type: "DEVELOPMENT",
     name: "Development Loan",
     max: 250000,
-    interestRate: 2,
+    interestRate: 1.5,
     duration: 72,
+    defaultRepaymentMonths: 48,
     guarantors: 3,
     requiresFullShareCapital: true,
   },
@@ -1030,6 +1036,7 @@ function Field({
   as = "input",
   options = [],
   suffix = null,
+  placeholder,
 }) {
   const controlClass =
     "mt-2 w-full rounded-lg border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100";
@@ -1044,6 +1051,7 @@ function Field({
             name={name}
             value={value}
             onChange={onChange}
+            placeholder={placeholder}
           />
         ) : as === "select" ? (
           <select
@@ -1065,6 +1073,7 @@ function Field({
             name={name}
             value={value}
             onChange={onChange}
+            placeholder={placeholder}
           />
         )}
         {suffix ? (
@@ -1104,7 +1113,7 @@ function buildProfileForm(profile = {}) {
   };
 }
 
-function ProfileSettings({ user, accessToken, onProfileUpdated }) {
+function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated }) {
   const [form, setForm] = useState(() => ({
     ...emptyProfile,
     fullName: user?.name || user?.fullName || "",
@@ -1129,6 +1138,12 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
   const [alert, setAlert] = useState(null);
   const [preview, setPreview] = useState(user?.passportPhotoUrl || null);
   const [photoFile, setPhotoFile] = useState(null);
+  const [optOutForm, setOptOutForm] = useState({
+    reason: "",
+    buyerMemberNumber: "",
+    acknowledgedTerms: false,
+  });
+  const [submittingOptOut, setSubmittingOptOut] = useState(false);
   useEffect(() => {
     setForm(buildProfileForm(user));
     setPreview(user?.passportPhotoUrl || null);
@@ -1151,6 +1166,10 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
   const maskedNationalId = form.nationalId
     ? maskNationalId(form.nationalId)
     : "—";
+  const shareCapital = Number(stats.shareCapital || 0);
+  const savingsWithdrawal = Number(stats.totalSavings || 0);
+  const saccoShareFee = shareCapital * 0.01;
+  const auctionAmount = Math.max(shareCapital - saccoShareFee, 0);
 
   function update(event) {
     setForm((current) => ({
@@ -1305,6 +1324,46 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
       });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleOptOutSubmit(event) {
+    event.preventDefault();
+    if (!optOutForm.acknowledgedTerms) {
+      setAlert({
+        type: "error",
+        message: "Please acknowledge the opt-out terms before submitting.",
+      });
+      return;
+    }
+
+    setSubmittingOptOut(true);
+    try {
+      await requestMemberOptOut(
+        {
+          reason: optOutForm.reason,
+          buyerMemberNumber: optOutForm.buyerMemberNumber,
+          acknowledgedTerms: optOutForm.acknowledgedTerms,
+        },
+        accessToken,
+      );
+      setOptOutForm({
+        reason: "",
+        buyerMemberNumber: "",
+        acknowledgedTerms: false,
+      });
+      setAlert({
+        type: "success",
+        message:
+          "Opt-out request submitted successfully. The SACCO team will review your savings withdrawal and share capital auction details.",
+      });
+    } catch (error) {
+      setAlert({
+        type: "error",
+        message: error?.message || "Failed to submit opt-out request.",
+      });
+    } finally {
+      setSubmittingOptOut(false);
     }
   }
 
@@ -1505,6 +1564,122 @@ function ProfileSettings({ user, accessToken, onProfileUpdated }) {
           </button>
         </div>
       </form>
+
+      <Surface className="p-5">
+        <div className="mb-5 flex items-start gap-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-rose-50 text-rose-700">
+            <LogOut size={20} />
+          </div>
+          <div>
+            <h5 className="text-base font-semibold tracking-normal text-slate-950">
+              Membership opt-out
+            </h5>
+            <p className="mt-1 text-sm text-slate-500">
+              Request to leave the SACCO and begin settlement of savings and
+              share capital.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-semibold uppercase text-slate-500">
+              Savings withdrawal
+            </p>
+            <p className="mt-2 text-lg font-semibold text-slate-950">
+              {formatCurrency(savingsWithdrawal)}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Savings can be withdrawn after review.
+            </p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-semibold uppercase text-slate-500">
+              SACCO fee
+            </p>
+            <p className="mt-2 text-lg font-semibold text-slate-950">
+              {formatCurrency(saccoShareFee)}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              1% of share capital is retained by the SACCO.
+            </p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-semibold uppercase text-slate-500">
+              Share auction value
+            </p>
+            <p className="mt-2 text-lg font-semibold text-slate-950">
+              {formatCurrency(auctionAmount)}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Remaining share capital is auctioned to existing members.
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={handleOptOutSubmit} className="mt-5 grid gap-4">
+          <Field
+            label="Preferred buyer member number"
+            name="buyerMemberNumber"
+            value={optOutForm.buyerMemberNumber}
+            onChange={(event) =>
+              setOptOutForm((current) => ({
+                ...current,
+                buyerMemberNumber: event.target.value,
+              }))
+            }
+            placeholder="Optional, if you already have a buyer"
+          />
+          <label className="grid gap-2 text-sm font-semibold text-slate-700">
+            Reason for opting out
+            <textarea
+              name="reason"
+              value={optOutForm.reason}
+              onChange={(event) =>
+                setOptOutForm((current) => ({
+                  ...current,
+                  reason: event.target.value,
+                }))
+              }
+              rows={4}
+              className="w-full rounded-lg border border-slate-200 px-3.5 py-3 text-sm font-normal outline-none transition focus:border-[#8cc63f]"
+              placeholder="Optional"
+            />
+          </label>
+          <label className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <input
+              type="checkbox"
+              checked={optOutForm.acknowledgedTerms}
+              onChange={(event) =>
+                setOptOutForm((current) => ({
+                  ...current,
+                  acknowledgedTerms: event.target.checked,
+                }))
+              }
+              className="mt-1 h-4 w-4 accent-[#8cc63f]"
+            />
+            <span>
+              I understand that my savings may be withdrawn, while my share
+              capital must be sold to an existing SACCO member. The SACCO will
+              retain 1% of the share capital and auction the remaining amount.
+            </span>
+          </label>
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={submittingOptOut || !optOutForm.acknowledgedTerms}
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-rose-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {submittingOptOut ? (
+                <RefreshCw className="animate-spin" size={17} />
+              ) : (
+                <LogOut size={17} />
+              )}
+              {submittingOptOut ? "Submitting request" : "Submit opt-out request"}
+            </button>
+          </div>
+        </form>
+      </Surface>
     </div>
   );
 }
@@ -2335,185 +2510,222 @@ function LoansTable({ loans }) {
 }
 
 function LoanCalculator({ product, amount, duration }) {
-  const [calculator, setCalculator] = useState({
-    amount: Math.max(1000, amount || 10000),
-    duration: Math.max(1, duration || product.duration),
-    extraMonthly: 0,
-  });
-  const safeAmount = Math.min(
-    Math.max(Number(calculator.amount || 0), 1000),
-    product.max,
+  const [calculatorProductType, setCalculatorProductType] = useState(
+    product.type,
   );
-  const safeDuration = Math.min(
-    Math.max(Number(calculator.duration || 1), 1),
-    product.duration,
+  const [loanAmount, setLoanAmount] = useState(
+    String(Math.min(Math.max(amount || product.max / 2, 1000), product.max)),
   );
-  const extraMonthly = Math.max(Number(calculator.extraMonthly || 0), 0);
-  const totalInterest =
-    safeAmount * (product.interestRate / 100) * safeDuration;
-  const totalRepayable = safeAmount + totalInterest;
-  const monthlyRepayment = safeDuration ? totalRepayable / safeDuration : 0;
-  const boostedPayment = monthlyRepayment + extraMonthly;
-  const monthsWithExtra = boostedPayment
-    ? Math.ceil(totalRepayable / boostedPayment)
-    : safeDuration;
-  const savedMonths = Math.max(safeDuration - monthsWithExtra, 0);
-  const affordabilityScore = Math.max(
-    0,
-    Math.min(100, 100 - (monthlyRepayment / Math.max(safeAmount, 1)) * 100),
+  const [repaymentMonths, setRepaymentMonths] = useState(
+    Math.min(
+      Math.max(duration || product.defaultRepaymentMonths || product.duration, 1),
+      product.duration,
+    ),
   );
+  const selectedCalculatorProduct =
+    LOAN_PRODUCTS.find((item) => item.type === calculatorProductType) ||
+    LOAN_PRODUCTS[0];
+
+  const clampLoanAmount = (value, maxAmount) => {
+    const numericValue = Number(value);
+
+    if (!Number.isFinite(numericValue) || numericValue <= 0) {
+      return "";
+    }
+
+    return String(Math.min(Math.max(numericValue, 1000), maxAmount));
+  };
+
+  useEffect(() => {
+    setCalculatorProductType(product.type);
+    setLoanAmount(String(Math.min(Math.max(amount || product.max / 2, 1000), product.max)));
+    setRepaymentMonths(
+      Math.min(
+        Math.max(duration || product.defaultRepaymentMonths || product.duration, 1),
+        product.duration,
+      ),
+    );
+  }, [amount, duration, product]);
+
+  useEffect(() => {
+    setLoanAmount((currentAmount) =>
+      clampLoanAmount(currentAmount, selectedCalculatorProduct.max),
+    );
+    setRepaymentMonths((currentMonths) =>
+      Math.min(Math.max(currentMonths, 1), selectedCalculatorProduct.duration),
+    );
+  }, [selectedCalculatorProduct]);
+
+  const loanSummary = useMemo(() => {
+    const principal = Number(loanAmount) || 0;
+    const months = Number(repaymentMonths) || 0;
+    const rate = selectedCalculatorProduct.interestRate / 100;
+
+    if (principal <= 0 || months <= 0) {
+      return {
+        monthlyPayment: 0,
+        totalRepayment: 0,
+        totalInterest: 0,
+      };
+    }
+
+    const monthlyPayment =
+      rate === 0
+        ? principal / months
+        : (principal * rate) / (1 - Math.pow(1 + rate, -months));
+    const totalRepayment = monthlyPayment * months;
+    const totalInterest = totalRepayment - principal;
+
+    return {
+      monthlyPayment,
+      totalRepayment,
+      totalInterest,
+    };
+  }, [loanAmount, repaymentMonths, selectedCalculatorProduct]);
 
   return (
-    <Surface className="overflow-hidden">
-      <div className="grid gap-0 lg:grid-cols-[1.15fr_0.85fr]">
-        <div className="p-5 sm:p-6">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h5 className="text-base font-semibold tracking-normal text-slate-950">
-                Interactive loan calculator
-              </h5>
-              <p className="mt-1 text-sm text-slate-500">
-                Tune amount, duration, and optional extra payments before
-                applying.
-              </p>
-            </div>
-            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-[8cc63f]/50 ">
-              <Calculator className="text-[#8cc63f]" size={20} />
-            </div>
+    <Surface className="overflow-hidden border-[#8cc63f]/20 bg-linear-to-br from-white via-[#f8fff0] to-[#eef7e2]">
+      <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[1.15fr_0.85fr]">
+        <div>
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-[#8cc63f]/15 px-3 py-1 text-sm font-semibold text-[#8cc63f]">
+            <Calculator size={17} />
+            Loan calculator
+          </div>
+          <h5 className="text-2xl font-semibold tracking-normal text-slate-950">
+            Estimate your monthly repayment
+          </h5>
+          <p className="mt-2 max-w-2xl text-sm text-slate-600">
+            Pick a product, set your amount, and adjust the repayment period to
+            see an estimated monthly installment based on the listed monthly
+            interest rate.
+          </p>
+
+          <div className="mt-6 grid gap-5 md:grid-cols-2">
+            <label className="block text-sm font-semibold text-slate-700">
+              Loan product
+              <select
+                value={calculatorProductType}
+                onChange={(event) =>
+                  setCalculatorProductType(event.target.value)
+                }
+                className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none transition focus:border-[#8cc63f]"
+              >
+                {LOAN_PRODUCTS.map((item) => (
+                  <option key={item.type} value={item.type}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block text-sm font-semibold text-slate-700">
+              Loan amount
+              <input
+                type="text"
+                inputMode="numeric"
+                value={loanAmount}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+
+                  if (/^\d*$/.test(nextValue)) {
+                    setLoanAmount(nextValue);
+                  }
+                }}
+                onBlur={() =>
+                  setLoanAmount((currentAmount) =>
+                    clampLoanAmount(currentAmount, selectedCalculatorProduct.max),
+                  )
+                }
+                className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3.5 py-3 text-sm outline-none transition focus:border-[#8cc63f]"
+              />
+              <span className="mt-2 block text-xs font-medium text-slate-500">
+                Maximum for this product:{" "}
+                {formatCurrency(selectedCalculatorProduct.max, {
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 0,
+                })}
+              </span>
+            </label>
           </div>
 
-          <div className="mt-6 grid gap-5">
-            <label className="grid gap-3">
-              <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="font-semibold text-slate-700">Principal</span>
-                <span className="font-bold text-slate-950">
-                  {formatCurrency(safeAmount)}
-                </span>
-              </div>
-              <input
-                type="range"
-                min="1000"
-                max={product.max}
-                step="1000"
-                value={safeAmount}
-                onChange={(event) =>
-                  setCalculator((current) => ({
-                    ...current,
-                    amount: event.target.value,
-                  }))
-                }
-                className="bg-[#8cc63f]"
-              />
-              <div className="flex justify-between text-xs font-medium text-slate-500">
-                <span>KES 1,000</span>
-                <span>{formatCurrency(product.max)}</span>
-              </div>
-            </label>
-
-            <label className="grid gap-3">
-              <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="font-semibold text-slate-700">Duration</span>
-                <span className="font-bold text-slate-950">
-                  {safeDuration} months
-                </span>
-              </div>
-              <input
-                type="range"
-                min="1"
-                max={product.duration}
-                step="1"
-                value={safeDuration}
-                onChange={(event) =>
-                  setCalculator((current) => ({
-                    ...current,
-                    duration: event.target.value,
-                  }))
-                }
-                className="bg-[#8cc63f]"
-              />
-              <div className="flex justify-between text-xs font-medium text-slate-500">
-                <span>1 month</span>
-                <span>{product.duration} months</span>
-              </div>
-            </label>
-
-            <label className="grid gap-3">
-              <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="font-semibold text-slate-700">
-                  Extra monthly payment
-                </span>
-                <span className="font-bold text-slate-950">
-                  {formatCurrency(extraMonthly)}
-                </span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max={Math.max(5000, Math.round(monthlyRepayment))}
-                step="500"
-                value={extraMonthly}
-                onChange={(event) =>
-                  setCalculator((current) => ({
-                    ...current,
-                    extraMonthly: event.target.value,
-                  }))
-                }
-                className="bg-[#8cc63f]"
-              />
-            </label>
+          <div className="mt-6">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <span className="text-sm font-semibold text-slate-700">
+                Repayment period
+              </span>
+              <span className="rounded-full bg-[#8cc63f]/15 px-3 py-1 text-sm font-semibold text-[#8cc63f]">
+                {repaymentMonths} months
+              </span>
+            </div>
+            <input
+              type="range"
+              min="1"
+              max={selectedCalculatorProduct.duration}
+              step="1"
+              value={repaymentMonths}
+              onChange={(event) =>
+                setRepaymentMonths(Number(event.target.value))
+              }
+              className="w-full accent-[#8cc63f]"
+            />
+            <div className="mt-2 flex justify-between text-xs font-medium text-slate-500">
+              <span>1 month</span>
+              <span>{selectedCalculatorProduct.duration} months</span>
+            </div>
           </div>
         </div>
 
-        <div className="border-t border-slate-200 bg-slate-50 p-5 sm:p-6 lg:border-l lg:border-t-0">
-          <div className="rounded-lg border border-slate-200 bg-white p-5">
-            <p className="text-sm font-semibold text-slate-500">
-              {product.name}
-            </p>
-            <p className="mt-2 text-3xl font-semibold tracking-normal text-slate-950">
-              {formatCurrency(monthlyRepayment)}
-            </p>
-            <p className="mt-1 text-sm text-slate-500">
-              Estimated monthly repayment
-            </p>
-          </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-            <div className="rounded-lg border border-slate-200 bg-white p-4">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                <TrendingUp size={16} /> Interest
-              </div>
-              <p className="mt-2 text-xl font-semibold text-slate-950">
-                {formatCurrency(totalInterest)}
-              </p>
-              <p className="mt-1 text-xs text-slate-500">
-                {product.interestRate}% monthly for {safeDuration} months
-              </p>
+        <div className="rounded-lg border border-white/80 bg-white/85 p-5 shadow-sm">
+          <p className="text-sm font-semibold text-slate-500">
+            Estimated repayment summary
+          </p>
+          <p className="mt-3 text-3xl font-semibold tracking-normal text-slate-950">
+            {formatCurrency(loanSummary.monthlyPayment, {
+              minimumFractionDigits: 0,
+              maximumFractionDigits: 0,
+            })}
+            <span className="ml-2 text-base font-medium text-slate-500">
+              / month
+            </span>
+          </p>
+
+          <div className="mt-5 grid gap-3">
+            <div className="flex items-center justify-between rounded-lg bg-slate-50 px-4 py-3">
+              <span className="text-sm font-medium text-slate-600">
+                Total repayment
+              </span>
+              <strong className="text-sm text-slate-950">
+                {formatCurrency(loanSummary.totalRepayment, {
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 0,
+                })}
+              </strong>
             </div>
-            <div className="rounded-lg border border-slate-200 bg-white p-4">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                <Clock3 size={16} /> Payoff impact
-              </div>
-              <p className="mt-2 text-xl font-semibold text-slate-950">
-                {savedMonths
-                  ? `${savedMonths} months faster`
-                  : "Standard schedule"}
-              </p>
-              <p className="mt-1 text-xs text-slate-500">
-                With {formatCurrency(extraMonthly)} extra per month
-              </p>
+            <div className="flex items-center justify-between rounded-lg bg-slate-50 px-4 py-3">
+              <span className="text-sm font-medium text-slate-600">
+                Total interest
+              </span>
+              <strong className="text-sm text-slate-950">
+                {formatCurrency(loanSummary.totalInterest, {
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 0,
+                })}
+              </strong>
             </div>
-          </div>
-          <div className="mt-4">
-            <div className="mb-2 flex justify-between text-xs font-semibold text-slate-500">
-              <span>Payment comfort</span>
-              <span>{Math.round(affordabilityScore)}%</span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-slate-200">
-              <div
-                className="h-full rounded-full bg-[#8cc63f]"
-                style={{ width: `${affordabilityScore}%` }}
-              />
+            <div className="flex items-center justify-between rounded-lg bg-slate-50 px-4 py-3">
+              <span className="text-sm font-medium text-slate-600">
+                Monthly interest rate
+              </span>
+              <strong className="text-sm text-slate-950">
+                {selectedCalculatorProduct.interestRate.toFixed(1)}%
+              </strong>
             </div>
           </div>
+
+          <p className="mt-5 text-xs leading-6 text-slate-500">
+            This is an estimate for planning purposes and may vary from final
+            approved loan terms, fees, or SACCO review outcomes.
+          </p>
         </div>
       </div>
     </Surface>
