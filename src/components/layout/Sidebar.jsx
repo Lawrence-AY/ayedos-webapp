@@ -6,13 +6,16 @@ import {
   BriefcaseBusiness,
   FileText,
   Headphones,
+  Landmark,
   LayoutDashboard,
   LogOut,
   PieChart,
   ReceiptText,
   Settings,
   Shield,
+  TrendingUp,
   UserRound,
+  UsersRound,
   WalletCards,
   X,
 } from "lucide-react";
@@ -65,17 +68,16 @@ const adminNavItems = [
 ];
 
 const financeNavItems = [
-  { label: "Dashboard", suffix: "", exact: true, icon: LayoutDashboard },
-  { label: "Transactions", suffix: "transactions", icon: ReceiptText },
-  { label: "Savings Accounts", suffix: "savings", icon: BriefcaseBusiness },
-  { label: "Loan Disbursements", suffix: "loan-disbursements", icon: FileText },
-  { label: "Loan Repayments", suffix: "loan-repayments", icon: FileText },
-  { label: "Salary Deductions", suffix: "deductions", icon: ReceiptText },
-  { label: "Dividends", suffix: "dividends", icon: BriefcaseBusiness },
-  { label: "Financial Reports", suffix: "reports", icon: LayoutDashboard },
-  { label: "Member Financial Profiles", suffix: "member-profiles", icon: UserRound },
+  { label: "Dashboard Overview", suffix: "", exact: true, icon: LayoutDashboard },
+  { label: "Transactions & Audit", suffix: "transactions", icon: ReceiptText },
+  { label: "Loan Management", suffix: "loans", icon: Landmark },
+  { label: "Salary Deductions", suffix: "deductions", icon: BriefcaseBusiness },
+  { label: "Member Profiles", suffix: "members", icon: UsersRound },
+  { label: "Dividends", suffix: "dividends", icon: PieChart },
+  { label: "Reports & Analytics", suffix: "reports", icon: TrendingUp },
   { label: "Notifications", suffix: "notifications", icon: Bell },
-  { label: "Security", suffix: "security", icon: Shield },
+  { label: "Profile Settings", suffix: "settings", icon: Settings },
+
 ];
 
 const navItems = {
