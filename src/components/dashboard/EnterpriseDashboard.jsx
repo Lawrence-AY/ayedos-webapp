@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   BarChart3,
@@ -24,7 +25,11 @@ import {
 } from "recharts";
 
 export function formatCurrency(value) {
-  return `KSh ${Math.round(Number(value || 0)).toLocaleString()}`;
+  return new Intl.NumberFormat("en-KE", {
+    style: "currency",
+    currency: "KES",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
 }
 
 export function formatDate(value) {
@@ -125,7 +130,7 @@ export function SkeletonDashboard() {
   );
 }
 
-export function KpiCard({ icon: Icon, label, value, trend = "Live", helper, tone = "emerald", bars = [] }) {
+export function KpiCard({ icon: Icon, label, value, trend, helper, tone = "emerald", bars = [] }) {
   const tones = {
     emerald: "bg-emerald-50 text-emerald-700",
     blue: "bg-sky-50 text-sky-700",
@@ -146,10 +151,12 @@ export function KpiCard({ icon: Icon, label, value, trend = "Live", helper, tone
         <div className={`grid h-11 w-11 place-items-center rounded-lg ${tones[tone] || tones.emerald}`}>
           <Icon size={21} />
         </div>
-        <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
-          {String(trend).startsWith("-") ? <TrendingDown size={13} /> : <TrendingUp size={13} />}
-          {trend}
-        </span>
+        {trend ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+            {String(trend).startsWith("-") ? <TrendingDown size={13} /> : <TrendingUp size={13} />}
+            {trend}
+          </span>
+        ) : null}
       </div>
       <p className="mt-5 text-sm font-medium text-slate-500">{label}</p>
       <motion.p
@@ -161,7 +168,7 @@ export function KpiCard({ icon: Icon, label, value, trend = "Live", helper, tone
         {value}
       </motion.p>
       <div className="mt-4 flex h-8 items-end gap-1.5">
-        {(bars.length ? bars : [0, 0, 0, 0, 0, 0]).map((bar, index) => (
+        {(bars.length ? bars : [12, 24, 18, 34, 28, 42]).map((bar, index) => (
           <span
             key={`${label}-${index}`}
             className="w-full rounded-t bg-emerald-100"
@@ -175,7 +182,34 @@ export function KpiCard({ icon: Icon, label, value, trend = "Live", helper, tone
   );
 }
 
-export function Toolbar({ search, onSearch, placeholder = "Search records...", actionLabel = "Export" }) {
+function getCellExportValue(row, column) {
+  if (typeof column.exportValue === "function") return column.exportValue(row[column.key], row);
+  const value = row?.[column.key];
+  if (value == null) return "";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+export function exportRowsToCsv({ columns = [], rows = [], filename = "records.csv" }) {
+  const exportableColumns = columns.filter((column) => column.export !== false && !/^(action|actions|decision)$/i.test(column.label || ""));
+  const escapeCell = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+  const csv = [
+    exportableColumns.map((column) => escapeCell(column.label || column.key)).join(","),
+    ...rows.map((row) => exportableColumns.map((column) => escapeCell(getCellExportValue(row, column))).join(",")),
+  ].join("\r\n");
+
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename.endsWith(".csv") ? filename : `${filename}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+export function Toolbar({ search, onSearch, placeholder = "Search records...", actionLabel = "Export CSV", onExport, onFilter }) {
   return (
     <div className="flex flex-col gap-3 border-b border-slate-200 p-5 lg:flex-row lg:items-center lg:justify-between">
       <div className="relative min-w-0 flex-1">
@@ -188,11 +222,13 @@ export function Toolbar({ search, onSearch, placeholder = "Search records...", a
         />
       </div>
       <div className="flex flex-wrap gap-2">
-        <button className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
-          <Filter size={16} />
-          Filter
-        </button>
-        <button className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">
+        {onFilter ? (
+          <button type="button" onClick={onFilter} className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-emerald-100">
+            <Filter size={16} />
+            Filter
+          </button>
+        ) : null}
+        <button type="button" onClick={onExport} className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-950 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-200">
           <Download size={16} />
           {actionLabel}
         </button>
@@ -201,7 +237,25 @@ export function Toolbar({ search, onSearch, placeholder = "Search records...", a
   );
 }
 
-export function DataTable({ title, description, columns, data = [], emptyTitle, emptyDescription, search, onSearch }) {
+export function DataTable({ title, description, columns, data = [], emptyTitle, emptyDescription, search, onSearch, pageSize = 10, exportFilename, onFilter }) {
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(data.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const startIndex = (currentPage - 1) * pageSize;
+  const pageRows = useMemo(() => data.slice(startIndex, startIndex + pageSize), [data, startIndex, pageSize]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [data, pageSize, search]);
+
+  const handleExport = () => {
+    exportRowsToCsv({
+      columns,
+      rows: data,
+      filename: exportFilename || `${String(title || "records").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "records"}.csv`,
+    });
+  };
+
   return (
     <Surface className="overflow-hidden">
       <div className="flex flex-col gap-2 border-b border-slate-200 p-5 sm:flex-row sm:items-end sm:justify-between">
@@ -210,7 +264,7 @@ export function DataTable({ title, description, columns, data = [], emptyTitle, 
           {description ? <p className="text-sm text-slate-500">{description}</p> : null}
         </div>
       </div>
-      {typeof search === "string" && onSearch ? <Toolbar search={search} onSearch={onSearch} /> : null}
+      {typeof search === "string" && onSearch ? <Toolbar search={search} onSearch={onSearch} onExport={handleExport} onFilter={onFilter} /> : null}
       {data.length === 0 ? (
         <EmptyState title={emptyTitle} description={emptyDescription} />
       ) : (
@@ -219,18 +273,18 @@ export function DataTable({ title, description, columns, data = [], emptyTitle, 
             <table className="min-w-[880px]">
               <thead>
                 <tr className="bg-slate-50">
-                  {columns.map((column) => (
-                    <th key={column.key} className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  {columns.map((column, index) => (
+                    <th key={`${column.key}-${index}`} scope="col" className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
                       {column.label}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {data.map((row, index) => (
+                {pageRows.map((row, index) => (
                   <tr key={row.id || row._id || index} className="bg-white transition hover:bg-emerald-50/40">
-                    {columns.map((column) => (
-                      <td key={column.key} className="px-5 py-4 text-sm text-slate-700">
+                    {columns.map((column, columnIndex) => (
+                      <td key={`${column.key}-${columnIndex}`} className="px-5 py-4 text-sm text-slate-700">
                         {column.render ? column.render(row[column.key], row) : (row[column.key] ?? "-")}
                       </td>
                     ))}
@@ -240,13 +294,15 @@ export function DataTable({ title, description, columns, data = [], emptyTitle, 
             </table>
           </div>
           <div className="flex flex-col gap-3 border-t border-slate-200 px-5 py-4 text-sm text-slate-600 sm:flex-row sm:items-center sm:justify-between">
-            <span>Showing {data.length} record{data.length === 1 ? "" : "s"}</span>
+            <span>
+              Showing {startIndex + 1}-{Math.min(startIndex + pageSize, data.length)} of {data.length} record{data.length === 1 ? "" : "s"}
+            </span>
             <div className="flex items-center gap-2">
-              <button className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-500">
+              <button type="button" aria-label="Previous page" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:opacity-40">
                 <ChevronLeft size={16} />
               </button>
-              <span className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white">1</span>
-              <button className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-500">
+              <span className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white">{currentPage} / {totalPages}</span>
+              <button type="button" aria-label="Next page" disabled={currentPage === totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:opacity-40">
                 <ChevronRight size={16} />
               </button>
             </div>
@@ -254,6 +310,44 @@ export function DataTable({ title, description, columns, data = [], emptyTitle, 
         </>
       )}
     </Surface>
+  );
+}
+
+export function ConfirmActionDialog({ action, onClose, onConfirm }) {
+  const [reason, setReason] = useState("");
+  if (!action) return null;
+
+  const requiresReason = Boolean(action.requiresReason);
+
+  return (
+    <div className="fixed inset-0 z-[80] grid place-items-center bg-slate-950/50 px-4">
+      <div role="dialog" aria-modal="true" aria-labelledby="confirm-action-title" className="w-full max-w-md rounded-lg bg-white p-5 shadow-2xl">
+        <h2 id="confirm-action-title" className="text-base font-semibold text-slate-950">{action.title || "Confirm action"}</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">{action.description || "Please confirm before this action is applied."}</p>
+        {requiresReason ? (
+          <label className="mt-4 block text-sm font-semibold text-slate-700">
+            Reason
+            <textarea
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              className="mt-2 min-h-24 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100"
+              placeholder="Enter the reason for this decision"
+            />
+          </label>
+        ) : null}
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-100">Cancel</button>
+          <button
+            type="button"
+            disabled={requiresReason && !reason.trim()}
+            onClick={() => onConfirm(reason.trim())}
+            className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Confirm
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -363,8 +457,17 @@ export function getMonthlySeries(records = [], amountSelector = (item) => item.a
     if (!rawDate) return;
     const date = new Date(rawDate);
     if (Number.isNaN(date.getTime())) return;
-    const label = date.toLocaleString("default", { month: "short" });
-    buckets.set(label, (buckets.get(label) || 0) + Number(amountSelector(record) || 0));
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    buckets.set(key, (buckets.get(key) || 0) + Number(amountSelector(record) || 0));
   });
-  return Array.from(buckets.entries()).map(([label, value]) => ({ label, value }));
+  return Array.from(buckets.entries())
+    .sort(([first], [second]) => first.localeCompare(second))
+    .map(([key, value]) => {
+      const [year, month] = key.split("-").map(Number);
+      const date = new Date(year, month - 1, 1);
+      return {
+        label: date.toLocaleString("default", { month: "short", year: "2-digit" }),
+        value,
+      };
+    });
 }

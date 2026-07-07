@@ -1,5 +1,5 @@
 import { useContext, useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import {
   AlertTriangle, Banknote, Bell, BriefcaseBusiness, Building2, Camera, CheckCircle2,
   Clock3, CreditCard, Download, FileText, Filter, KeyRound, Landmark, LockKeyhole,
@@ -17,8 +17,19 @@ import {
   rejectLoan, verifyTransaction, voidTransaction, writeOffLoan,
 } from "../features/finance/financeService.js";
 import {
-  AnalyticsPanel, DataTable, DashboardHero, KpiCard, SectionHeader,
-  SkeletonDashboard, StatusBadge, formatCurrency, formatDate, getMonthlySeries,
+  AnalyticsPanel,
+  ConfirmActionDialog,
+  DataTable,
+  DashboardHero,
+  KpiCard,
+  RoutePlaceholder,
+  SectionHeader,
+  SkeletonDashboard,
+  StatusBadge,
+  exportRowsToCsv,
+  formatCurrency,
+  formatDate,
+  getMonthlySeries,
 } from "../components/dashboard/EnterpriseDashboard.jsx";
 
 function filterRows(rows, search, keys) {
@@ -121,40 +132,24 @@ export default function FinanceDashboard() {
   const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
   const unreadCount = notifications.filter((n) => !n.read).length;
 
-  const path = location.pathname;
-  const dashboardBase = getDashboardPath("FINANCE");
-  let activeSection = "home";
-  if (path.includes("/transactions")) activeSection = "transactions";
-  else if (path.includes("/loans")) activeSection = "loans";
-  else if (path.includes("/deductions")) activeSection = "deductions";
-  else if (path.includes("/members")) activeSection = "members";
-  else if (path.includes("/dividends")) activeSection = "dividends";
-  else if (path.includes("/reports")) activeSection = "reports";
-  else if (path.includes("/settings")) activeSection = "settings";
-  else if (path.includes("/notifications")) activeSection = "notifications";
+  return (
+    <div className="space-y-6">
+      <DashboardHero
+        eyebrow="Finance operations"
+        title="Financial control desk"
+        description="Verify payments, monitor cash movement, manage disbursements, review deductions, and prepare financial reports."
+        metrics={[
+          { label: "Today", value: stats.dailyTransactions },
+          { label: "Active loans", value: stats.activeLoans },
+          { label: "Revenue", value: formatCurrency(stats.monthlyRevenue) },
+        ]}
+      />
 
-  const [data, setData] = useState({ transactions:[], loans:[], shares:[], deductions:[], dividends:[], members:[], companies:[], reports:{} });
-
-  async function loadAllData({ showLoading = true } = {}) {
-    if (!accessToken) { setLoading(false); return; }
-    if (showLoading) setLoading(true);
-    const results = await Promise.allSettled([
-      getAllTransactions(accessToken), getAllLoans(accessToken), getAllShares(accessToken),
-      getAllDeductions(accessToken), getAllDividends(accessToken), getAllMembers(accessToken),
-      getAllCompanies(accessToken), getFinancialReports(accessToken),
-    ]);
-    setData({
-      transactions: results[0].status==="fulfilled"&&Array.isArray(results[0].value)?results[0].value:[],
-      loans: results[1].status==="fulfilled"&&Array.isArray(results[1].value)?results[1].value:MOCK_LOANS_QUEUE,
-      shares: results[2].status==="fulfilled"&&Array.isArray(results[2].value)?results[2].value:[],
-      deductions: results[3].status==="fulfilled"&&Array.isArray(results[3].value)?results[3].value:[],
-      dividends: results[4].status==="fulfilled"&&Array.isArray(results[4].value)?results[4].value:MOCK_DIVIDENDS,
-      members: results[5].status==="fulfilled"&&Array.isArray(results[5].value)?results[5].value:MOCK_MEMBERS_PROFILE,
-      companies: results[6].status==="fulfilled"&&Array.isArray(results[6].value)?results[6].value:MOCK_COMPANIES,
-      reports: results[7].status==="fulfilled"?results[7].value:{},
-    });
-    setLoading(false);
-  }
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {cards.map((card) => (
+          <KpiCard key={card.label} {...card} />
+        ))}
+      </div>
 
   useEffect(() => { loadAllData(); }, [accessToken]);
   useEffect(() => { const interval = setInterval(() => loadAllData({ showLoading: false }), 60000); return () => clearInterval(interval); }, [accessToken]);
@@ -162,12 +157,40 @@ export default function FinanceDashboard() {
   const stats = useMemo(() => getFinanceStats(data), [data]);
   function markAllNotificationsRead() { setNotifications((prev) => prev.map((n) => ({ ...n, read: true }))); }
 
-  async function handleVerifyTransaction(id) { try { await verifyTransaction(id, accessToken); await loadAllData({ showLoading: false }); } catch (e) { alert(e.message); } }
-  async function handleVoidTransaction(id) { const reason = prompt("Reason for voiding:"); if (reason) { try { await voidTransaction(id, reason, accessToken); await loadAllData({ showLoading: false }); } catch (e) { alert(e.message); } } }
-  async function handleApproveLoan(id) { try { await approveLoan(id, accessToken); await loadAllData({ showLoading: false }); } catch (e) { alert(e.message); } }
-  async function handleRejectLoan(id) { const reason = prompt("Reason for rejection:"); if (reason) { try { await rejectLoan(id, reason, accessToken); await loadAllData({ showLoading: false }); } catch (e) { alert(e.message); } } }
-  async function handleDisburseLoan(id) { try { await disburseLoan(id, accessToken); await loadAllData({ showLoading: false }); } catch (e) { alert(e.message); } }
-  async function handleWriteOffLoan(id) { const reason = prompt("Reason for write-off:"); if (reason) { try { await writeOffLoan(id, reason, accessToken); await loadAllData({ showLoading: false }); } catch (e) { alert(e.message); } } }
+function TransactionsPage({ transactions, embedded = false, onVerifyTransaction, onVoidTransaction, globalSearch = "" }) {
+  const [search, setSearch] = useState("");
+  const rows = useMemo(
+    () => filterRows(filterRows(transactions, globalSearch, ["id", "type", "description", "status", "reference"]), search, ["id", "type", "description", "status", "reference"]),
+    [transactions, globalSearch, search],
+  );
+
+  const table = (
+    <DataTable
+      title={embedded ? "Recent transactions" : "Transaction processing"}
+      description="Verify deposits, withdrawals, fees, disbursements, repayments, and dividend transactions"
+      search={search}
+      onSearch={setSearch}
+      columns={[
+        { key: "id", label: "Reference", render: (value, row) => row.reference || value || "-" },
+        { key: "type", label: "Type" },
+        { key: "amount", label: "Amount", render: formatCurrency },
+        { key: "status", label: "Status", render: (value) => <StatusBadge status={value || "Pending"} /> },
+        { key: "description", label: "Description", render: (value) => value || "-" },
+        { key: "createdAt", label: "Date", render: (value, row) => formatDate(value || row.date) },
+        { key: "id", label: "Action", render: (value, row) => (
+          <div className="flex gap-2">
+            <button onClick={() => onVerifyTransaction?.(value)} className="text-sm font-semibold text-emerald-700">Verify</button>
+            {onVoidTransaction ? (
+              <button onClick={() => onVoidTransaction(value, row)} className="text-sm font-semibold text-rose-700">Void</button>
+            ) : null}
+          </div>
+        ) },
+      ]}
+      data={rows}
+      emptyTitle="No transactions found"
+      emptyDescription="Finance transaction records will appear here once returned by the backend."
+    />
+  );
 
   function renderContent() {
     if (loading) return <SkeletonDashboard />;
@@ -199,30 +222,60 @@ export default function FinanceDashboard() {
   );
 }
 
-// ============================================================
-// NOTIFICATIONS
-// ============================================================
-function NotificationsPanel({ notifications, onMarkAllRead }) {
-  const [notifTab, setNotifTab] = useState("all");
-  const filtered = notifTab === "all" ? notifications : notifications.filter((n) => n.type === notifTab);
-  const typeLabel = (n) => {
-    if (n.type === "LOAN") return n.subtype === "application" ? "Loan Request" : n.subtype === "repayment" ? "Repayment" : n.subtype === "overdue" ? "Overdue" : "LOAN";
-    if (n.type === "TRANSACTION") return n.subtype === "deposit" ? "Deposit" : n.subtype === "withdrawal" ? "Withdrawal" : "TRANSACTION";
-    return n.type;
-  };
-  const typeColor = (n) => {
-    if (n.type === "LOAN") return n.subtype === "application" ? "bg-sky-100 text-sky-700" : n.subtype === "overdue" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700";
-    if (n.type === "TRANSACTION") return n.subtype === "deposit" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700";
-    return "bg-rose-100 text-rose-700";
-  };
-  const counts = { all: notifications.length, LOAN: notifications.filter((n)=>n.type==="LOAN").length, TRANSACTION: notifications.filter((n)=>n.type==="TRANSACTION").length, OVERDUE: notifications.filter((n)=>n.type==="OVERDUE"||(n.type==="LOAN"&&n.subtype==="overdue")).length };
-  return (<div className="space-y-6">
-    <SectionHeader eyebrow="Notifications" title="Alert center" description="Categorized real-time alerts for loan applications, repayments, deposits, withdrawals, and overdue accounts." />
-    <div className="flex items-center justify-between">
-      <div className="flex gap-2">
-        {[{key:"all",label:"All",count:counts.all,icon:Bell},{key:"LOAN",label:"Loans",count:counts.LOAN,icon:FileText},{key:"TRANSACTION",label:"Transactions",count:counts.TRANSACTION,icon:ReceiptText},{key:"OVERDUE",label:"Overdue",count:counts.OVERDUE,icon:AlertTriangle}].map((tab)=>(<button key={tab.key} type="button" onClick={()=>setNotifTab(tab.key)} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${notifTab===tab.key?"bg-slate-950 text-white":"bg-slate-100 text-slate-700 hover:bg-slate-200"}`}><tab.icon size={14}/>{tab.label} ({tab.count})</button>))}
-      </div>
-      <button onClick={onMarkAllRead} className="rounded-lg border px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Mark all read</button>
+function LoansPage({ loans, mode = "all", onApproveLoan, onRejectLoan, onDisburseLoan, onReviewLoan, globalSearch = "" }) {
+  const [search, setSearch] = useState("");
+  const filteredByMode = useMemo(
+    () => loans.filter((loan) => {
+      const status = String(loan.status || "").toUpperCase();
+      if (mode === "disbursements") return ["APPROVED", "DISBURSED", "ACTIVE"].includes(status);
+      if (mode === "repayments") return ["ACTIVE", "OVERDUE", "DISBURSED"].includes(status);
+      return true;
+    }),
+    [loans, mode],
+  );
+  const rows = useMemo(
+    () => filterRows(filterRows(filteredByMode, globalSearch, ["id", "type", "status", "memberName", "loanType", "memberId"]), search, ["id", "type", "status", "memberName", "loanType", "memberId"]),
+    [filteredByMode, globalSearch, search],
+  );
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader
+        eyebrow={mode === "repayments" ? "Loan repayments" : "Loan disbursements"}
+        title={mode === "repayments" ? "Repayment monitoring" : "Loan disbursement desk"}
+        description="Track approved loans, disbursement readiness, repayment progress, overdue exposure, and finance actions."
+      />
+      <DataTable
+        title="Loan records"
+        description="Loan workflow records available to finance officers"
+        search={search}
+        onSearch={setSearch}
+        columns={[
+          { key: "memberName", label: "Member", render: (value, row) => value || row.member?.name || row.user?.name || "-" },
+          { key: "type", label: "Loan Type", render: (value, row) => value || row.loanType || "-" },
+          { key: "principal", label: "Amount", render: formatCurrency },
+          { key: "balance", label: "Balance", render: formatCurrency },
+          { key: "status", label: "Status", render: (value) => <StatusBadge status={value} /> },
+          { key: "approvalStage", label: "Approval Stage", render: (value) => value || "-" },
+          { key: "dueDate", label: "Due Date", render: formatDate },
+          { key: "id", label: "Action", render: (value) => (
+            <div className="flex flex-wrap gap-2">
+              {mode === "repayments" ? (
+                <button onClick={() => onReviewLoan?.(value)} className="text-sm font-semibold text-emerald-700">Review</button>
+              ) : (
+                <>
+                  <button onClick={() => onApproveLoan?.(value)} className="text-sm font-semibold text-emerald-700">Approve</button>
+                  <button onClick={() => onDisburseLoan?.(value)} className="text-sm font-semibold text-sky-700">Disburse</button>
+                  <button onClick={() => onRejectLoan?.(value)} className="text-sm font-semibold text-rose-700">Reject</button>
+                </>
+              )}
+            </div>
+          ) },
+        ]}
+        data={rows}
+        emptyTitle="No loan records found"
+        emptyDescription="Loan records for finance processing will appear here."
+      />
     </div>
     <div className="space-y-3">{filtered.map((n) => (
       <div key={n.id} className={`rounded-lg border p-4 ${n.read ? "bg-white" : "border-rose-200 bg-rose-50"}`}>
@@ -233,64 +286,108 @@ function NotificationsPanel({ notifications, onMarkAllRead }) {
   </div>);
 }
 
-// ============================================================
-// OVERVIEW
-// ============================================================
-function FinanceHome({ data, stats, globalSearch = "", onVerifyTransaction }) {
-  const navigate = useNavigate();
-  const dashboardBase = getDashboardPath("FINANCE");
-  const transactionSeries = getMonthlySeries(data.transactions);
-  const repaymentSeries = getMonthlySeries(data.transactions.filter((t) => String(t.type||"").toUpperCase().includes("REPAYMENT")));
-  const txCards = [
-    { label: "Daily Transactions", value: stats.dailyTransactions, icon: ReceiptText, tone: "blue", path: "/transactions" },
-    { label: "Deposits", value: formatCurrency(stats.totalDeposits), icon: TrendingUp, tone: "emerald", path: "/transactions" },
-    { label: "Withdrawals", value: formatCurrency(stats.totalWithdrawals), icon: TrendingDown, tone: "rose", path: "/transactions" },
-  ];
-  const loanCards = [
-    { label: "Active Loans", value: stats.activeLoans, icon: Landmark, tone: "blue", path: "/loans" },
-    { label: "Repayments", value: formatCurrency(stats.loanRepayments), icon: CreditCard, tone: "emerald", path: "/loans" },
-    { label: "Pending Disburse", value: stats.pendingDisbursements, icon: Banknote, tone: "amber", path: "/loans" },
-    { label: "Overdue", value: stats.overdueLoans, icon: AlertTriangle, tone: "rose", path: "/loans" },
-    { label: "Arrears", value: formatCurrency(stats.totalArrears), icon: ShieldAlert, tone: "rose", path: "/loans" },
-  ];
-  return (<div className="space-y-6">
-    <DashboardHero eyebrow="Finance operations" title="Financial control desk" description="Verify payments, manage loans, track deductions, and generate reports."/>
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-      {txCards.map((c)=>(<div key={c.label} onClick={()=>navigate(`${dashboardBase}${c.path}`)} className="cursor-pointer"><KpiCard {...c} trend="Live" /></div>))}
-      {loanCards.map((c)=>(<div key={c.label} onClick={()=>navigate(`${dashboardBase}${c.path}`)} className="cursor-pointer"><KpiCard {...c} trend="Live" /></div>))}
+function SavingsPage({ shares, globalSearch = "" }) {
+  const [search, setSearch] = useState("");
+  const rows = useMemo(
+    () => filterRows(filterRows(shares, globalSearch, ["id", "memberName", "memberId", "status"]), search, ["id", "memberName", "memberId", "status"]),
+    [shares, globalSearch, search],
+  );
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader
+        eyebrow="Savings accounts"
+        title="Savings and share accounts"
+        description="Review member savings history, share contributions, and account contribution records."
+      />
+      <DataTable
+        title="Contribution records"
+        description="Share and savings contribution data returned by finance endpoints"
+        search={search}
+        onSearch={setSearch}
+        columns={[
+          { key: "id", label: "Record ID" },
+          { key: "memberName", label: "Member", render: (value, row) => value || row.member?.name || "-" },
+          { key: "shares", label: "Shares", render: (value) => Number(value || 0).toLocaleString() },
+          { key: "totalInvested", label: "Invested", render: formatCurrency },
+          { key: "purchaseDate", label: "Date", render: formatDate },
+          { key: "status", label: "Status", render: (value) => <StatusBadge status={value || "Active"} /> },
+        ]}
+        data={rows}
+        emptyTitle="No contribution records"
+        emptyDescription="Savings and share account records will appear here."
+      />
     </div>
-    <div className="grid gap-5 xl:grid-cols-2">
-      <AnalyticsPanel title="Transaction volume" data={transactionSeries} type="bar" />
-      <AnalyticsPanel title="Repayment trends" data={repaymentSeries} color="#0369a1" />
+  );
+}
+
+function DeductionsPage({ deductions, globalSearch = "" }) {
+  const [search, setSearch] = useState("");
+  const rows = useMemo(
+    () => filterRows(filterRows(deductions, globalSearch, ["id", "memberName", "memberId", "reason", "status"]), search, ["id", "memberName", "memberId", "reason", "status"]),
+    [deductions, globalSearch, search],
+  );
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader
+        eyebrow="Salary deductions"
+        title="Deduction verification"
+        description="Verify payroll deductions, track failed deductions, and prepare employer remittance reviews."
+      />
+      <DataTable
+        title="Deduction records"
+        description="Salary deduction records returned by finance endpoints"
+        search={search}
+        onSearch={setSearch}
+        columns={[
+          { key: "id", label: "Deduction ID" },
+          { key: "memberName", label: "Member", render: (value, row) => value || row.member?.name || "-" },
+          { key: "amount", label: "Amount", render: formatCurrency },
+          { key: "reason", label: "Reason", render: (value) => value || "-" },
+          { key: "status", label: "Status", render: (value) => <StatusBadge status={value || "Pending"} /> },
+          { key: "date", label: "Date", render: formatDate },
+        ]}
+        data={rows}
+        emptyTitle="No deductions found"
+        emptyDescription="Salary deduction records will appear here."
+      />
     </div>
     <TransactionsPage data={data} embedded onVerifyTransaction={onVerifyTransaction} globalSearch={globalSearch} />
   </div>);
 }
 
-// ============================================================
-// TRANSACTIONS
-// ============================================================
-function TransactionsPage({ data, embedded = false, onVerifyTransaction, onVoidTransaction, globalSearch = "" }) {
-  const [search, setSearch] = useState(""); const [fromDate, setFromDate] = useState(""); const [toDate, setToDate] = useState(""); const [depositFilter, setDepositFilter] = useState("all");
-  const transactions = data.transactions || [];
-  let filtered = filterRows(filterRows(transactions, globalSearch, ["id","type","description","status","reference"]), search, ["id","type","description","status","reference"]);
-  if (fromDate) filtered = filtered.filter((t) => { const d = t.createdAt||t.date; return d ? new Date(d) >= new Date(fromDate) : true; });
-  if (toDate) filtered = filtered.filter((t) => { const d = t.createdAt||t.date; return d ? new Date(d) <= new Date(toDate) : true; });
-  if (depositFilter === "share") filtered = filtered.filter((t) => { const type = String(t.type||"").toLowerCase(); return type.includes("share")||type.includes("capital"); });
-  if (depositFilter === "savings") filtered = filtered.filter((t) => { const type = String(t.type||"").toLowerCase(); return type.includes("savings")||type.includes("deposit"); });
-  const columns = [
-    { key: "id", label: "Reference", render: (v,r) => r.reference || v || "-" }, { key: "type", label: "Type" },
-    { key: "amount", label: "Amount", render: (v) => formatCurrency(v) }, { key: "status", label: "Status", render: (v) => <StatusBadge status={v||"Pending"} /> },
-    { key: "description", label: "Description", render: (v) => v||"-" }, { key: "createdAt", label: "Date", render: (v,r) => formatDate(v||r.date) },
-  ];
-  const content = (<div className="space-y-4">
-    <div className="flex flex-wrap items-center gap-3">
-      <div className="flex items-center gap-2 text-sm"><span className="font-semibold text-slate-700">Date range:</span>
-        <input type="date" value={fromDate} onChange={(e)=>setFromDate(e.target.value)} className="rounded border px-2 py-1 text-sm" /><span>to</span>
-        <input type="date" value={toDate} onChange={(e)=>setToDate(e.target.value)} className="rounded border px-2 py-1 text-sm" />
-      </div>
-      <select value={depositFilter} onChange={(e)=>setDepositFilter(e.target.value)} className="rounded border px-3 py-1 text-sm"><option value="all">All Deposits</option><option value="share">Share Capital</option><option value="savings">Savings Only</option></select>
-      <button onClick={() => exportToCSV(filtered, columns, "transactions.csv")} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold hover:bg-slate-50"><Download size={14} />Export CSV</button>
+function DividendsPage({ dividends, onReviewDividend, globalSearch = "" }) {
+  const [search, setSearch] = useState("");
+  const rows = useMemo(
+    () => filterRows(filterRows(dividends, globalSearch, ["id", "memberId", "status"]), search, ["id", "memberId", "status"]),
+    [dividends, globalSearch, search],
+  );
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader
+        eyebrow="Dividends"
+        title="Dividend processing"
+        description="Review dividend declarations, payout approvals, distribution history, and report exports."
+      />
+      <DataTable
+        title="Dividend records"
+        description="Dividend declarations and payout history"
+        search={search}
+        onSearch={setSearch}
+        columns={[
+          { key: "id", label: "Dividend ID" },
+          { key: "amount", label: "Amount", render: formatCurrency },
+          { key: "sharePercentage", label: "Rate", render: (value) => (value ? `${value}%` : "-") },
+          { key: "status", label: "Status", render: (value) => <StatusBadge status={value || "Pending"} /> },
+          { key: "declaredAt", label: "Declared", render: formatDate },
+          { key: "id", label: "Action", render: (value) => <button onClick={() => onReviewDividend?.(value)} className="text-sm font-semibold text-emerald-700">Review</button> },
+        ]}
+        data={rows}
+        emptyTitle="No dividends found"
+        emptyDescription="Dividend declarations will appear here when available."
+      />
     </div>
     <DataTable title={embedded?"Recent transactions":"Transaction processing"} description="Verify deposits, withdrawals, fees, disbursements, repayments, and dividend transactions" search={search} onSearch={setSearch}
       columns={[...columns, { key: "id", label: "Action", render: (v,r) => (<div className="flex gap-2"><button onClick={()=>onVerifyTransaction?.(v)} className="text-sm font-semibold text-emerald-700">Verify</button>{onVoidTransaction?<button onClick={()=>onVoidTransaction(v,r)} className="text-sm font-semibold text-rose-700">Void</button>:null}</div>)}]}
@@ -300,93 +397,96 @@ function TransactionsPage({ data, embedded = false, onVerifyTransaction, onVoidT
   return (<div className="space-y-6"><SectionHeader eyebrow="Transactions" title="Transaction processing" description="Verify, filter by date range, classify deposits, and export data." />{content}</div>);
 }
 
-// ============================================================
-// UNIFIED LOAN MANAGEMENT
-// ============================================================
-function UnifiedLoansPage({ loans, onApproveLoan, onRejectLoan, onDisburseLoan, onWriteOffLoan, globalSearch = "" }) {
-  const [loanTab, setLoanTab] = useState("all"); const [search, setSearch] = useState(""); const [showAmortization, setShowAmortization] = useState(null);
-  const queueMap = {
-    all: { label: "All Loans", filter: () => true, icon: Landmark }, pending: { label: "Pending", filter: (l) => String(l.status||"").toUpperCase()==="PENDING", icon: Clock3 },
-    approved: { label: "Approved", filter: (l) => String(l.status||"").toUpperCase()==="APPROVED", icon: CheckCircle2 },
-    active: { label: "Active/Disbursed", filter: (l) => ["ACTIVE","DISBURSED"].includes(String(l.status||"").toUpperCase()), icon: TrendingUp },
-    overdue: { label: "Overdue", filter: (l) => String(l.status||"").toUpperCase()==="OVERDUE", icon: AlertTriangle },
-    rejected: { label: "Rejected", filter: (l) => String(l.status||"").toUpperCase()==="REJECTED", icon: XCircle },
-    writtenOff: { label: "Written Off", filter: (l) => String(l.status||"").toUpperCase()==="WRITTEN_OFF", icon: FileText },
+function ReportsPage({ data }) {
+  const exportReport = (filename) => {
+    exportRowsToCsv({
+      filename,
+      rows: [
+        ...data.transactions.map((item) => ({ section: "Transaction", ...item })),
+        ...data.loans.map((item) => ({ section: "Loan", ...item })),
+        ...data.shares.map((item) => ({ section: "Savings", ...item })),
+        ...data.dividends.map((item) => ({ section: "Dividend", ...item })),
+      ],
+      columns: [
+        { key: "section", label: "Section" },
+        { key: "id", label: "ID" },
+        { key: "memberId", label: "Member ID" },
+        { key: "type", label: "Type" },
+        { key: "amount", label: "Amount" },
+        { key: "principal", label: "Principal" },
+        { key: "status", label: "Status" },
+        { key: "createdAt", label: "Created" },
+      ],
+    });
   };
-  const queue = queueMap[loanTab] || queueMap.all;
-  const filtered = filterRows(filterRows(loans.filter(queue.filter), globalSearch, ["id","type","member","memberName","memberId","status"]), search, ["id","type","member","memberName","memberId","status"]);
-  const totalDisbursed = loans.filter((l) => ["DISBURSED","ACTIVE","OVERDUE"].includes(String(l.status||"").toUpperCase())).reduce((s,l) => s+Number(l.principal||0),0);
-  const totalRepaid = loans.reduce((s,l)=>s+Number(l.paid||0),0);
-  const loanColumns = [
-    { key: "member", label: "Member", render: (v,r) => v||r.memberName||"-" }, { key: "type", label: "Type" },
-    { key: "principal", label: "Principal", render: (v) => formatCurrency(v) }, { key: "balance", label: "Balance", render: (v) => formatCurrency(v||0) },
-    { key: "nextPayment", label: "Next Payment", render: (v) => v?formatCurrency(v):"-" }, { key: "status", label: "Status", render: (v) => <StatusBadge status={v||"Pending"} /> },
-    { key: "disbursedDate", label: "Disbursed", render: (v) => formatDateSafe(v) },
-  ];
-  return (<div className="space-y-6">
-    <SectionHeader eyebrow="Loan Management" title="Unified loan control center" description="Full lifecycle management with amortization, arrears, and product revenue." />
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-      <KpiCard label="Disbursed" value={formatCurrency(totalDisbursed)} icon={Banknote} tone="blue" /><KpiCard label="Repaid" value={formatCurrency(totalRepaid)} icon={CreditCard} tone="emerald" />
-      <KpiCard label="Active" value={loans.filter((l)=>["ACTIVE","DISBURSED"].includes(String(l.status||"").toUpperCase())).length} icon={Landmark} tone="blue" />
-      <KpiCard label="Overdue" value={loans.filter((l)=>String(l.status||"").toUpperCase()==="OVERDUE").length} icon={AlertTriangle} tone="rose" />
-      <KpiCard label="Rate" value={`${Math.round((totalRepaid/Math.max(totalDisbursed,1))*100)}%`} icon={TrendingUp} tone="emerald" />
-      <KpiCard label="Arrears" value={formatCurrency(loans.reduce((s,l)=>s+Number(l.arrears||0),0))} icon={ShieldAlert} tone="rose" />
-    </div>
-    <div className="flex flex-wrap gap-2">{Object.entries(queueMap).map(([k,q])=>(<button key={k} onClick={()=>setLoanTab(k)} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${loanTab===k?"bg-slate-950 text-white":"bg-slate-100 text-slate-700 hover:bg-slate-200"}`}><q.icon size={14}/>{q.label} ({loans.filter(q.filter).length})</button>))}</div>
-    <DataTable title={`${queue.label} (${filtered.length})`} description="Loan lifecycle tracking" search={search} onSearch={setSearch}
-      columns={[...loanColumns, { key: "id", label: "Actions", render: (v,r) => { const s = String(r.status||"").toUpperCase();
-        return (<div className="flex flex-wrap gap-1">
-          {s==="PENDING"&&<><button onClick={()=>onApproveLoan?.(v)} className="text-xs font-semibold text-emerald-700">Approve</button><button onClick={()=>onRejectLoan?.(v)} className="text-xs font-semibold text-rose-700">Reject</button></>}
-          {s==="APPROVED"&&<button onClick={()=>onDisburseLoan?.(v)} className="text-xs font-semibold text-sky-700">Disburse</button>}
-          {(s==="ACTIVE"||s==="DISBURSED")&&<button onClick={()=>setShowAmortization(r)} className="text-xs font-semibold text-sky-700">Schedule</button>}
-          {s==="OVERDUE"&&<button onClick={()=>onWriteOffLoan?.(v)} className="text-xs font-semibold text-rose-700">Write Off</button>}
-        </div>);}}]}
-      data={filtered} emptyTitle="No loans" />
-    <button onClick={() => exportToCSV(loans, [{key:"member"},{key:"type"},{key:"principal"},{key:"balance"},{key:"status"}], "loans.csv")} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold hover:bg-slate-50"><Download size={14} />Export CSV</button>
-    {showAmortization ? <AmortizationPanel loan={showAmortization} onClose={()=>setShowAmortization(null)} /> : null}
-    <div className="rounded-lg border border-rose-200 bg-rose-50 p-5">
-      <div className="flex items-center gap-3"><ShieldAlert size={20} className="text-rose-700" /><h5 className="text-base font-semibold text-rose-900">Arrears & Risk</h5></div>
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
-        <div className="rounded-lg bg-white p-4"><p className="text-xs text-slate-500">Total Arrears</p><p className="mt-1 text-xl font-semibold text-rose-700">{formatCurrency(loans.reduce((s,l)=>s+Number(l.arrears||0),0))}</p></div>
-        <div className="rounded-lg bg-white p-4"><p className="text-xs text-slate-500">Penalties</p><p className="mt-1 text-xl font-semibold text-rose-700">{formatCurrency(loans.filter((l)=>String(l.status||"").toUpperCase()==="OVERDUE").reduce((s,l)=>s+Number(l.balance||0)*0.02,0))}</p></div>
-        <div className="rounded-lg bg-white p-4"><p className="text-xs text-slate-500">In Default</p><p className="mt-1 text-xl font-semibold text-rose-700">{loans.filter((l)=>String(l.status||"").toUpperCase()==="OVERDUE").length}</p></div>
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader
+        eyebrow="Financial reports"
+        title="Reports and exports"
+        description="Generate cash flow, savings, repayment, dividend, and monthly financial summaries."
+        action={
+          <div className="flex gap-2">
+            <button type="button" onClick={() => window.print()} className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700">Export PDF</button>
+            <button type="button" onClick={() => exportReport("finance-report.csv")} className="rounded-lg bg-slate-950 px-4 py-3 text-sm font-semibold text-white">Export Excel</button>
+          </div>
+        }
+      />
+      <div className="grid gap-5 xl:grid-cols-2">
+        <AnalyticsPanel title="Cash flow" data={getMonthlySeries(data.transactions)} type="bar" />
+        <AnalyticsPanel title="Dividend distribution" data={getMonthlySeries(data.dividends, (item) => item.amount)} color="#0369a1" />
+        <AnalyticsPanel title="Loan repayments" data={getMonthlySeries(data.transactions.filter((item) => String(item.type || "").toUpperCase().includes("REPAYMENT")))} color="#047857" />
+        <AnalyticsPanel title="Savings reports" data={getMonthlySeries(data.shares, (item) => item.totalInvested || item.shares)} color="#b45309" />
       </div>
     </div>
   </div>);
 }
 
-function AmortizationPanel({ loan, onClose }) {
-  const { monthlyPayment, schedule } = useMemo(() => calculateReducingBalance(Number(loan.principal||0),(loan.interest||1)*12,loan.duration||12),[loan]);
-  return (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}><div className="max-h-[80vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl" onClick={(e)=>e.stopPropagation()}>
-    <div className="mb-4 flex items-center justify-between"><div><h4 className="text-lg font-semibold">Amortization Schedule</h4><p className="text-sm text-slate-500">{loan.member||loan.memberName} — {loan.type}</p></div><button onClick={onClose} className="rounded-lg border px-3 py-1 text-sm">Close</button></div>
-    <div className="mb-4 grid grid-cols-3 gap-3"><div className="rounded-lg bg-slate-50 p-3"><p className="text-xs">Monthly</p><p className="font-semibold">{formatCurrency(monthlyPayment)}</p></div><div className="rounded-lg bg-slate-50 p-3"><p className="text-xs">Paid</p><p className="font-semibold text-emerald-700">{formatCurrency(loan.paid||0)}</p></div><div className="rounded-lg bg-slate-50 p-3"><p className="text-xs">Remaining</p><p className="font-semibold text-rose-700">{formatCurrency(loan.balance||0)}</p></div></div>
-    <table className="min-w-full text-sm"><thead><tr className="bg-slate-50">{["Month","Payment","Principal","Interest","Balance"].map(h=><th key={h} className="px-3 py-2 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{schedule.slice(0,Math.min(schedule.length,loan.duration||12)).map((row)=>(<tr key={row.month} className={row.month<=(loan.repayments||0)?"bg-emerald-50/50":""}><td className="px-3 py-2">{row.month}</td><td className="px-3 py-2">{formatCurrency(row.payment)}</td><td className="px-3 py-2">{formatCurrency(row.principal)}</td><td className="px-3 py-2 text-amber-700">{formatCurrency(row.interest)}</td><td className="px-3 py-2">{formatCurrency(row.balance)}</td></tr>))}</tbody></table>
-    <p className="mt-3 text-xs text-slate-500">Reducing balance. Green = paid. APR: {((loan.interest||1)*12).toFixed(1)}%</p>
-  </div></div>);
-}
+export default function FinanceDashboard() {
+  const location = useLocation();
+  const { accessToken } = useContext(AuthContext);
+  const dashboardBasePath = getDashboardPath("FINANCE");
+  const [loading, setLoading] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [globalSearch, setGlobalSearch] = useState("");
+  const [feedback, setFeedback] = useState(null);
+  const [pendingAction, setPendingAction] = useState(null);
+  const [loadError, setLoadError] = useState("");
+  const [data, setData] = useState({
+    transactions: [],
+    loans: [],
+    shares: [],
+    dividends: [],
+    deductions: [],
+  });
 
-// ============================================================
-// SALARY DEDUCTION PAGE
-// ============================================================
-function SalaryDeductionPage({ data, accessToken, onRefresh }) {
-  const { companies = MOCK_COMPANIES, members = MOCK_MEMBERS_PROFILE } = data;
-  const [selectedCompany, setSelectedCompany] = useState("all"); const [editingDeduction, setEditingDeduction] = useState(null);
-  const [showAddCompany, setShowAddCompany] = useState(false); const [showAddMember, setShowAddMember] = useState(false);
-  const companyMembers = selectedCompany === "all" ? members : members.filter((m) => m.company === selectedCompany);
-  const unassociated = members.filter((m) => !m.company);
-  return (<div className="space-y-6">
-    <SectionHeader eyebrow="Salary deductions" title="Deduction & Company Linkage" description="Filter by company, manage deductions, add companies, and add members." action={<div className="flex gap-2">
-      <button onClick={() => setShowAddCompany(true)} className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white"><Building2 size={14} />Add Company</button>
-      <button onClick={() => setShowAddMember(true)} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"><Plus size={14} />Add Member</button>
-      <button onClick={() => exportToCSV(members, [{key:"name"},{key:"company"},{key:"salary"},{key:"deduction"},{key:"status"}], "deductions.csv")} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold"><Download size={14} />Export</button>
-    </div>} />
-    <div className="grid gap-4 md:grid-cols-4">{companies.slice(0,4).map((c) => (<button key={c.id} onClick={() => setSelectedCompany(selectedCompany===c.name?"all":c.name)} className={`rounded-lg border p-4 text-left transition ${selectedCompany===c.name?"border-sky-400 bg-sky-50 ring-2 ring-sky-200":"border-slate-200 bg-white hover:border-sky-200"}`}><Building2 size={20} className="text-[#8cc63f]" /><p className="mt-2 font-semibold">{c.name}</p><p className="mt-1 text-xs text-slate-500">{c.employees} employees · {formatCurrency(c.totalDeductions)}</p></button>))}</div>
-    <div className="flex gap-2"><button onClick={()=>setSelectedCompany("all")} className={`rounded-full px-4 py-2 text-sm font-semibold ${selectedCompany==="all"?"bg-slate-950 text-white":"bg-slate-100 text-slate-700"}`}>All ({companyMembers.length})</button><button onClick={()=>setSelectedCompany("unassociated")} className={`rounded-full px-4 py-2 text-sm font-semibold ${selectedCompany==="unassociated"?"bg-slate-950 text-white":"bg-slate-100 text-slate-700"}`}>Unassociated ({unassociated.length})</button></div>
-    <div className="overflow-x-auto rounded-lg border"><table className="min-w-full"><thead><tr className="bg-slate-50">{["Member","Company","Salary","Deduction","Savings","Status","Edit"].map(h=><th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{(selectedCompany==="unassociated"?unassociated:companyMembers).map((m,i)=>(<tr key={m.id||i} className="hover:bg-slate-50"><td className="px-4 py-3 text-sm font-semibold">{m.name}</td><td className="px-4 py-3 text-sm">{m.company||"—"}</td><td className="px-4 py-3 text-sm">{m.salary?formatCurrency(m.salary):"—"}</td><td className="px-4 py-3 text-sm">{editingDeduction===m.id?<input type="number" defaultValue={m.deduction} className="w-24 rounded border px-2 py-1 text-sm" onBlur={(e)=>{m.deduction=Number(e.target.value);setEditingDeduction(null);}}/>:<span>{m.deduction?formatCurrency(m.deduction):"—"}</span>}</td><td className="px-4 py-3 text-sm">{formatCurrency(m.savings||0)}</td><td className="px-4 py-3 text-sm"><StatusBadge status={m.status||"Active"}/></td><td className="px-4 py-3 text-sm"><button onClick={()=>setEditingDeduction(m.id)} className="text-xs font-semibold text-sky-700">Edit</button></td></tr>))}</tbody></table></div>
-    {showAddCompany && <AddCompanyModal onClose={()=>setShowAddCompany(false)} onSubmit={(c)=>{companies.push({id:"c"+(companies.length+1),...c,employees:0,totalDeductions:0,status:"Active"});setShowAddCompany(false);}} />}
-    {showAddMember && <AddMemberModal companies={companies} onClose={()=>setShowAddMember(false)} onSubmit={(m)=>{members.push({id:"M00"+(members.length+1),...m,risk:"Low",status:"Active",savings:0,loans:0,shares:0});setShowAddMember(false);}} />}
-  </div>);
-}
+  async function loadDashboardData({ showLoading = true } = {}) {
+    if (!accessToken) {
+      setLoading(false);
+      return;
+    }
+
+    if (showLoading) setLoading(true);
+    const results = await Promise.allSettled([
+      getAllTransactions(accessToken),
+      getAllLoans(accessToken),
+      getAllShares(accessToken),
+      getAllDividends(accessToken),
+      getAllDeductions(accessToken),
+    ]);
+
+    const rejected = results.filter((result) => result.status === "rejected");
+    setLoadError(rejected.length ? `${rejected.length} dashboard section${rejected.length === 1 ? "" : "s"} failed to refresh. Showing available data.` : "");
+    setData({
+      transactions: results[0].status === "fulfilled" && Array.isArray(results[0].value) ? results[0].value : [],
+      loans: results[1].status === "fulfilled" && Array.isArray(results[1].value) ? results[1].value : [],
+      shares: results[2].status === "fulfilled" && Array.isArray(results[2].value) ? results[2].value : [],
+      dividends: results[3].status === "fulfilled" && Array.isArray(results[3].value) ? results[3].value : [],
+      deductions: results[4].status === "fulfilled" && Array.isArray(results[4].value) ? results[4].value : [],
+    });
+    setLoading(false);
+  }
 
 function AddCompanyModal({ onClose, onSubmit }) {
   const [form, setForm] = useState({ name: "", registrationNumber: "", contactEmail: "", contactPhone: "" });
@@ -398,18 +498,37 @@ function AddMemberModal({ companies, onClose, onSubmit }) {
   return (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}><div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl" onClick={(e)=>e.stopPropagation()}><div className="mb-4 flex items-center justify-between"><h4 className="text-lg font-semibold">Add Member</h4><button onClick={onClose}><X size={20}/></button></div><div className="grid gap-4"><label className="block text-sm font-semibold text-slate-700">Name<input className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" value={form.name} onChange={(e)=>setForm((c)=>({...c,name:e.target.value}))}/></label><label className="block text-sm font-semibold text-slate-700">Phone<input className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" value={form.phone} onChange={(e)=>setForm((c)=>({...c,phone:e.target.value}))}/></label><label className="block text-sm font-semibold text-slate-700">Company<select className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" value={form.company} onChange={(e)=>setForm((c)=>({...c,company:e.target.value}))}><option value="">— Select —</option>{companies.map((c)=>(<option key={c.id} value={c.name}>{c.name}</option>))}</select></label><label className="block text-sm font-semibold text-slate-700">Salary<input type="number" className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" value={form.salary} onChange={(e)=>setForm((c)=>({...c,salary:e.target.value}))}/></label><label className="block text-sm font-semibold text-slate-700">Deduction<input type="number" className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" value={form.deduction} onChange={(e)=>setForm((c)=>({...c,deduction:e.target.value}))}/></label><button onClick={()=>{if(form.name.trim())onSubmit({...form,salary:Number(form.salary)||0,deduction:Number(form.deduction)||0});}} className="rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold text-white">Add Member</button></div></div></div>);
 }
 
-// ============================================================
-// MEMBER PROFILES
-// ============================================================
-function MemberProfilesPage({ data }) {
-  const [search, setSearch] = useState(""); const [selectedMember, setSelectedMember] = useState(null);
-  const members = data.members || MOCK_MEMBERS_PROFILE;
-  const filtered = members.filter((m) => search.trim() ? String(m.id||"").toLowerCase().includes(search.toLowerCase()) || String(m.name||"").toLowerCase().includes(search.toLowerCase()) : true);
-  return (<div className="space-y-6"><SectionHeader eyebrow="Member profiles" title="Financial profiles" description="Search by ID, view risk flags, aggregated balances, and ledgers." action={<button onClick={()=>exportToCSV(members,[{key:"id"},{key:"name"},{key:"company"},{key:"risk"},{key:"savings"},{key:"loans"},{key:"shares"}],"members.csv")} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold"><Download size={14}/>Export</button>} /><div className="relative"><Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input type="text" placeholder="Search by Membership ID or Name..." value={search} onChange={(e)=>setSearch(e.target.value)} className="w-full rounded-lg border border-slate-200 py-3 pl-10 pr-4 text-sm"/></div>{selectedMember?<MemberProfileDetail member={selectedMember} onBack={()=>setSelectedMember(null)}/>:(<div className="overflow-x-auto rounded-lg border"><table className="min-w-full"><thead><tr className="bg-slate-50">{["ID","Name","Company","Risk","Savings","Loans","Shares","Status"].map(h=><th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{filtered.map((m,i)=>(<tr key={m.id||i} className="cursor-pointer hover:bg-slate-50" onClick={()=>setSelectedMember(m)}><td className="px-4 py-3 text-sm font-semibold text-sky-700">{m.id}</td><td className="px-4 py-3 text-sm font-semibold">{m.name}</td><td className="px-4 py-3 text-sm">{m.company||"—"}</td><td className="px-4 py-3 text-sm"><span className={`rounded-full px-2 py-1 text-xs font-semibold ${m.risk==="Low"?"bg-emerald-100 text-emerald-700":m.risk==="Medium"?"bg-amber-100 text-amber-700":"bg-rose-100 text-rose-700"}`}>{m.risk}</span></td><td className="px-4 py-3 text-sm">{formatCurrency(m.savings)}</td><td className="px-4 py-3 text-sm">{formatCurrency(m.loans)}</td><td className="px-4 py-3 text-sm">{formatCurrency(m.shares)}</td><td className="px-4 py-3 text-sm"><StatusBadge status={m.status}/></td></tr>))}</tbody></table></div>)}</div>);
-}
-function MemberProfileDetail({ member, onBack }) {
-  return (<div className="space-y-6"><button onClick={onBack} className="text-sm font-semibold text-sky-700">&larr; Back</button><div className="rounded-lg border bg-white p-6"><div className="flex items-start justify-between"><div><h3 className="text-xl font-semibold">{member.name}</h3><p className="text-sm text-slate-500">{member.id} · {member.phone} · {member.company||"Independent"}</p></div><span className={`rounded-full px-3 py-1 text-sm font-semibold ${member.risk==="Low"?"bg-emerald-100 text-emerald-700":member.risk==="Medium"?"bg-amber-100 text-amber-700":"bg-rose-100 text-rose-700"}`}>Risk: {member.risk}</span></div><div className="mt-6 grid gap-4 md:grid-cols-4">{["Savings","Loans","Shares","Salary"].map((label)=>{const key=label.toLowerCase();const val=key==="salary"?member.salary:member[key];return(<div key={label} className="rounded-lg border bg-slate-50 p-4"><p className="text-xs text-slate-500">{label}</p><p className="mt-1 text-xl font-semibold">{val?formatCurrency(val):"—"}</p></div>);})}</div><div className="mt-6 rounded-lg border p-4"><h5 className="font-semibold">Recent Ledger</h5><div className="mt-3 space-y-2 text-sm">{["Deposit — KES 5,000 — 2026-07-01","Loan Repayment — KES 3,500 — 2026-06-28","Deduction — KES 8,500 — 2026-06-25"].map((t,i)=>(<div key={i} className="flex justify-between border-b py-1"><span>{t}</span><StatusBadge status="Completed"/></div>))}</div></div></div></div>);
-}
+    load();
+    if (accessToken) {
+      intervalId = window.setInterval(() => {
+        if (document.visibilityState === "visible") {
+          loadDashboardData({ showLoading: false });
+        }
+      }, 120000);
+    }
+    return () => {
+      cancelled = true;
+      if (intervalId) window.clearInterval(intervalId);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken]);
+
+  useEffect(() => {
+    if (!feedback) return undefined;
+    const timeoutId = window.setTimeout(() => setFeedback(null), 6000);
+    return () => window.clearTimeout(timeoutId);
+  }, [feedback]);
+
+  async function runAction(action, successMessage) {
+    try {
+      setFeedback(null);
+      await action();
+      setFeedback({ type: "success", message: successMessage });
+      await loadDashboardData({ showLoading: false });
+    } catch (error) {
+      setFeedback({ type: "error", message: error?.message || "Action failed" });
+    }
+  }
 
 // ============================================================
 // REPORTS
@@ -421,73 +540,101 @@ function FinancialReportsPage({ data }) {
   return (<div className="space-y-6"><SectionHeader eyebrow="Reports" title="Reports & analytics" description="Daily, monthly, and yearly time-series analysis." action={<button onClick={()=>exportToCSV(reportRows,[{key:"label",label:"Period"},{key:"deposits"},{key:"withdrawals"},{key:"repayments"},{key:"disbursements"},{key:"count"}],"financial-reports.csv")} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold"><Download size={14}/>Export CSV</button>} /><div className="flex items-center gap-3">{["daily","monthly","yearly"].map((tf)=>(<button key={tf} onClick={()=>setTimeFilter(tf)} className={`rounded-full px-4 py-2 text-sm font-semibold capitalize ${timeFilter===tf?"bg-slate-950 text-white":"bg-slate-100 text-slate-700"}`}>{tf}</button>))}</div><div className="grid gap-5 xl:grid-cols-2"><AnalyticsPanel title={`Deposits (${timeFilter})`} data={timeSeries.map(s=>({label:s.label,value:s.deposits}))} type="bar" color="#8cc63f"/><AnalyticsPanel title={`Repayments (${timeFilter})`} data={timeSeries.map(s=>({label:s.label,value:s.repayments}))} type="bar" color="#0369a1"/></div><div className="overflow-x-auto rounded-lg border"><table className="min-w-full"><thead><tr className="bg-slate-50">{["Period","Deposits","Withdrawals","Repayments","Disbursements","Count"].map(h=><th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{timeSeries.map((row,i)=>(<tr key={i}><td className="px-4 py-3 text-sm font-semibold">{row.label}</td><td className="px-4 py-3 text-sm text-emerald-700">{formatCurrency(row.deposits)}</td><td className="px-4 py-3 text-sm text-rose-700">{formatCurrency(row.withdrawals)}</td><td className="px-4 py-3 text-sm text-sky-700">{formatCurrency(row.repayments)}</td><td className="px-4 py-3 text-sm text-amber-700">{formatCurrency(row.disbursements)}</td><td className="px-4 py-3 text-sm">{row.count}</td></tr>))}</tbody></table></div></div>);
 }
 
-// ============================================================
-// DIVIDENDS
-// ============================================================
-function DividendsPage({ dividends }) {
-  return (<div className="space-y-6"><SectionHeader eyebrow="Dividends" title="Historical distributions" description="Yearly dividend tracking." /><div className="grid gap-4 md:grid-cols-3">{dividends.map((d,i)=>(<div key={i} className="rounded-lg border bg-white p-5"><div className="flex items-center justify-between"><h5 className="text-lg font-semibold">{d.year}</h5><StatusBadge status={d.status}/></div><div className="mt-4 space-y-2 text-sm"><p><strong>Rate:</strong> {d.rate}</p><p><strong>Distributed:</strong> {formatCurrency(d.totalDistributed)}</p><p><strong>Members:</strong> {d.membersCount}</p><p><strong>Declared:</strong> {formatDateSafe(d.declaredDate)}</p></div></div>))}</div></div>);
-}
+  const handleVoidTransaction = (transactionId) =>
+    setPendingAction({
+      title: "Void transaction",
+      description: "Provide a reason before voiding this transaction.",
+      requiresReason: true,
+      action: (reason) => runAction(() => voidTransaction(transactionId, reason, accessToken), "Transaction voided successfully"),
+    });
 
-// ============================================================
-// PROFILE SETTINGS — unified: profile image, edit profile, password change
-// ============================================================
-function FinancierProfileSettings({ user, stats, accessToken }) {
-  const [form, setForm] = useState({ name: user?.name || "", email: user?.email || "", phone: user?.phone || "" });
-  const [passwords, setPasswords] = useState({ current: "", new: "", confirm: "" });
-  const [showing, setShowing] = useState({ current: false, new: false, confirm: false });
-  const [saving, setSaving] = useState(false);
-  const [pwSaving, setPwSaving] = useState(false);
-  const [message, setMessage] = useState(null);
-  const [pwMessage, setPwMessage] = useState(null);
-  const [profileImage, setProfileImage] = useState(user?.passportPhotoUrl || null);
-  const [imageFile, setImageFile] = useState(null);
+  const handleApproveLoan = (loanId) =>
+    setPendingAction({
+      title: "Approve loan",
+      description: "This will approve the selected loan for the next workflow step.",
+      action: () => runAction(() => approveLoan(loanId, accessToken), "Loan approved successfully"),
+    });
 
-  function handleImageSelect(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 1.5 * 1024 * 1024) { setMessage({ type: "error", text: "Image must be under 1.5 MB." }); return; }
-    const preview = URL.createObjectURL(file);
-    setProfileImage((prev) => { if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev); return preview; });
-    setImageFile(file);
-  }
+  const handleRejectLoan = (loanId) =>
+    setPendingAction({
+      title: "Reject loan",
+      description: "Provide a reason so the decision is recorded clearly.",
+      requiresReason: true,
+      action: (reason) => runAction(() => rejectLoan(loanId, reason, accessToken), "Loan rejected successfully"),
+    });
 
-  async function handleSaveProfile(e) {
-    e.preventDefault(); setSaving(true); setMessage(null);
-    try { await new Promise((r) => setTimeout(r, 800)); setMessage({ type: "success", text: "Profile updated successfully." }); }
-    catch (err) { setMessage({ type: "error", text: err.message }); }
-    finally { setSaving(false); }
-  }
+  const handleDisburseLoan = (loanId) =>
+    setPendingAction({
+      title: "Disburse loan",
+      description: "This will mark the selected loan for disbursement. Confirm the loan details before continuing.",
+      action: () => runAction(() => disburseLoan(loanId, accessToken), "Loan disbursed successfully"),
+    });
 
-  async function handlePasswordSubmit(e) {
-    e.preventDefault();
-    if (passwords.new.length < 8) { setPwMessage({ type: "error", text: "New password must be at least 8 characters." }); return; }
-    if (passwords.new !== passwords.confirm) { setPwMessage({ type: "error", text: "Passwords do not match." }); return; }
-    setPwSaving(true); setPwMessage(null);
-    try {
-      await changePassword({ currentPassword: passwords.current, newPassword: passwords.new }, accessToken);
-      setPwMessage({ type: "success", text: "Password changed successfully." }); setPasswords({ current: "", new: "", confirm: "" });
-    } catch (err) { setPwMessage({ type: "error", text: err?.message || "Failed to change password." }); }
-    finally { setPwSaving(false); }
-  }
+  const handleReviewLoan = (loanId) =>
+    setFeedback({ type: "success", message: `Loan ${loanId} selected for repayment review.` });
+
+  const handleReviewDividend = (dividendId) =>
+    setFeedback({ type: "success", message: `Dividend ${dividendId} selected for review.` });
 
   const pwField = (label, name) => (<label className="block text-sm font-semibold text-slate-700">{label}<div className="relative"><input type={showing[name]?"text":"password"} className="mt-1 w-full rounded-lg border px-3.5 py-3 pr-12 text-sm" value={passwords[name]} onChange={(e)=>setPasswords((c)=>({...c,[name]:e.target.value}))}/><button type="button" onClick={()=>setShowing((s)=>({...s,[name]:!s[name]}))} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500">{showing[name]?"Hide":"Show"}</button></div></label>);
 
-  return (<div className="space-y-6 max-w-2xl">
-    <SectionHeader eyebrow="Profile Settings" title="Manage your profile" />
-    {message && <div className={`rounded-lg border px-4 py-3 text-sm font-medium ${message.type==="success"?"border-emerald-200 bg-emerald-50 text-emerald-800":"border-rose-200 bg-rose-50 text-rose-800"}`}>{message.text}</div>}
+  const content = (() => {
+    if (loading) return <SkeletonDashboard />;
+    if (isHome) return <FinanceHome data={data} onVerifyTransaction={handleVerifyTransaction} globalSearch={globalSearch} />;
+    if (path.includes("/transactions")) return <TransactionsPage transactions={data.transactions} onVerifyTransaction={handleVerifyTransaction} onVoidTransaction={handleVoidTransaction} globalSearch={globalSearch} />;
+    if (path.includes("/loan-disbursements") || path.includes("/loans")) return <LoansPage loans={data.loans} mode="disbursements" onApproveLoan={handleApproveLoan} onRejectLoan={handleRejectLoan} onDisburseLoan={handleDisburseLoan} globalSearch={globalSearch} />;
+    if (path.includes("/loan-repayments")) return <LoansPage loans={data.loans} mode="repayments" onReviewLoan={handleReviewLoan} globalSearch={globalSearch} />;
+    if (path.includes("/savings") || path.includes("/shares")) return <SavingsPage shares={data.shares} globalSearch={globalSearch} />;
+    if (path.includes("/deductions")) return <DeductionsPage deductions={data.deductions} globalSearch={globalSearch} />;
+    if (path.includes("/dividends")) return <DividendsPage dividends={data.dividends} onReviewDividend={handleReviewDividend} globalSearch={globalSearch} />;
+    if (path.includes("/reports")) return <ReportsPage data={data} />;
+    if (path.includes("/member-profiles")) {
+      return <RoutePlaceholder eyebrow="Member financial profiles" title="Member financial profiles" description="View savings history, share contributions, loan repayment history, salary deductions, and dividend history by member." capabilities={["Savings history", "Share contributions", "Loan repayments", "Salary deductions", "Dividend history"]} />;
+    }
+    if (path.includes("/notifications")) {
+      return <RoutePlaceholder eyebrow="Notifications" title="Finance notifications" description="Payment failures, approval events, disbursement reminders, and reporting alerts." capabilities={["Failed payment alerts", "Pending disbursements", "Payroll reminders", "Dividend notices"]} />;
+    }
+    if (path.includes("/security")) {
+      return <RoutePlaceholder eyebrow="Security" title="Finance security" description="Security status, session review, verification controls, and role-based access protections." capabilities={["JWT sessions", "Session expiry", "Role-based access", "Access audit trail"]} />;
+    }
+    return <FinanceHome data={data} />;
+  })();
 
-    {/* Profile Image Section */}
-    <div className="rounded-lg border bg-white p-6">
-      <div className="flex items-center gap-4">
-        <div className="grid h-20 w-20 place-items-center overflow-hidden rounded-lg bg-slate-100 text-slate-500">
-          {profileImage ? <img src={profileImage} alt="Profile" className="h-full w-full object-cover" /> : <UserRound size={32} />}
+  return (
+    <div className="enterprise-shell">
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <main className="min-h-screen lg:pl-72">
+        <TopNavbar
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={() => setSidebarOpen((current) => !current)}
+          unreadCount={0}
+          searchValue={globalSearch}
+          onSearchChange={setGlobalSearch}
+        />
+        <div className="mx-auto w-full max-w-[1500px] px-4 py-5 sm:px-6 lg:px-8">
+          {loadError ? (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+              {loadError}
+            </div>
+          ) : null}
+          {feedback ? (
+            <div className={`mb-4 flex items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm font-medium ${feedback.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800"}`}>
+              <span>{feedback.message}</span>
+              <button type="button" onClick={() => setFeedback(null)} className="text-xs font-semibold uppercase tracking-[0.12em]">Close</button>
+            </div>
+          ) : null}
+          {content}
         </div>
-        <div>
-          <h5 className="text-base font-semibold text-slate-950">Profile picture</h5>
-          <p className="text-sm text-slate-500">Upload a clear profile photo.</p>
-          <label className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Camera size={16} />Upload photo<input type="file" accept="image/*" className="sr-only" onChange={handleImageSelect} /></label>
-        </div>
-      </div>
+      </main>
+      <ConfirmActionDialog
+        action={pendingAction}
+        onClose={() => setPendingAction(null)}
+        onConfirm={async (reason) => {
+          const action = pendingAction;
+          setPendingAction(null);
+          await action?.action(reason);
+        }}
+      />
     </div>
 
     {/* Edit Profile Form */}

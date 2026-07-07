@@ -27,7 +27,7 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
   const [mpesaReferenceDisplay, setMpesaReferenceDisplay] = useState(null);
   const pollingInterval = useRef(null);
   const progressInterval = useRef(null);
- s
+
   const REGISTRATION_FEE = 1;
 
   // Helper: format phone to 254XXXXXXXXX

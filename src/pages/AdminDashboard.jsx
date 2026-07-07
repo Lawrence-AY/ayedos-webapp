@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import {
   BadgeCheck,
@@ -34,6 +34,7 @@ import {
 } from "../features/finance/financeService.js";
 import {
   AnalyticsPanel,
+  ConfirmActionDialog,
   DataTable,
   DashboardHero,
   KpiCard,
@@ -86,7 +87,7 @@ function AdminHome({ stats, users, applications, onReviewApplication }) {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {cards.map((card) => (
-          <KpiCard key={card.label} {...card} trend="Live" />
+          <KpiCard key={card.label} {...card} />
         ))}
       </div>
 
@@ -120,8 +121,11 @@ function AdminHome({ stats, users, applications, onReviewApplication }) {
 
 function MembersPage({ users, onToggleStatus, globalSearch = "" }) {
   const [search, setSearch] = useState("");
-  const members = users.filter((user) => String(user.role || "MEMBER").toUpperCase() === "MEMBER");
-  const rows = filterRows(filterRows(members, globalSearch, ["memberNumber", "name", "email", "phone", "nationalId"]), search, ["memberNumber", "name", "email", "phone", "nationalId"]);
+  const members = useMemo(() => users.filter((user) => String(user.role || "MEMBER").toUpperCase() === "MEMBER"), [users]);
+  const rows = useMemo(
+    () => filterRows(filterRows(members, globalSearch, ["memberNumber", "name", "email", "phone", "nationalId"]), search, ["memberNumber", "name", "email", "phone", "nationalId"]),
+    [members, globalSearch, search],
+  );
 
   return (
     <div className="space-y-6">
@@ -160,7 +164,10 @@ function MembersPage({ users, onToggleStatus, globalSearch = "" }) {
 
 function ApplicationsPage({ applications, onReviewApplication, globalSearch = "" }) {
   const [search, setSearch] = useState("");
-  const rows = filterRows(filterRows(applications, globalSearch, ["applicantName", "applicantEmail", "status", "id"]), search, ["applicantName", "applicantEmail", "status", "id"]);
+  const rows = useMemo(
+    () => filterRows(filterRows(applications, globalSearch, ["applicantName", "applicantEmail", "status", "id"]), search, ["applicantName", "applicantEmail", "status", "id"]),
+    [applications, globalSearch, search],
+  );
 
   return (
     <div className="space-y-6">
@@ -205,7 +212,10 @@ function NotificationsPage() {
 
 function AdminLoansPage({ loans, onApproveLoan, onRejectLoan, onDisburseLoan, globalSearch = "" }) {
   const [search, setSearch] = useState("");
-  const rows = filterRows(filterRows(loans, globalSearch, ["id", "type", "status", "memberName", "memberId"]), search, ["id", "type", "status", "memberName", "memberId"]);
+  const rows = useMemo(
+    () => filterRows(filterRows(loans, globalSearch, ["id", "type", "status", "memberName", "memberId"]), search, ["id", "type", "status", "memberName", "memberId"]),
+    [loans, globalSearch, search],
+  );
 
   return (
     <div className="space-y-6">
@@ -240,7 +250,10 @@ function AdminLoansPage({ loans, onApproveLoan, onRejectLoan, onDisburseLoan, gl
 
 function AdminTransactionsPage({ transactions, onVerifyTransaction, globalSearch = "" }) {
   const [search, setSearch] = useState("");
-  const rows = filterRows(filterRows(transactions, globalSearch, ["id", "reference", "type", "status", "description"]), search, ["id", "reference", "type", "status", "description"]);
+  const rows = useMemo(
+    () => filterRows(filterRows(transactions, globalSearch, ["id", "reference", "type", "status", "description"]), search, ["id", "reference", "type", "status", "description"]),
+    [transactions, globalSearch, search],
+  );
 
   return (
     <div className="space-y-6">
@@ -268,7 +281,10 @@ function AdminTransactionsPage({ transactions, onVerifyTransaction, globalSearch
 
 function AdminSimpleDataPage({ eyebrow, title, description, rows, columns, emptyTitle, emptyDescription, globalSearch = "" }) {
   const [search, setSearch] = useState("");
-  const filteredRows = filterRows(filterRows(rows, globalSearch, ["id", "memberId", "memberName", "status", "reason"]), search, ["id", "memberId", "memberName", "status", "reason"]);
+  const filteredRows = useMemo(
+    () => filterRows(filterRows(rows, globalSearch, ["id", "memberId", "memberName", "status", "reason"]), search, ["id", "memberId", "memberName", "status", "reason"]),
+    [rows, globalSearch, search],
+  );
 
   return (
     <div className="space-y-6">
@@ -306,6 +322,8 @@ export default function AdminDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
   const [feedback, setFeedback] = useState(null);
+  const [pendingAction, setPendingAction] = useState(null);
+  const [loadError, setLoadError] = useState("");
   const [stats, setStats] = useState({});
   const [data, setData] = useState({
     users: [],
@@ -335,6 +353,8 @@ export default function AdminDashboard() {
       getAllDeductions(accessToken),
     ]);
 
+    const rejected = results.filter((result) => result.status === "rejected");
+    setLoadError(rejected.length ? `${rejected.length} dashboard section${rejected.length === 1 ? "" : "s"} failed to refresh. Showing available data.` : "");
     setData({
       applications: results[0].status === "fulfilled" && Array.isArray(results[0].value) ? results[0].value : [],
       users: results[2].status === "fulfilled" && Array.isArray(results[2].value) ? results[2].value : [],
@@ -360,7 +380,9 @@ export default function AdminDashboard() {
     load();
     if (accessToken) {
       intervalId = window.setInterval(() => {
-        loadDashboardData({ showLoading: false });
+        if (document.visibilityState === "visible") {
+          loadDashboardData({ showLoading: false });
+        }
       }, 120000);
     }
     return () => {
@@ -369,6 +391,12 @@ export default function AdminDashboard() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
+
+  useEffect(() => {
+    if (!feedback) return undefined;
+    const timeoutId = window.setTimeout(() => setFeedback(null), 6000);
+    return () => window.clearTimeout(timeoutId);
+  }, [feedback]);
 
   async function runAction(action, successMessage) {
     try {
@@ -394,13 +422,26 @@ export default function AdminDashboard() {
     );
 
   const handleApproveLoan = (loanId) =>
-    runAction(() => approveLoan(loanId, accessToken), "Loan approved successfully");
+    setPendingAction({
+      title: "Approve loan",
+      description: "This will approve the selected loan for the next workflow step.",
+      action: () => runAction(() => approveLoan(loanId, accessToken), "Loan approved successfully"),
+    });
 
   const handleRejectLoan = (loanId) =>
-    runAction(() => rejectLoan(loanId, "Rejected by admin", accessToken), "Loan rejected successfully");
+    setPendingAction({
+      title: "Reject loan",
+      description: "Provide a reason so the audit trail and member-facing decision are clear.",
+      requiresReason: true,
+      action: (reason) => runAction(() => rejectLoan(loanId, reason, accessToken), "Loan rejected successfully"),
+    });
 
   const handleDisburseLoan = (loanId) =>
-    runAction(() => disburseLoan(loanId, accessToken), "Loan disbursed successfully");
+    setPendingAction({
+      title: "Disburse loan",
+      description: "This will mark the selected loan for disbursement. Confirm the loan details before continuing.",
+      action: () => runAction(() => disburseLoan(loanId, accessToken), "Loan disbursed successfully"),
+    });
 
   const handleVerifyTransaction = (transactionId) =>
     runAction(() => verifyTransaction(transactionId, accessToken), "Transaction verified successfully");
@@ -475,14 +516,29 @@ export default function AdminDashboard() {
           onSearchChange={setGlobalSearch}
         />
         <div className="mx-auto w-full max-w-[1500px] px-4 py-5 sm:px-6 lg:px-8">
+          {loadError ? (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+              {loadError}
+            </div>
+          ) : null}
           {feedback ? (
-            <div className={`mb-4 rounded-lg border px-4 py-3 text-sm font-medium ${feedback.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800"}`}>
-              {feedback.message}
+            <div className={`mb-4 flex items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm font-medium ${feedback.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800"}`}>
+              <span>{feedback.message}</span>
+              <button type="button" onClick={() => setFeedback(null)} className="text-xs font-semibold uppercase tracking-[0.12em]">Close</button>
             </div>
           ) : null}
           {content}
         </div>
       </main>
+      <ConfirmActionDialog
+        action={pendingAction}
+        onClose={() => setPendingAction(null)}
+        onConfirm={async (reason) => {
+          const action = pendingAction;
+          setPendingAction(null);
+          await action?.action(reason);
+        }}
+      />
     </div>
   );
 }
