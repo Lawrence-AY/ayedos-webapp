@@ -20,6 +20,7 @@ import NotificationsPanel from "../components/user-dashboard/NotificationsPanel.
 import PortfolioPage from "../components/user-dashboard/PortfolioPage.jsx";
 import ProfileSettings from "../components/user-dashboard/ProfileSettings.jsx";
 import ReportsPage from "../components/user-dashboard/ReportsPage.jsx";
+import GroupsPage from "../components/user-dashboard/GroupsPage.jsx";
 import SavingsPage from "../components/user-dashboard/SavingsPage.jsx";
 import SearchResultsPage from "../components/user-dashboard/SearchResultsPage.jsx";
 import SecuritySection from "../components/user-dashboard/SecuritySection.jsx";
@@ -272,7 +273,10 @@ export default function UserDashboard() {
       return <PortfolioPage stats={stats} transactions={data.transactions} shares={data.shares} search={search} user={user} showValues={showValues} onToggleValues={() => setShowValues((current) => !current)} />;
     }
     if (path.includes("/reports")) {
-      return <ReportsPage accessToken={accessToken} />;
+      return <ReportsPage accessToken={accessToken} data={{ transactions: data.transactions, loans: data.loans, shares: data.shares, stats }} />;
+    }
+    if (path.includes("/groups")) {
+      return <GroupsPage user={user} accessToken={accessToken} stats={stats} onRefresh={() => loadDashboardData({ showLoading: false })} />;
     }
     if (path.includes("/savings")) {
       return <SavingsPage stats={stats} transactions={data.transactions} accessToken={accessToken} onRefresh={() => loadDashboardData({ showLoading: false })} showValues={showValues} onToggleValues={() => setShowValues((current) => !current)} user={user} />;

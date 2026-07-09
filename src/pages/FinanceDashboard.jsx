@@ -157,7 +157,7 @@ export default function FinanceDashboard() {
   }
 
   useEffect(() => { loadAllData(); }, [accessToken]);
-  useEffect(() => { const interval = setInterval(() => loadAllData({ showLoading: false }), 60000); return () => clearInterval(interval); }, [accessToken]);
+  useEffect(() => { const interval = setInterval(() => loadAllData({ showLoading: false }), 15000); return () => clearInterval(interval); }, [accessToken]);
 
   const stats = useMemo(() => getFinanceStats(data), [data]);
   function markAllNotificationsRead() { setNotifications((prev) => prev.map((n) => ({ ...n, read: true }))); }
@@ -415,10 +415,92 @@ function MemberProfileDetail({ member, onBack }) {
 // REPORTS
 // ============================================================
 function FinancialReportsPage({ data }) {
-  const [timeFilter, setTimeFilter] = useState("monthly"); const transactions = data.transactions || [];
-  const timeSeries = useMemo(() => { const series = {}; const formatKey = (d) => { if (timeFilter==="daily") return d.toISOString().split("T")[0]; if (timeFilter==="monthly") return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`; return `${d.getFullYear()}`; }; transactions.forEach((t) => { const d = t.createdAt||t.date; if(!d) return; const key = formatKey(new Date(d)); if(!series[key]) series[key]={deposits:0,withdrawals:0,repayments:0,disbursements:0,count:0}; const type = String(t.type||"").toUpperCase(); if(type.includes("DEPOSIT")) series[key].deposits+=Number(t.amount||0); else if(type.includes("WITHDRAW")) series[key].withdrawals+=Number(t.amount||0); else if(type.includes("REPAYMENT")) series[key].repayments+=Number(t.amount||0); else if(type.includes("DISBURSE")) series[key].disbursements+=Number(t.amount||0); series[key].count++; }); return Object.entries(series).sort(([a],[b])=>a.localeCompare(b)).slice(-30).map(([label,vals])=>({label,...vals})); }, [transactions, timeFilter]);
+  const [timeFilter, setTimeFilter] = useState("monthly");
+  const transactions = data.transactions || [];
+  const loans = data.loans || MOCK_LOANS_QUEUE;
+
+  const timeSeries = useMemo(() => {
+    const series = {};
+    const formatKey = (d) => {
+      if (timeFilter==="daily") return d.toISOString().split("T")[0];
+      if (timeFilter==="monthly") return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+      return `${d.getFullYear()}`;
+    };
+    transactions.forEach((t) => {
+      const d = t.createdAt||t.date; if(!d) return;
+      const key = formatKey(new Date(d));
+      if(!series[key]) series[key]={deposits:0,withdrawals:0,repayments:0,disbursements:0,count:0};
+      const type = String(t.type||"").toUpperCase();
+      if(type.includes("DEPOSIT")) series[key].deposits+=Number(t.amount||0);
+      else if(type.includes("WITHDRAW")) series[key].withdrawals+=Number(t.amount||0);
+      else if(type.includes("REPAYMENT")) series[key].repayments+=Number(t.amount||0);
+      else if(type.includes("DISBURSE")) series[key].disbursements+=Number(t.amount||0);
+      series[key].count++;
+    });
+    return Object.entries(series).sort(([a],[b])=>a.localeCompare(b)).slice(-30).map(([label,vals])=>({label,...vals}));
+  }, [transactions, timeFilter]);
+
   const reportRows = timeSeries;
-  return (<div className="space-y-6"><SectionHeader eyebrow="Reports" title="Reports & analytics" description="Daily, monthly, and yearly time-series analysis." action={<button onClick={()=>exportToCSV(reportRows,[{key:"label",label:"Period"},{key:"deposits"},{key:"withdrawals"},{key:"repayments"},{key:"disbursements"},{key:"count"}],"financial-reports.csv")} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold"><Download size={14}/>Export CSV</button>} /><div className="flex items-center gap-3">{["daily","monthly","yearly"].map((tf)=>(<button key={tf} onClick={()=>setTimeFilter(tf)} className={`rounded-full px-4 py-2 text-sm font-semibold capitalize ${timeFilter===tf?"bg-slate-950 text-white":"bg-slate-100 text-slate-700"}`}>{tf}</button>))}</div><div className="grid gap-5 xl:grid-cols-2"><AnalyticsPanel title={`Deposits (${timeFilter})`} data={timeSeries.map(s=>({label:s.label,value:s.deposits}))} type="bar" color="#8cc63f"/><AnalyticsPanel title={`Repayments (${timeFilter})`} data={timeSeries.map(s=>({label:s.label,value:s.repayments}))} type="bar" color="#0369a1"/></div><div className="overflow-x-auto rounded-lg border"><table className="min-w-full"><thead><tr className="bg-slate-50">{["Period","Deposits","Withdrawals","Repayments","Disbursements","Count"].map(h=><th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{timeSeries.map((row,i)=>(<tr key={i}><td className="px-4 py-3 text-sm font-semibold">{row.label}</td><td className="px-4 py-3 text-sm text-emerald-700">{formatCurrency(row.deposits)}</td><td className="px-4 py-3 text-sm text-rose-700">{formatCurrency(row.withdrawals)}</td><td className="px-4 py-3 text-sm text-sky-700">{formatCurrency(row.repayments)}</td><td className="px-4 py-3 text-sm text-amber-700">{formatCurrency(row.disbursements)}</td><td className="px-4 py-3 text-sm">{row.count}</td></tr>))}</tbody></table></div></div>);
+
+  const totalDeposits = transactions.filter((t) => String(t.type||"").toUpperCase().includes("DEPOSIT")).reduce((s,t)=>s+Number(t.amount||0),0);
+  const shareCapitalTxs = transactions.filter((t) => { const tp = String(t.type||"").toLowerCase(); return (tp.includes("deposit")||tp.includes("payment")) && (tp.includes("share")||tp.includes("capital")); });
+  const savingsTxs = transactions.filter((t) => { const tp = String(t.type||"").toLowerCase(); return (tp.includes("deposit")||tp.includes("payment")) && (tp.includes("savings")); });
+  const shareCapitalDeposits = shareCapitalTxs.reduce((s,t)=>s+Number(t.amount||0),0);
+  const savingsDeposits = savingsTxs.reduce((s,t)=>s+Number(t.amount||0),0);
+
+  const loanProducts = ["EMERGENCY","EDUCATION","DEVELOPMENT","WELFARE"];
+  const repayByProduct = {};
+  const disburseByProduct = {};
+  loanProducts.forEach((p) => {
+    repayByProduct[p] = loans.filter((l) => String(l.type||"").toUpperCase()===p).reduce((s,l)=>s+Number(l.paid||0),0);
+    disburseByProduct[p] = loans.filter((l) => String(l.type||"").toUpperCase()===p && ["DISBURSED","ACTIVE","OVERDUE"].includes(String(l.status||"").toUpperCase())).reduce((s,l)=>s+Number(l.principal||0),0);
+  });
+  const totalRepayments = loans.reduce((s,l)=>s+Number(l.paid||0),0);
+  const totalDisbursed = loans.filter((l) => ["DISBURSED","ACTIVE","OVERDUE"].includes(String(l.status||"").toUpperCase())).reduce((s,l)=>s+Number(l.principal||0),0);
+
+  return (<div className="space-y-6">
+    <SectionHeader eyebrow="Reports" title="Reports & analytics" description="Live KPI aggregates with daily, monthly, and yearly filtering."
+      action={<button onClick={()=>exportToCSV(reportRows,[{key:"label",label:"Period"},{key:"deposits"},{key:"withdrawals"},{key:"repayments"},{key:"disbursements"},{key:"count"}],"financial-reports.csv")} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold"><Download size={14}/>Export CSV</button>} />
+
+    {/* Time filter */}
+    <div className="flex items-center gap-3">
+      {["daily","monthly","yearly"].map((tf)=>(<button key={tf} onClick={()=>setTimeFilter(tf)} className={`rounded-full px-4 py-2 text-sm font-semibold capitalize ${timeFilter===tf?"bg-slate-950 text-white":"bg-slate-100 text-slate-700"}`}>{tf}</button>))}
+    </div>
+
+    {/* DEPOSITS GROUP */}
+    <div className="rounded-lg border border-slate-200 bg-white p-5">
+      <div className="mb-4 flex items-center gap-2"><TrendingUp size={20} className="text-emerald-600" /><h5 className="text-base font-semibold text-slate-950">Total Deposits</h5><span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700">{formatCurrency(totalDeposits)}</span></div>
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-semibold text-slate-500">Share Capital</p><p className="mt-1 text-xl font-semibold text-sky-700">{formatCurrency(shareCapitalDeposits)}</p><p className="mt-1 text-xs text-slate-500">Deposits allocated to share ownership</p></div>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-semibold text-slate-500">Savings Pools</p><p className="mt-1 text-xl font-semibold text-emerald-700">{formatCurrency(savingsDeposits)}</p><p className="mt-1 text-xs text-slate-500">General savings deposits</p></div>
+      </div>
+    </div>
+
+    {/* LOAN REPAYMENTS GROUP */}
+    <div className="rounded-lg border border-slate-200 bg-white p-5">
+      <div className="mb-4 flex items-center gap-2"><CreditCard size={20} className="text-sky-600" /><h5 className="text-base font-semibold text-slate-950">Loan Repayments</h5><span className="rounded-full bg-sky-50 px-3 py-1 text-sm font-semibold text-sky-700">{formatCurrency(totalRepayments)}</span></div>
+      <div className="grid gap-3 md:grid-cols-4">
+        {loanProducts.map((p) => (<div key={p} className="rounded-lg border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-semibold text-slate-500">{p.charAt(0)+p.slice(1).toLowerCase()} Loans</p><p className="mt-1 text-lg font-semibold text-sky-700">{formatCurrency(repayByProduct[p])}</p></div>))}
+      </div>
+    </div>
+
+    {/* LOAN DISBURSEMENTS GROUP */}
+    <div className="rounded-lg border border-slate-200 bg-white p-5">
+      <div className="mb-4 flex items-center gap-2"><Banknote size={20} className="text-amber-600" /><h5 className="text-base font-semibold text-slate-950">Loan Disbursements</h5><span className="rounded-full bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-700">{formatCurrency(totalDisbursed)}</span></div>
+      <div className="grid gap-3 md:grid-cols-4">
+        {loanProducts.map((p) => (<div key={p} className="rounded-lg border border-slate-200 bg-slate-50 p-4"><p className="text-xs font-semibold text-slate-500">{p.charAt(0)+p.slice(1).toLowerCase()} Loans</p><p className="mt-1 text-lg font-semibold text-amber-700">{formatCurrency(disburseByProduct[p])}</p></div>))}
+      </div>
+    </div>
+
+    {/* CHARTS */}
+    <div className="grid gap-5 xl:grid-cols-2">
+      <AnalyticsPanel title={`Deposits (${timeFilter})`} data={timeSeries.map(s=>({label:s.label,value:s.deposits}))} type="bar" color="#8cc63f"/>
+      <AnalyticsPanel title={`Repayments (${timeFilter})`} data={timeSeries.map(s=>({label:s.label,value:s.repayments}))} type="bar" color="#0369a1"/>
+    </div>
+
+    {/* TABLE */}
+    <div className="overflow-x-auto rounded-lg border"><table className="min-w-full"><thead><tr className="bg-slate-50">{["Period","Deposits","Withdrawals","Repayments","Disbursements","Count"].map(h=><th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{timeSeries.map((row,i)=>(<tr key={i}><td className="px-4 py-3 text-sm font-semibold">{row.label}</td><td className="px-4 py-3 text-sm text-emerald-700">{formatCurrency(row.deposits)}</td><td className="px-4 py-3 text-sm text-rose-700">{formatCurrency(row.withdrawals)}</td><td className="px-4 py-3 text-sm text-sky-700">{formatCurrency(row.repayments)}</td><td className="px-4 py-3 text-sm text-amber-700">{formatCurrency(row.disbursements)}</td><td className="px-4 py-3 text-sm">{row.count}</td></tr>))}</tbody></table></div>
+  </div>);
 }
 
 // ============================================================

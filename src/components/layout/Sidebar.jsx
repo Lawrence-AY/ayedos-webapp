@@ -40,6 +40,7 @@ const memberNavItems = [
   { label: "Deposit", suffix: "savings", icon: BriefcaseBusiness },
   { label: "Transactions", suffix: "transactions", icon: ReceiptText },
   { label: "Loans", suffix: "loans", icon: FileText },
+  { label: "Groups", suffix: "groups", icon: UsersRound },
   { label: "Portfolio", suffix: "portfolio", icon: PieChart },
   { label: "Reports", suffix: "reports", icon: ReceiptText },
   { label: "Notifications", suffix: "notifications", icon: Bell },
@@ -50,21 +51,15 @@ const memberNavItems = [
 
 const adminNavItems = [
   { label: "Dashboard Overview", suffix: "", exact: true, icon: LayoutDashboard },
-  { label: "Member Management", suffix: "members", icon: UserRound },
-  { label: "Membership Applications", suffix: "applications", icon: FileText },
+  { label: "Member Management", suffix: "members", icon: UsersRound },
   { label: "Loan Management", suffix: "loans", icon: FileText },
   { label: "Transactions", suffix: "transactions", icon: ReceiptText },
-  { label: "Savings Accounts", suffix: "savings", icon: BriefcaseBusiness },
-  { label: "Share Accounts", suffix: "shares", icon: WalletCards },
   { label: "Dividends", suffix: "dividends", icon: BriefcaseBusiness },
   { label: "Salary Deductions", suffix: "deductions", icon: ReceiptText },
   { label: "Reports & Analytics", suffix: "reports", icon: LayoutDashboard },
   { label: "Notifications", suffix: "notifications", icon: Bell },
   { label: "Audit Logs", suffix: "audit-logs", icon: Shield },
   { label: "System Configuration", suffix: "configuration", icon: Settings },
-  { label: "Staff & Roles", suffix: "staff-roles", icon: UserRound },
-  { label: "Security", suffix: "security", icon: Shield },
-  { label: "Support", suffix: "support", icon: Headphones },
 ];
 
 const financeNavItems = [

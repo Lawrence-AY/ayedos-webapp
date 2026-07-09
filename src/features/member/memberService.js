@@ -169,6 +169,16 @@ export async function getContributionStatus(transactionId, accessToken) {
   }
 }
 
+export async function requestMemberOptOut(data, accessToken) {
+  const res = await apiRequest('/api/member/opt-out', {
+    method: 'POST',
+    accessToken,
+    body: data,
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to submit opt-out request')
+  return unwrapEnvelopeData(res.json)
+}
+
 export async function emailMemberReport(reportType, accessToken, duration) {
   const body = { reportType };
   if (duration !== undefined && duration !== null && duration !== 'all') {
