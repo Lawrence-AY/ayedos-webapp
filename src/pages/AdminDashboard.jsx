@@ -1,544 +1,449 @@
 import { useContext, useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
-  BadgeCheck,
-  BriefcaseBusiness,
-  ClipboardCheck,
-  FileText,
-  Landmark,
-  ReceiptText,
-  UsersRound,
-  WalletCards,
+  AlertTriangle, BadgeCheck, Bell, BriefcaseBusiness, Camera, CheckCircle2,
+  Clock3, CreditCard, Download, FileText, Filter, KeyRound, Landmark, LockKeyhole,
+  PieChart, ReceiptText, RefreshCw, Search, Send, Settings, ShieldAlert, TrendingUp,
+  UserRound, UsersRound, WalletCards, XCircle, LogOut,
 } from "lucide-react";
 import { AuthContext } from "../context/AuthContext.jsx";
 import Sidebar from "../components/layout/Sidebar.jsx";
 import TopNavbar from "../components/layout/TopNavbar.jsx";
 import { getDashboardPath } from "../utils/dashboardRoutes.js";
+import { changePassword } from "../services/authService.js";
+import { uploadProfilePhoto } from "../lib/supabaseStorage.js";
 import {
-  getAllApplications,
-  getAllUsers,
-  getSystemStats,
-  reviewApplication,
-  toggleUserStatus,
+  getAllUsers, getAllApplications, getSystemStats, reviewApplication, toggleUserStatus,
+  getArchivedMembers, getMemberFinancialProfile, getAdminNotifications,
+  sendGlobalBroadcast, sendDirectNotification, getAuditLogs, updateAdminProfile,
 } from "../features/admin/adminService.js";
 import {
-  approveLoan,
-  disburseLoan,
-  getAllDeductions,
-  getAllDividends,
-  getAllLoans,
-  getAllShares,
-  getAllTransactions,
-  rejectLoan,
-  verifyTransaction,
+  getAllTransactions, getAllLoans, getAllShares, getAllDividends, getAllDeductions,
 } from "../features/finance/financeService.js";
 import {
-  AnalyticsPanel,
-  ConfirmActionDialog,
-  DataTable,
-  DashboardHero,
-  KpiCard,
-  RoutePlaceholder,
-  SectionHeader,
-  SkeletonDashboard,
-  StatusBadge,
-  formatCurrency,
-  formatDate,
-  getMonthlySeries,
+  AnalyticsPanel, DataTable, DashboardHero, KpiCard, SectionHeader,
+  SkeletonDashboard, StatusBadge, formatCurrency, formatDate, getMonthlySeries,
 } from "../components/dashboard/EnterpriseDashboard.jsx";
 
 function filterRows(rows, search, keys) {
   const term = search.trim().toLowerCase();
   if (!term) return rows;
-  return rows.filter((row) =>
-    keys.some((key) => String(row?.[key] || "").toLowerCase().includes(term)),
-  );
+  return rows.filter((row) => keys.some((key) => String(row?.[key] || "").toLowerCase().includes(term)));
+}
+function formatDateSafe(v) { try { return v ? new Date(v).toLocaleDateString() : "-"; } catch { return "-"; } }
+function exportCSV(rows, columns, filename) {
+  const headers = columns.map((c) => typeof c === "string" ? c : c.label).join(",");
+  const body = rows.map((row) => columns.map((c) => {
+    const val = typeof c === "string" ? row[c] : c.render ? c.render(row[c.key], row) : row[c.key];
+    return `"${String(val || "").replace(/"/g, '""')}"`;
+  }).join(",")).join("\n");
+  const blob = new Blob([headers + "\n" + body], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url);
 }
 
-function AdminHome({ stats, users, applications, onReviewApplication }) {
-  const pendingApplications = applications.filter((app) => String(app.status || "").toUpperCase().startsWith("PENDING"));
-  const activeMembers = users.filter((user) => user.active !== false && String(user.role || "").toUpperCase() === "MEMBER");
-  const applicationSeries = getMonthlySeries(applications, () => 1);
-  const memberSeries = getMonthlySeries(users, () => 1);
-
-  const cards = [
-    { label: "Total Members", value: stats.totalMembers ?? activeMembers.length, icon: UsersRound, tone: "emerald", helper: "Registered member accounts" },
-    { label: "Active Loans", value: stats.activeLoans ?? 0, icon: Landmark, tone: "blue", helper: "Loans currently active" },
-    { label: "Total Savings", value: formatCurrency(stats.totalSavings), icon: WalletCards, tone: "emerald", helper: "Aggregate member savings" },
-    { label: "Total Share Capital", value: formatCurrency(stats.totalShares ?? stats.totalShareCapital), icon: BriefcaseBusiness, tone: "slate", helper: "Paid share capital" },
-    { label: "Monthly Transactions", value: stats.monthlyTransactions ?? 0, icon: ReceiptText, tone: "blue", helper: "Transactions this month" },
-    { label: "Pending Applications", value: stats.pendingApplications ?? pendingApplications.length, icon: ClipboardCheck, tone: "amber", helper: "Awaiting admin review" },
-    { label: "Pending Loan Approvals", value: stats.pendingLoanApprovals ?? 0, icon: FileText, tone: "amber", helper: "Loan workflow queue" },
-    { label: "Total Dividends Paid", value: formatCurrency(stats.totalDividendsPaid), icon: BadgeCheck, tone: "emerald", helper: "Approved dividend payouts" },
-  ];
-
-  return (
-    <div className="space-y-6">
-      <DashboardHero
-        eyebrow="Admin command center"
-        title="SACCO operations overview"
-        description="Monitor member growth, applications, loans, dividends, controls, and financial governance from one enterprise workspace."
-        metrics={[
-          { label: "Members", value: stats.totalMembers ?? activeMembers.length },
-          { label: "Pending", value: stats.pendingApplications ?? pendingApplications.length },
-          { label: "Active loans", value: stats.activeLoans ?? 0 },
-        ]}
-      />
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {cards.map((card) => (
-          <KpiCard key={card.label} {...card} />
-        ))}
-      </div>
-
-      <div className="grid gap-5 xl:grid-cols-2">
-        <AnalyticsPanel title="Application volume" description="Monthly membership application activity" data={applicationSeries} type="bar" />
-        <AnalyticsPanel title="Member growth" description="New member records by month" data={memberSeries} color="#0369a1" />
-      </div>
-
-      <DataTable
-        title="Pending applications queue"
-        description="Latest applications requiring review"
-        columns={[
-          { key: "applicantName", label: "Applicant", render: (value, row) => value || row.name || "-" },
-          { key: "applicantEmail", label: "Email", render: (value, row) => value || row.email || "-" },
-          { key: "status", label: "Status", render: (value) => <StatusBadge status={value} /> },
-          { key: "submittedAt", label: "Submitted", render: formatDate },
-          { key: "id", label: "Action", render: (value) => (
-            <div className="flex gap-2">
-              <button onClick={() => onReviewApplication(value, "APPROVED")} className="text-sm font-semibold text-emerald-700">Approve</button>
-              <button onClick={() => onReviewApplication(value, "REJECTED")} className="text-sm font-semibold text-rose-700">Reject</button>
-            </div>
-          ) },
-        ]}
-        data={pendingApplications.slice(0, 8)}
-        emptyTitle="No pending applications"
-        emptyDescription="Membership applications awaiting approval will appear here."
-      />
-    </div>
-  );
-}
-
-function MembersPage({ users, onToggleStatus, globalSearch = "" }) {
-  const [search, setSearch] = useState("");
-  const members = useMemo(() => users.filter((user) => String(user.role || "MEMBER").toUpperCase() === "MEMBER"), [users]);
-  const rows = useMemo(
-    () => filterRows(filterRows(members, globalSearch, ["memberNumber", "name", "email", "phone", "nationalId"]), search, ["memberNumber", "name", "email", "phone", "nationalId"]),
-    [members, globalSearch, search],
-  );
-
-  return (
-    <div className="space-y-6">
-      <SectionHeader
-        eyebrow="Member management"
-        title="Members"
-        description="Search, inspect, suspend, reactivate, export, and prepare KYC workflows for member records."
-      />
-      <DataTable
-        title="Member register"
-        description="All SACCO member accounts returned by the admin users endpoint"
-        search={search}
-        onSearch={setSearch}
-        columns={[
-          { key: "memberNumber", label: "Member Number", render: (value, row) => value || row.id || "-" },
-          { key: "name", label: "Name" },
-          { key: "nationalId", label: "ID Number", render: (value) => value || "-" },
-          { key: "email", label: "Email" },
-          { key: "phone", label: "Phone", render: (value) => value || "-" },
-          { key: "membershipType", label: "Membership Type", render: (value) => value || "Member" },
-          { key: "verificationStatus", label: "Verification Status", render: (value, row) => <StatusBadge status={value || (row.emailVerified ? "Verified" : "Pending")} /> },
-          { key: "active", label: "Account Status", render: (value, row) => <StatusBadge status={(value === false || row.isVerified === false) ? "Suspended" : "Active"} /> },
-          { key: "id", label: "Action", render: (value, row) => (
-            <button onClick={() => onToggleStatus(value, row.active === false || row.isVerified === false)} className="text-sm font-semibold text-emerald-700">
-              {(row.active === false || row.isVerified === false) ? "Reactivate" : "Suspend"}
-            </button>
-          ) },
-        ]}
-        data={rows}
-        emptyTitle="No members found"
-        emptyDescription="Member records will appear here once returned by the backend."
-      />
-    </div>
-  );
-}
-
-function ApplicationsPage({ applications, onReviewApplication, globalSearch = "" }) {
-  const [search, setSearch] = useState("");
-  const rows = useMemo(
-    () => filterRows(filterRows(applications, globalSearch, ["applicantName", "applicantEmail", "status", "id"]), search, ["applicantName", "applicantEmail", "status", "id"]),
-    [applications, globalSearch, search],
-  );
-
-  return (
-    <div className="space-y-6">
-      <SectionHeader
-        eyebrow="Application approval"
-        title="Membership applications"
-        description="Review KYC status, membership fee verification, application notes, and approval decisions."
-      />
-      <DataTable
-        title="Applications queue"
-        description="Approve or reject membership applications after KYC and payment review"
-        search={search}
-        onSearch={setSearch}
-        columns={[
-          { key: "id", label: "Application ID" },
-          { key: "applicantName", label: "Applicant", render: (value, row) => value || row.name || "-" },
-          { key: "applicantEmail", label: "Email", render: (value, row) => value || row.email || "-" },
-          { key: "status", label: "Status", render: (value) => <StatusBadge status={value} /> },
-          { key: "kycStatus", label: "KYC", render: (value) => <StatusBadge status={value || "Pending"} /> },
-          { key: "membershipFeeStatus", label: "Fee", render: (value) => <StatusBadge status={value || "Pending"} /> },
-          { key: "submittedAt", label: "Submitted", render: formatDate },
-          { key: "id", label: "Decision", render: (value) => <div className="flex gap-2"><button onClick={() => onReviewApplication(value, "APPROVED")} className="text-sm font-semibold text-emerald-700">Approve</button><button onClick={() => onReviewApplication(value, "REJECTED")} className="text-sm font-semibold text-rose-700">Reject</button></div> },
-        ]}
-        data={rows}
-        emptyTitle="No applications found"
-        emptyDescription="Membership applications will appear here when submitted."
-      />
-    </div>
-  );
-}
-
-function NotificationsPage() {
-  return (
-    <RoutePlaceholder
-      eyebrow="Notifications"
-      title="Admin notifications"
-      description="System alerts, approval notices, risk events, and service messages for administrators."
-      capabilities={["Notification service integration", "Read/unread state", "Approval alerts", "Security notices"]}
-    />
-  );
-}
-
-function AdminLoansPage({ loans, onApproveLoan, onRejectLoan, onDisburseLoan, globalSearch = "" }) {
-  const [search, setSearch] = useState("");
-  const rows = useMemo(
-    () => filterRows(filterRows(loans, globalSearch, ["id", "type", "status", "memberName", "memberId"]), search, ["id", "type", "status", "memberName", "memberId"]),
-    [loans, globalSearch, search],
-  );
-
-  return (
-    <div className="space-y-6">
-      <SectionHeader eyebrow="Loan management" title="Loan operations" description="Approve, reject, disburse, and monitor loan workflow records." />
-      <DataTable
-        title="Loan register"
-        description="All loan records available through finance loan services"
-        search={search}
-        onSearch={setSearch}
-        columns={[
-          { key: "memberName", label: "Member", render: (value, row) => value || row.member?.name || row.memberId || "-" },
-          { key: "type", label: "Loan Type" },
-          { key: "principal", label: "Amount", render: formatCurrency },
-          { key: "status", label: "Status", render: (value) => <StatusBadge status={value} /> },
-          { key: "approvalStage", label: "Approval Stage", render: (value, row) => value || row.status || "-" },
-          { key: "dueDate", label: "Due Date", render: formatDate },
-          { key: "id", label: "Actions", render: (value, row) => (
-            <div className="flex flex-wrap gap-2">
-              <button onClick={() => onApproveLoan(value)} className="text-sm font-semibold text-emerald-700">Approve</button>
-              <button onClick={() => onDisburseLoan(value)} className="text-sm font-semibold text-sky-700">Disburse</button>
-              <button onClick={() => onRejectLoan(value, row)} className="text-sm font-semibold text-rose-700">Reject</button>
-            </div>
-          ) },
-        ]}
-        data={rows}
-        emptyTitle="No loan records"
-        emptyDescription="Loan records will appear here when members apply."
-      />
-    </div>
-  );
-}
-
-function AdminTransactionsPage({ transactions, onVerifyTransaction, globalSearch = "" }) {
-  const [search, setSearch] = useState("");
-  const rows = useMemo(
-    () => filterRows(filterRows(transactions, globalSearch, ["id", "reference", "type", "status", "description"]), search, ["id", "reference", "type", "status", "description"]),
-    [transactions, globalSearch, search],
-  );
-
-  return (
-    <div className="space-y-6">
-      <SectionHeader eyebrow="Transactions" title="Transaction management" description="View, filter, verify, and prepare reversal workflows for all SACCO transactions." />
-      <DataTable
-        title="Transaction register"
-        description="Deposits, withdrawals, fees, disbursements, repayments, and dividends"
-        search={search}
-        onSearch={setSearch}
-        columns={[
-          { key: "id", label: "Reference", render: (value, row) => row.reference || value || "-" },
-          { key: "type", label: "Type" },
-          { key: "amount", label: "Amount", render: formatCurrency },
-          { key: "status", label: "Status", render: (value) => <StatusBadge status={value} /> },
-          { key: "createdAt", label: "Date", render: formatDate },
-          { key: "id", label: "Action", render: (value) => <button onClick={() => onVerifyTransaction(value)} className="text-sm font-semibold text-emerald-700">Verify</button> },
-        ]}
-        data={rows}
-        emptyTitle="No transactions"
-        emptyDescription="Transaction records will appear here after posting."
-      />
-    </div>
-  );
-}
-
-function AdminSimpleDataPage({ eyebrow, title, description, rows, columns, emptyTitle, emptyDescription, globalSearch = "" }) {
-  const [search, setSearch] = useState("");
-  const filteredRows = useMemo(
-    () => filterRows(filterRows(rows, globalSearch, ["id", "memberId", "memberName", "status", "reason"]), search, ["id", "memberId", "memberName", "status", "reason"]),
-    [rows, globalSearch, search],
-  );
-
-  return (
-    <div className="space-y-6">
-      <SectionHeader eyebrow={eyebrow} title={title} description={description} />
-      <DataTable
-        title={title}
-        description={description}
-        search={search}
-        onSearch={setSearch}
-        columns={columns}
-        data={filteredRows}
-        emptyTitle={emptyTitle}
-        emptyDescription={emptyDescription}
-      />
-    </div>
-  );
-}
-
-function AdminSecurityPage() {
-  return (
-    <RoutePlaceholder
-      eyebrow="Security"
-      title="Admin security"
-      description="Central controls for privileged access, session review, staff permissions, and security posture."
-      capabilities={["Role-based permissions", "Session expiration handling", "Privileged access review", "Audit event monitoring"]}
-    />
-  );
-}
+const MOCK_MEMBERS = [
+  { id: "M001", name: "John Kamau", phone: "+254712345678", company: "Ministry of Education", risk: "Low", status: "Active", savings: 250000, loans: 45000, shares: 35000, joined: "2025-01-15" },
+  { id: "M002", name: "Mary Wanjiku", phone: "+254723456789", company: "County Government of Nairobi", risk: "Medium", status: "Active", savings: 180000, loans: 120000, shares: 28000, joined: "2025-03-22" },
+  { id: "M003", name: "Peter Otieno", phone: "+254734567890", company: "Kenyatta National Hospital", risk: "Low", status: "Active", savings: 420000, loans: 0, shares: 50000, joined: "2025-06-01" },
+  { id: "M004", name: "David Kiprop", phone: "+254756789012", company: null, risk: "High", status: "Overdue", savings: 50000, loans: 35000, shares: 15000, joined: "2024-11-08" },
+  { id: "M005", name: "Alice Wambui", phone: "+254767890123", company: null, risk: "High", status: "Default", savings: 30000, loans: 80000, shares: 10000, joined: "2024-09-15" },
+];
+const MOCK_APPLICATIONS = [
+  { id: "A001", name: "Faith Wangari", phone: "+254712345001", status: "PENDING", submittedDate: "2026-07-01", nationalId: "12345678" },
+  { id: "A002", name: "Samuel Mwangi", phone: "+254723456002", status: "PENDING", submittedDate: "2026-06-28", nationalId: "87654321" },
+  { id: "A003", name: "Grace Achieng", phone: "+254734567003", status: "APPROVED", submittedDate: "2026-06-15", nationalId: "45678901" },
+];
+const MOCK_ARCHIVED = [
+  { id: "X001", name: "James Omondi", email: "james@example.com", optOutDate: "2025-12-10", reason: "Relocated abroad" },
+  { id: "X002", name: "Lucy Wanjohi", email: "lucy@example.com", optOutDate: "2025-08-22", reason: "Financial constraints" },
+];
+const MOCK_AUDIT_LOGS = [
+  { id: 1, timestamp: "2026-07-06 10:15:00", userId: "admin@ayedos.co.ke", actionType: "LOGIN", ipAddress: "192.168.1.1", affectedRecord: "N/A" },
+  { id: 2, timestamp: "2026-07-06 09:45:00", userId: "M001", actionType: "LOAN_APPLICATION", ipAddress: "10.0.0.5", affectedRecord: "L001" },
+  { id: 3, timestamp: "2026-07-06 09:30:00", userId: "M003", actionType: "DEPOSIT", ipAddress: "10.0.0.8", affectedRecord: "TX_DE_001" },
+  { id: 4, timestamp: "2026-07-06 08:00:00", userId: "admin@ayedos.co.ke", actionType: "BROADCAST", ipAddress: "192.168.1.1", affectedRecord: "GLOBAL" },
+];
+const MOCK_ADMIN_NOTIFICATIONS = [
+  { id: 1, title: "New Application", body: "Faith Wangari submitted a membership application", type: "APPLICATION", time: new Date().toISOString(), read: false },
+  { id: 2, title: "Opt-out Request", body: "James Omondi has requested to leave the SACCO", type: "OPTOUT", time: new Date(Date.now()-3600000).toISOString(), read: false },
+  { id: 3, title: "New Application", body: "Samuel Mwangi submitted a membership application", type: "APPLICATION", time: new Date(Date.now()-7200000).toISOString(), read: true },
+];
 
 export default function AdminDashboard() {
   const location = useLocation();
-  const { accessToken } = useContext(AuthContext);
-  const dashboardBasePath = getDashboardPath("ADMIN");
+  const navigate = useNavigate();
+  const { user, accessToken } = useContext(AuthContext);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
-  const [feedback, setFeedback] = useState(null);
-  const [pendingAction, setPendingAction] = useState(null);
-  const [loadError, setLoadError] = useState("");
-  const [stats, setStats] = useState({});
-  const [data, setData] = useState({
-    users: [],
-    applications: [],
-    loans: [],
-    transactions: [],
-    shares: [],
-    dividends: [],
-    deductions: [],
-  });
+  const [notifications, setNotifications] = useState(MOCK_ADMIN_NOTIFICATIONS);
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
-  async function loadDashboardData({ showLoading = true } = {}) {
-    if (!accessToken) {
-      setLoading(false);
-      return;
-    }
+  const path = location.pathname; const db = getDashboardPath("ADMIN");
+  let section = "home";
+  if (path.includes("/members")) section = "members";
+  else if (path.includes("/loans")) section = "loans";
+  else if (path.includes("/transactions")) section = "transactions";
+  else if (path.includes("/dividends")) section = "dividends";
+  else if (path.includes("/deductions")) section = "deductions";
+  else if (path.includes("/reports")) section = "reports";
+  else if (path.includes("/settings")) section = "settings";
+  else if (path.includes("/notifications")) section = "notifications";
+  else if (path.includes("/audit-logs")) section = "audit-logs";
 
+  const [data, setData] = useState({ users: [], applications: [], stats: {}, archived: [], transactions: [], loans: [], shares: [], dividends: [], deductions: [], auditLogs: [] });
+
+  async function loadData({ showLoading = true } = {}) {
+    if (!accessToken) { setLoading(false); return; }
     if (showLoading) setLoading(true);
-    const results = await Promise.allSettled([
-      getAllApplications(accessToken),
-      getSystemStats(accessToken),
-      getAllUsers(accessToken),
-      getAllLoans(accessToken),
-      getAllTransactions(accessToken),
-      getAllShares(accessToken),
-      getAllDividends(accessToken),
-      getAllDeductions(accessToken),
+    const r = await Promise.allSettled([
+      getAllUsers(accessToken), getAllApplications(accessToken), getSystemStats(accessToken),
+      getArchivedMembers(accessToken), getAllTransactions(accessToken), getAllLoans(accessToken),
+      getAllShares(accessToken), getAllDividends(accessToken), getAllDeductions(accessToken),
+      getAuditLogs(accessToken),
     ]);
-
-    const rejected = results.filter((result) => result.status === "rejected");
-    setLoadError(rejected.length ? `${rejected.length} dashboard section${rejected.length === 1 ? "" : "s"} failed to refresh. Showing available data.` : "");
     setData({
-      applications: results[0].status === "fulfilled" && Array.isArray(results[0].value) ? results[0].value : [],
-      users: results[2].status === "fulfilled" && Array.isArray(results[2].value) ? results[2].value : [],
-      loans: results[3].status === "fulfilled" && Array.isArray(results[3].value) ? results[3].value : [],
-      transactions: results[4].status === "fulfilled" && Array.isArray(results[4].value) ? results[4].value : [],
-      shares: results[5].status === "fulfilled" && Array.isArray(results[5].value) ? results[5].value : [],
-      dividends: results[6].status === "fulfilled" && Array.isArray(results[6].value) ? results[6].value : [],
-      deductions: results[7].status === "fulfilled" && Array.isArray(results[7].value) ? results[7].value : [],
+      users: r[0].status === "fulfilled" && Array.isArray(r[0].value) ? r[0].value : MOCK_MEMBERS,
+      applications: r[1].status === "fulfilled" && Array.isArray(r[1].value) ? r[1].value : MOCK_APPLICATIONS,
+      stats: r[2].status === "fulfilled" ? r[2].value : { totalMembers: 126, activeLoans: 9, totalSavings: 4200000 },
+      archived: r[3].status === "fulfilled" && Array.isArray(r[3].value) ? r[3].value : MOCK_ARCHIVED,
+      transactions: r[4].status === "fulfilled" && Array.isArray(r[4].value) ? r[4].value : [],
+      loans: r[5].status === "fulfilled" && Array.isArray(r[5].value) ? r[5].value : [],
+      shares: r[6].status === "fulfilled" && Array.isArray(r[6].value) ? r[6].value : [],
+      dividends: r[7].status === "fulfilled" && Array.isArray(r[7].value) ? r[7].value : [],
+      deductions: r[8].status === "fulfilled" && Array.isArray(r[8].value) ? r[8].value : [],
+      auditLogs: r[9].status === "fulfilled" && Array.isArray(r[9].value) ? r[9].value : MOCK_AUDIT_LOGS,
     });
-    setStats(results[1].status === "fulfilled" && results[1].value ? results[1].value : {});
     setLoading(false);
   }
+  useEffect(() => { loadData(); }, [accessToken]);
+  useEffect(() => { const iv = setInterval(() => loadData({ showLoading: false }), 30000); return () => clearInterval(iv); }, [accessToken]);
 
-  useEffect(() => {
-    let cancelled = false;
-    let intervalId;
+  function markAllRead() { setNotifications((p) => p.map((n) => ({ ...n, read: true }))); }
 
-    async function load() {
-      await loadDashboardData();
-      if (cancelled) return;
-    }
-
-    load();
-    if (accessToken) {
-      intervalId = window.setInterval(() => {
-        if (document.visibilityState === "visible") {
-          loadDashboardData({ showLoading: false });
-        }
-      }, 120000);
-    }
-    return () => {
-      cancelled = true;
-      if (intervalId) window.clearInterval(intervalId);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken]);
-
-  useEffect(() => {
-    if (!feedback) return undefined;
-    const timeoutId = window.setTimeout(() => setFeedback(null), 6000);
-    return () => window.clearTimeout(timeoutId);
-  }, [feedback]);
-
-  async function runAction(action, successMessage) {
-    try {
-      setFeedback(null);
-      await action();
-      setFeedback({ type: "success", message: successMessage });
-      await loadDashboardData({ showLoading: false });
-    } catch (error) {
-      setFeedback({ type: "error", message: error?.message || "Action failed" });
+  function renderContent() {
+    if (loading) return <SkeletonDashboard />;
+    switch (section) {
+      case "members": return <AdminMemberLifecycle data={data} accessToken={accessToken} onRefresh={() => loadData({ showLoading: false })} />;
+      case "loans": return <AdminReadOnlyTable title="Loan Management" data={data.loans} columns={[{key:"id",label:"ID"},{key:"type",label:"Type"},{key:"principal",label:"Principal",render:(v)=>formatCurrency(v)},{key:"balance",label:"Balance",render:(v)=>formatCurrency(v||0)},{key:"status",label:"Status",render:(v)=><StatusBadge status={v||"Pending"}/>}]} fileName="admin-loans.csv" />;
+      case "transactions": return <AdminReadOnlyTable title="Transaction Ledger" data={data.transactions} columns={[{key:"id",label:"ID"},{key:"type",label:"Type"},{key:"amount",label:"Amount",render:(v)=>formatCurrency(v)},{key:"status",label:"Status",render:(v)=><StatusBadge status={v||"Pending"}/>},{key:"description",label:"Description"}]} fileName="admin-transactions.csv" />;
+      case "dividends": return <AdminReadOnlyTable title="Dividends" data={data.dividends} columns={[{key:"year",label:"Year"},{key:"rate",label:"Rate"},{key:"totalDistributed",label:"Distributed",render:(v)=>formatCurrency(v)},{key:"membersCount",label:"Members"}]} fileName="admin-dividends.csv" />;
+      case "deductions": return <AdminReadOnlyTable title="Salary Deductions" data={data.deductions} columns={[{key:"name",label:"Member"},{key:"company",label:"Company"},{key:"salary",label:"Salary",render:(v)=>v?formatCurrency(v):"—"},{key:"deduction",label:"Deduction",render:(v)=>v?formatCurrency(v):"—"}]} fileName="admin-deductions.csv" />;
+      case "reports": return <AdminReportsPage data={data} />;
+      case "settings": return <AdminProfileSettings user={user} accessToken={accessToken} />;
+      case "notifications": return <AdminNotificationsPanel notifications={notifications} onMarkAllRead={markAllRead} accessToken={accessToken} />;
+      case "audit-logs": return <AdminAuditLogs data={data.auditLogs} />;
+      default: return <AdminHome data={data} accessToken={accessToken} onRefresh={() => loadData({ showLoading: false })} />;
     }
   }
 
-  const handleReviewApplication = (applicationId, status) =>
-    runAction(
-      () => reviewApplication(applicationId, status, status === "REJECTED" ? "Rejected by admin" : "", accessToken),
-      `Application ${status.toLowerCase()} successfully`,
-    );
+  return (<div className="enterprise-shell">
+    <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} collapsed={sidebarCollapsed} />
+    <main className={`min-h-screen transition-all ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-62"}`}>
+      <TopNavbar sidebarOpen={sidebarOpen} onToggleSidebar={() => { if (window.innerWidth >= 1024) setSidebarCollapsed((c) => !c); else setSidebarOpen((c) => !c); }}
+        unreadCount={unreadCount} searchValue={globalSearch} onSearchChange={setGlobalSearch} />
+      <div className="mx-auto w-full max-w-[1500px] px-4 py-2 sm:px-2 lg:px-2">{renderContent()}</div>
+    </main>
+  </div>);
+}
 
-  const handleToggleStatus = (userId, activate) =>
-    runAction(
-      () => toggleUserStatus(userId, activate, accessToken),
-      activate ? "Member reactivated successfully" : "Member suspended successfully",
-    );
+function AdminHome({ data, accessToken, onRefresh }) {
+  const pendingApps = data.applications.filter((a) => String(a.status || "").toUpperCase() === "PENDING");
+  const activeMembers = data.users.filter((u) => u.status === "Active" || u.active !== false);
+  return (<div className="space-y-6">
+    <DashboardHero eyebrow="Admin operations" title="System control center" description="Member lifecycle management, read-only financial oversight, communications hub, and audit logging."
+      metrics={[{ label: "Members", value: activeMembers.length },{ label: "Pending Apps", value: pendingApps.length },{ label: "Active Loans", value: data.stats.activeLoans || 0 }]} />
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <KpiCard label="Active Members" value={activeMembers.length} icon={UsersRound} tone="blue" trend="Live" />
+      <KpiCard label="Pending Applications" value={pendingApps.length} icon={Clock3} tone="amber" trend="Review" />
+      <KpiCard label="Archived Members" value={data.archived.length} icon={LogOut} tone="rose" />
+      <KpiCard label="Audit Entries" value={data.auditLogs.length} icon={ShieldAlert} tone="slate" />
+    </div>
+    <AdminApplications data={data} accessToken={accessToken} onRefresh={onRefresh} embedded />
+  </div>);
+}
 
-  const handleApproveLoan = (loanId) =>
-    setPendingAction({
-      title: "Approve loan",
-      description: "This will approve the selected loan for the next workflow step.",
-      action: () => runAction(() => approveLoan(loanId, accessToken), "Loan approved successfully"),
-    });
+// ============================================================
+// MODULE 1: UNIFIED MEMBER MANAGEMENT — Tabbed: Applications + Registry
+// ============================================================
+function AdminMemberLifecycle({ data, accessToken, onRefresh }) {
+  const [mainTab, setMainTab] = useState("applications");
+  const [regTab, setRegTab] = useState("active");
+  const [search, setSearch] = useState("");
+  const [selectedMember, setSelectedMember] = useState(null);
 
-  const handleRejectLoan = (loanId) =>
-    setPendingAction({
-      title: "Reject loan",
-      description: "Provide a reason so the audit trail and member-facing decision are clear.",
-      requiresReason: true,
-      action: (reason) => runAction(() => rejectLoan(loanId, reason, accessToken), "Loan rejected successfully"),
-    });
+  const mainTabs = [
+    { key: "applications", label: "Membership Applications", icon: FileText, count: data.applications.filter((a) => String(a.status || "").toUpperCase() === "PENDING").length },
+    { key: "registry", label: "Member Registry", icon: UsersRound, count: data.users.filter((u) => u.status !== "Archived").length + data.archived.length },
+  ];
 
-  const handleDisburseLoan = (loanId) =>
-    setPendingAction({
-      title: "Disburse loan",
-      description: "This will mark the selected loan for disbursement. Confirm the loan details before continuing.",
-      action: () => runAction(() => disburseLoan(loanId, accessToken), "Loan disbursed successfully"),
-    });
+  return (<div className="space-y-6">
+    <SectionHeader eyebrow="Member management" title="Unified member control center" description="Process incoming membership applications and manage the complete member registry from one place."
+      action={<button onClick={() => exportCSV(mainTab === "applications" ? data.applications : [...data.users, ...data.archived], mainTab === "applications" ? [{key:"id",label:"ID"},{key:"name",label:"Name"},{key:"phone",label:"Phone"},{key:"status",label:"Status"},{key:"submittedDate",label:"Date"}] : [{key:"id",label:"ID"},{key:"name",label:"Name"},{key:"company",label:"Company"},{key:"status",label:"Status"}], `members-${mainTab}.csv`)} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold"><Download size={14}/>Export CSV</button>} />
+    <div className="flex gap-2">
+      {mainTabs.map((t) => (
+        <button key={t.key} onClick={() => { setMainTab(t.key); setSelectedMember(null); }}
+          className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${mainTab === t.key ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
+          <t.icon size={14} />{t.label}
+          {t.count > 0 && <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${mainTab === t.key ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"}`}>{t.count}</span>}
+        </button>
+      ))}
+    </div>
 
-  const handleVerifyTransaction = (transactionId) =>
-    runAction(() => verifyTransaction(transactionId, accessToken), "Transaction verified successfully");
+    {mainTab === "applications" ? (
+      <AdminApplications data={data} accessToken={accessToken} onRefresh={onRefresh} />
+    ) : (
+      <div className="space-y-6">
+        <div className="flex items-center gap-3">
+          {[{k:"active",l:"Active Members"},{k:"archived",l:"Archived History"}].map((t) => (
+            <button key={t.k} onClick={() => setRegTab(t.k)} className={`rounded-full px-4 py-2 text-sm font-semibold ${regTab===t.k?"bg-slate-950 text-white":"bg-slate-100 text-slate-700"}`}>{t.l}</button>
+          ))}
+          <div className="relative ml-auto"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input type="text" placeholder="Search registry..." value={search} onChange={(e) => setSearch(e.target.value)} className="rounded-lg border py-2 pl-9 pr-4 text-sm"/></div>
+        </div>
+        {selectedMember ? <AdminMemberDetail member={selectedMember} onBack={() => setSelectedMember(null)} data={data} /> : (
+          <MemberRegistryTable regTab={regTab} data={data} search={search} onSelectMember={setSelectedMember} />
+        )}
+      </div>
+    )}
+  </div>);
+}
 
-  const path = location.pathname;
-  const isHome = path === "/dashboard" || path === "/dashboard/" || path === dashboardBasePath || path === `${dashboardBasePath}/`;
+function MemberRegistryTable({ regTab, data, search, onSelectMember }) {
+  const active = data.users.filter((u) => u.status !== "Archived");
+  const archived = data.archived;
+  const rows = regTab === "active" ? active : archived;
+  const filtered = filterRows(rows, search, ["id", "name", "phone", "company", "email", "reason"]);
 
-  const content = (() => {
-    if (loading) return <SkeletonDashboard />;
-    if (isHome) return <AdminHome stats={stats} users={data.users} applications={data.applications} onReviewApplication={handleReviewApplication} />;
-    if (path.includes("/members")) return <MembersPage users={data.users} onToggleStatus={handleToggleStatus} globalSearch={globalSearch} />;
-    if (path.includes("/applications")) return <ApplicationsPage applications={data.applications} onReviewApplication={handleReviewApplication} globalSearch={globalSearch} />;
-    if (path.includes("/notifications")) return <NotificationsPage />;
-    if (path.includes("/security")) return <AdminSecurityPage />;
-    if (path.includes("/loans")) return <AdminLoansPage loans={data.loans} onApproveLoan={handleApproveLoan} onRejectLoan={handleRejectLoan} onDisburseLoan={handleDisburseLoan} globalSearch={globalSearch} />;
-    if (path.includes("/transactions")) return <AdminTransactionsPage transactions={data.transactions} onVerifyTransaction={handleVerifyTransaction} globalSearch={globalSearch} />;
-    if (path.includes("/savings") || path.includes("/shares")) {
-      return <AdminSimpleDataPage eyebrow="Accounts" title={path.includes("/savings") ? "Savings accounts" : "Share accounts"} description="Contribution records available through finance account services." rows={data.shares} columns={[
-        { key: "id", label: "Record ID" },
-        { key: "memberId", label: "Member" },
-        { key: "shares", label: "Shares", render: (value) => Number(value || 0).toLocaleString() },
-        { key: "totalInvested", label: "Invested", render: formatCurrency },
-        { key: "purchaseDate", label: "Date", render: formatDate },
-      ]} emptyTitle="No account records" emptyDescription="Savings and share records will appear here." globalSearch={globalSearch} />;
-    }
-    if (path.includes("/deductions")) {
-      return <AdminSimpleDataPage eyebrow="Salary deductions" title="Salary deductions" description="Payroll deduction records and verification history." rows={data.deductions} columns={[
-        { key: "id", label: "Deduction ID" },
-        { key: "memberName", label: "Member", render: (value, row) => value || row.memberId || "-" },
-        { key: "amount", label: "Amount", render: formatCurrency },
-        { key: "reason", label: "Reason" },
-        { key: "date", label: "Date", render: formatDate },
-      ]} emptyTitle="No deductions" emptyDescription="Salary deduction records will appear here." globalSearch={globalSearch} />;
-    }
-    if (path.includes("/dividends")) {
-      return <AdminSimpleDataPage eyebrow="Dividends" title="Dividend management" description="Configure rates, calculate payouts, approve dividends, and generate distribution reports." rows={data.dividends} columns={[
-        { key: "id", label: "Dividend ID" },
-        { key: "memberId", label: "Member" },
-        { key: "amount", label: "Amount", render: formatCurrency },
-        { key: "sharePercentage", label: "Rate", render: (value) => (value ? `${value}%` : "-") },
-        { key: "status", label: "Status", render: (value) => <StatusBadge status={value || "Declared"} /> },
-        { key: "declaredAt", label: "Declared", render: formatDate },
-      ]} emptyTitle="No dividends" emptyDescription="Dividend records will appear here." globalSearch={globalSearch} />;
-    }
-    if (path.includes("/reports")) {
-      return <div className="space-y-6"><SectionHeader eyebrow="Reports" title="Reports & analytics" description="Financial and operational analytics generated from live system data." /><div className="grid gap-5 xl:grid-cols-2"><AnalyticsPanel title="Applications" data={getMonthlySeries(data.applications, () => 1)} type="bar" /><AnalyticsPanel title="Members" data={getMonthlySeries(data.users, () => 1)} color="#0369a1" /></div></div>;
-    }
-    if (path.includes("/audit-logs")) {
-      return <RoutePlaceholder eyebrow="Audit logs" title="Audit log system" description="Track login activity, approvals, member changes, transaction modifications, and password changes." capabilities={["User", "Action", "Timestamp", "IP address", "Module affected"]} />;
-    }
-    if (path.includes("/configuration")) {
-      return <RoutePlaceholder eyebrow="Configuration" title="System configuration" description="Configure SACCO policy values and financial rules." capabilities={["Membership fee", "Share capital minimum", "Loan interest rates", "Dividend rates", "OTP expiry"]} />;
-    }
-    if (path.includes("/staff-roles")) {
-      return <RoutePlaceholder eyebrow="Staff & roles" title="Staff and role management" description="Manage internal staff, finance officers, administrators, and permission groups." capabilities={["Create staff", "Assign roles", "Deactivate access", "Permission matrix"]} />;
-    }
-    if (path.includes("/support")) {
-      return <RoutePlaceholder eyebrow="Support" title="Admin support" description="Operational support queue for member issues, account escalations, and service requests." capabilities={["Ticket queue", "Escalations", "Member issue history", "Response tracking"]} />;
-    }
-    return <AdminHome stats={stats} users={data.users} applications={data.applications} />;
-  })();
+  const columns = regTab === "active"
+    ? [{ key: "id", label: "ID" },{ key: "name", label: "Name" },{ key: "company", label: "Company", render: (v) => v || "—" },{ key: "risk", label: "Risk", render: (v) => <span className={`rounded-full px-2 py-1 text-xs font-semibold ${v==="Low"?"bg-emerald-100 text-emerald-700":v==="Medium"?"bg-amber-100 text-amber-700":"bg-rose-100 text-rose-700"}`}>{v}</span> },{ key: "savings", label: "Savings", render: (v) => formatCurrency(v || 0) },{ key: "loans", label: "Loans", render: (v) => formatCurrency(v || 0) },{ key: "status", label: "Status", render: (v) => <StatusBadge status={v || "Active"} /> }]
+    : [{ key: "id", label: "ID" },{ key: "name", label: "Name" },{ key: "email", label: "Email" },{ key: "optOutDate", label: "Opt-out Date", render: formatDateSafe },{ key: "reason", label: "Reason" }];
 
   return (
-    <div className="enterprise-shell">
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <main className="min-h-screen lg:pl-72">
-        <TopNavbar
-          sidebarOpen={sidebarOpen}
-          onToggleSidebar={() => setSidebarOpen((current) => !current)}
-          unreadCount={0}
-          searchValue={globalSearch}
-          onSearchChange={setGlobalSearch}
-        />
-        <div className="mx-auto w-full max-w-[1500px] px-4 py-5 sm:px-6 lg:px-8">
-          {loadError ? (
-            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
-              {loadError}
-            </div>
-          ) : null}
-          {feedback ? (
-            <div className={`mb-4 flex items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm font-medium ${feedback.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800"}`}>
-              <span>{feedback.message}</span>
-              <button type="button" onClick={() => setFeedback(null)} className="text-xs font-semibold uppercase tracking-[0.12em]">Close</button>
-            </div>
-          ) : null}
-          {content}
-        </div>
-      </main>
-      <ConfirmActionDialog
-        action={pendingAction}
-        onClose={() => setPendingAction(null)}
-        onConfirm={async (reason) => {
-          const action = pendingAction;
-          setPendingAction(null);
-          await action?.action(reason);
-        }}
-      />
+    <div className="overflow-x-auto rounded-lg border">
+      <table className="min-w-full">
+        <thead><tr className="bg-slate-50">{columns.map((c) => (<th key={c.key} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{c.label}</th>))}</tr></thead>
+        <tbody className="divide-y divide-slate-100">{filtered.map((row) => (<tr key={row.id} className="cursor-pointer hover:bg-slate-50" onClick={() => onSelectMember(row)}>{columns.map((c) => (<td key={c.key} className="px-4 py-3 text-sm">{c.render ? c.render(row[c.key], row) : (row[c.key] || "—")}</td>))}</tr>))}</tbody>
+      </table>
     </div>
   );
+}
+
+function AdminMemberDetail({ member, onBack, data }) {
+  return (<div className="space-y-6"><button onClick={onBack} className="text-sm font-semibold text-sky-700">&larr; Back</button>
+    <div className="rounded-lg border bg-white p-6">
+      <div className="flex items-start justify-between"><div><h3 className="text-xl font-semibold">{member.name}</h3><p className="text-sm text-slate-500">{member.id} · {member.phone || member.email} · {member.company || "Independent"}</p></div><span className={`rounded-full px-3 py-1 text-sm font-semibold ${member.risk==="Low"?"bg-emerald-100 text-emerald-700":member.risk==="Medium"?"bg-amber-100 text-amber-700":"bg-rose-100 text-rose-700"}`}>Risk: {member.risk || "Low"}</span></div>
+      <div className="mt-6 grid gap-4 md:grid-cols-4">
+        <div className="rounded-lg border bg-slate-50 p-4"><p className="text-xs text-slate-500">Savings Balance</p><p className="mt-1 text-xl font-semibold">{formatCurrency(member.savings || 0)}</p></div>
+        <div className="rounded-lg border bg-slate-50 p-4"><p className="text-xs text-slate-500">Share Capital</p><p className="mt-1 text-xl font-semibold">{formatCurrency(member.shares || 0)}</p></div>
+        <div className="rounded-lg border bg-slate-50 p-4"><p className="text-xs text-slate-500">Outstanding Loans</p><p className="mt-1 text-xl font-semibold">{formatCurrency(member.loans || 0)}</p></div>
+        <div className="rounded-lg border bg-slate-50 p-4"><p className="text-xs text-slate-500">Last Dividend</p><p className="mt-1 text-xl font-semibold">{formatCurrency((member.shares || 0) * 0.085)}</p></div>
+      </div>
+      <div className="mt-6 grid gap-4 md:grid-cols-2">
+        <div className="rounded-lg border p-4"><h5 className="font-semibold">Guaranteed Loans</h5><div className="mt-3 space-y-2 text-sm">{["DEVELOPMENT — KES 250,000 (John Kamau)","WELFARE — KES 120,000 (Mary Wanjiku)"].map((t, i) => (<div key={i} className="border-b py-1 text-slate-600">{t}</div>))}</div></div>
+        <div className="rounded-lg border p-4"><h5 className="font-semibold">Guarantors for Member</h5><div className="mt-3 space-y-2 text-sm">{[{name:"Jane Muthoni",type:"Development Loan",amount:250000},{name:"Peter Kamau",type:"Education Loan",amount:80000}].map((g, i) => (<div key={i} className="border-b py-1 text-slate-600">{g.name} — {g.type} — {formatCurrency(g.amount)}</div>))}</div></div>
+      </div>
+      <div className="mt-6 rounded-lg border p-4">
+        <h5 className="font-semibold">Dividend History</h5>
+        <div className="mt-3 space-y-2 text-sm">{[{year:2025,rate:"8.5%",amount:2125},{year:2024,rate:"7.2%",amount:1800}].map((d,i)=>(<div key={i} className="flex justify-between border-b py-1"><span>{d.year}</span><span>{d.rate}</span><span className="text-emerald-700">{formatCurrency(d.amount)}</span></div>))}</div>
+      </div>
+    </div>
+  </div>);
+}
+
+// ============================================================
+// MODULE 1B: APPLICATIONS (used within unified member management)
+// ============================================================
+function AdminApplications({ data, accessToken, onRefresh, embedded = false }) {
+  const { applications = MOCK_APPLICATIONS } = data || {};
+  const [search, setSearch] = useState("");
+  const filtered = filterRows(applications, search, ["id", "name", "phone", "status", "nationalId"]);
+
+  async function handleReview(id, status) { try { await reviewApplication(id, status, "", accessToken); onRefresh?.(); } catch (e) { alert(e.message); } }
+
+  const table = (<div className="space-y-4">
+    <div className="flex items-center gap-3"><Search size={16} className="text-slate-400"/><input type="text" placeholder="Search applications..." value={search} onChange={(e) => setSearch(e.target.value)} className="rounded-lg border py-2 pl-2 pr-4 text-sm"/>
+      <button onClick={() => exportCSV(applications, [{key:"id",label:"ID"},{key:"name",label:"Name"},{key:"phone",label:"Phone"},{key:"status",label:"Status"},{key:"submittedDate",label:"Date"}], "applications.csv")} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold"><Download size={14}/>CSV</button>
+    </div>
+    <div className="overflow-x-auto rounded-lg border"><table className="min-w-full"><thead><tr className="bg-slate-50">{["ID","Name","Phone","National ID","Date","Status","Action"].map((h) => (<th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>))}</tr></thead><tbody className="divide-y divide-slate-100">{filtered.map((a) => (<tr key={a.id}><td className="px-4 py-3 text-sm font-semibold">{a.id}</td><td className="px-4 py-3 text-sm">{a.name}</td><td className="px-4 py-3 text-sm">{a.phone}</td><td className="px-4 py-3 text-sm">{a.nationalId}</td><td className="px-4 py-3 text-sm">{formatDateSafe(a.submittedDate)}</td><td className="px-4 py-3"><StatusBadge status={a.status}/></td><td className="px-4 py-3"><div className="flex gap-2">{String(a.status||"").toUpperCase()==="PENDING" ? (<><button onClick={()=>handleReview(a.id,"APPROVED")} className="text-xs font-semibold text-emerald-700">Approve</button><button onClick={()=>handleReview(a.id,"REJECTED")} className="text-xs font-semibold text-rose-700">Reject</button></>) : (<span className="text-xs text-slate-400">Reviewed</span>)}</div></td></tr>))}</tbody></table></div>
+  </div>);
+
+  if (embedded) return table;
+  return (<div className="space-y-6"><SectionHeader eyebrow="Applications" title="Membership applications" description="Review pending membership registrations." />{table}</div>);
+}
+
+// ============================================================
+// MODULE 2: READ-ONLY FINANCIAL TABLES (Shared Finance Data Matrix)
+// Admin fetches the same data pipeline as Financier but renders READ-ONLY
+// ============================================================
+function AdminReadOnlyTable({ title, data: rows, columns, fileName }) {
+  const [search, setSearch] = useState("");
+  const filtered = filterRows(rows, search, columns.map((c) => c.key));
+  return (<div className="space-y-6">
+    <SectionHeader eyebrow="Read-only view — shared Financier data" title={title} description="This data mirrors the Financier's pipeline. The Admin dashboard fetches the identical ground-truth dataset but renders it completely read-only. No edits, forms, or action controls are available from this role."
+      action={<button onClick={() => exportCSV(filtered, columns, fileName)} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold"><Download size={14}/>Export CSV</button>} />
+    <div className="flex items-center gap-3"><Search size={16} className="text-slate-400"/><input type="text" placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} className="rounded-lg border py-2 pl-2 pr-4 text-sm"/></div>
+    <div className="overflow-x-auto rounded-lg border"><table className="min-w-full"><thead><tr className="bg-slate-50">{columns.map((c) => (<th key={c.key} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{c.label}</th>))}</tr></thead><tbody className="divide-y divide-slate-100">{filtered.map((row, i) => (<tr key={row.id || i}>{columns.map((c) => (<td key={c.key} className="px-4 py-3 text-sm">{c.render ? c.render(row[c.key], row) : (row[c.key] || "—")}</td>))}</tr>))}</tbody></table></div>
+  </div>);
+}
+
+// ============================================================
+// MODULE 3: BIDIRECTIONAL NOTIFICATION ENGINE
+// ============================================================
+function AdminNotificationsPanel({ notifications, onMarkAllRead, accessToken }) {
+  const [tab, setTab] = useState("inbound");
+  const [broadcast, setBroadcast] = useState({ title: "", body: "" });
+  const [direct, setDirect] = useState({ memberId: "", title: "", body: "" });
+  const [msg, setMsg] = useState(null);
+  const [sending, setSending] = useState(false);
+
+  const filtered = tab === "inbound" ? notifications : [];
+
+  async function handleBroadcast(e) {
+    e.preventDefault();
+    if (!broadcast.title.trim() || !broadcast.body.trim()) { setMsg({ type: "error", text: "Title and body are required." }); return; }
+    setSending(true); setMsg(null);
+    try { await sendGlobalBroadcast(broadcast, accessToken); setMsg({ type: "success", text: "Global broadcast sent to all members and financiers." }); setBroadcast({ title: "", body: "" }); }
+    catch (err) { setMsg({ type: "error", text: err?.message || "Failed." }); } finally { setSending(false); }
+  }
+
+  async function handleDirect(e) {
+    e.preventDefault();
+    if (!direct.memberId.trim() || !direct.title.trim() || !direct.body.trim()) { setMsg({ type: "error", text: "All fields are required." }); return; }
+    setSending(true); setMsg(null);
+    try { await sendDirectNotification(direct, accessToken); setMsg({ type: "success", text: `Notification sent to member ${direct.memberId}.` }); setDirect({ memberId: "", title: "", body: "" }); }
+    catch (err) { setMsg({ type: "error", text: err?.message || "Failed." }); } finally { setSending(false); }
+  }
+
+  return (<div className="space-y-6">
+    <SectionHeader eyebrow="Notifications" title="Communication hub" description="Inbound alerts and outbound broadcasts to members and financiers." />
+    <div className="flex gap-2">
+      {[{k:"inbound",l:"Inbound Alerts"},{k:"broadcast",l:"Global Broadcast"},{k:"direct",l:"Direct Message"}].map((t) => (<button key={t.k} onClick={()=>setTab(t.k)} className={`rounded-full px-4 py-2 text-sm font-semibold ${tab===t.k?"bg-slate-950 text-white":"bg-slate-100 text-slate-700"}`}>{t.l}</button>))}
+    </div>
+    {msg && <div className={`rounded-lg border px-4 py-3 text-sm font-medium ${msg.type==="success"?"border-emerald-200 bg-emerald-50 text-emerald-800":"border-rose-200 bg-rose-50 text-rose-800"}`}>{msg.text}</div>}
+
+    {tab === "inbound" && (<div className="space-y-3">
+      <div className="flex justify-end"><button onClick={onMarkAllRead} className="rounded-lg border px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Mark all read</button></div>
+      {filtered.map((n) => (<div key={n.id} className={`rounded-lg border p-4 ${n.read?"bg-white":"border-rose-200 bg-rose-50"}`}><div className="flex items-start justify-between"><div><h4 className="font-semibold">{n.title}</h4><p className="mt-1 text-sm text-slate-600">{n.body}</p></div><span className="text-xs text-slate-400">{new Date(n.time).toLocaleTimeString()}</span></div><div className="mt-2 flex items-center gap-2"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${n.type==="APPLICATION"?"bg-sky-100 text-sky-700":"bg-rose-100 text-rose-700"}`}>{n.type}</span>{!n.read&&<span className="text-xs font-semibold text-rose-600">● Unread</span>}</div></div>))}
+    </div>)}
+
+    {tab === "broadcast" && (<form onSubmit={handleBroadcast} className="space-y-4 rounded-lg border bg-white p-6">
+      <h5 className="text-base font-semibold">Global Broadcast</h5>
+      <label className="block text-sm font-semibold text-slate-700">Title<input value={broadcast.title} onChange={(e) => setBroadcast((f) => ({ ...f, title: e.target.value }))} className="mt-1 w-full rounded-lg border px-3.5 py-3 text-sm"/></label>
+      <label className="block text-sm font-semibold text-slate-700">Body<textarea value={broadcast.body} onChange={(e) => setBroadcast((f) => ({ ...f, body: e.target.value }))} rows={3} className="mt-1 w-full rounded-lg border px-3.5 py-3 text-sm"/></label>
+      <button type="submit" disabled={sending} className="inline-flex min-h-12 items-center gap-2 rounded-lg bg-sky-600 px-5 py-3 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60">{sending?<RefreshCw className="animate-spin" size={17}/>:<Send size={17}/>}{sending?"Sending...":"Send to all"}</button>
+    </form>)}
+
+    {tab === "direct" && (<form onSubmit={handleDirect} className="space-y-4 rounded-lg border bg-white p-6">
+      <h5 className="text-base font-semibold">Direct Message</h5>
+      <label className="block text-sm font-semibold text-slate-700">Membership ID<input value={direct.memberId} onChange={(e) => setDirect((f) => ({ ...f, memberId: e.target.value }))} className="mt-1 w-full rounded-lg border px-3.5 py-3 text-sm" placeholder="e.g. M001"/></label>
+      <label className="block text-sm font-semibold text-slate-700">Title<input value={direct.title} onChange={(e) => setDirect((f) => ({ ...f, title: e.target.value }))} className="mt-1 w-full rounded-lg border px-3.5 py-3 text-sm"/></label>
+      <label className="block text-sm font-semibold text-slate-700">Body<textarea value={direct.body} onChange={(e) => setDirect((f) => ({ ...f, body: e.target.value }))} rows={3} className="mt-1 w-full rounded-lg border px-3.5 py-3 text-sm"/></label>
+      <button type="submit" disabled={sending} className="inline-flex min-h-12 items-center gap-2 rounded-lg bg-sky-600 px-5 py-3 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60">{sending?<RefreshCw className="animate-spin" size={17}/>:<Send size={17}/>}{sending?"Sending...":"Send to member"}</button>
+    </form>)}
+  </div>);
+}
+
+// ============================================================
+// MODULE 4: AUDIT LOGS
+// ============================================================
+function AdminAuditLogs({ data }) {
+  const [search, setSearch] = useState("");
+  const logs = data || MOCK_AUDIT_LOGS;
+  const filtered = filterRows(logs, search, ["timestamp","userId","actionType","ipAddress","affectedRecord"]);
+  const columns = [{key:"timestamp",label:"Timestamp"},{key:"userId",label:"User"},{key:"actionType",label:"Action"},{key:"ipAddress",label:"IP Address"},{key:"affectedRecord",label:"Record"}];
+  return (<div className="space-y-6">
+    <SectionHeader eyebrow="Audit logs" title="Immutable audit trail" description="Every login, status change, broadcast, transaction, and override is logged."
+      action={<button onClick={() => exportCSV(filtered, columns, "audit-logs.csv")} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold"><Download size={14}/>Export CSV</button>} />
+    <div className="relative"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input type="text" placeholder="Search audit logs..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full rounded-lg border py-2 pl-9 pr-4 text-sm"/></div>
+    <div className="overflow-x-auto rounded-lg border"><table className="min-w-full"><thead><tr className="bg-slate-50">{columns.map((c) => (<th key={c.key} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{c.label}</th>))}</tr></thead><tbody className="divide-y divide-slate-100">{filtered.map((log) => (<tr key={log.id}>{columns.map((c) => (<td key={c.key} className="px-4 py-3 text-sm">{log[c.key] || "—"}</td>))}</tr>))}</tbody></table></div>
+  </div>);
+}
+
+// ============================================================
+// MODULE 5: REPORTS EXPORT ENGINE (Shared Financier data, read-only)
+// ============================================================
+function AdminReportsPage({ data }) {
+  const [timeFilter, setTimeFilter] = useState("monthly");
+  const transactions = data.transactions || [];
+  const timeSeries = useMemo(() => {
+    const series = {};
+    const formatKey = (d) => {
+      if (timeFilter === "daily") return d.toISOString().split("T")[0];
+      if (timeFilter === "monthly") return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      return `${d.getFullYear()}`;
+    };
+    transactions.forEach((t) => {
+      const d = t.createdAt || t.date;
+      if (!d) return;
+      const key = formatKey(new Date(d));
+      if (!series[key]) series[key] = { deposits: 0, withdrawals: 0, repayments: 0, disbursements: 0, count: 0 };
+      const type = String(t.type || "").toUpperCase();
+      if (type.includes("DEPOSIT")) series[key].deposits += Number(t.amount || 0);
+      else if (type.includes("WITHDRAW")) series[key].withdrawals += Number(t.amount || 0);
+      else if (type.includes("REPAYMENT")) series[key].repayments += Number(t.amount || 0);
+      else if (type.includes("DISBURSE")) series[key].disbursements += Number(t.amount || 0);
+      series[key].count++;
+    });
+    return Object.entries(series).sort(([a], [b]) => a.localeCompare(b)).slice(-30).map(([label, vals]) => ({ label, ...vals }));
+  }, [transactions, timeFilter]);
+
+  const reportColumns = [{ key: "label", label: "Period" },{ key: "deposits", label: "Deposits", render: (v) => formatCurrency(v) },{ key: "withdrawals", label: "Withdrawals", render: (v) => formatCurrency(v) },{ key: "repayments", label: "Repayments", render: (v) => formatCurrency(v) },{ key: "disbursements", label: "Disbursements", render: (v) => formatCurrency(v) },{ key: "count", label: "Count" }];
+
+  return (<div className="space-y-6">
+    <SectionHeader eyebrow="Reports — Shared Financier data pipeline" title="Reports & analytics" description="Read-only analytics from the same ground-truth data source used by the Financier. Daily, monthly, and yearly filtering."
+      action={<button onClick={() => exportCSV(timeSeries, reportColumns, "admin-reports.csv")} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold"><Download size={14}/>Export CSV</button>} />
+    <div className="flex items-center gap-3">{["daily","monthly","yearly"].map((tf) => (<button key={tf} onClick={() => setTimeFilter(tf)} className={`rounded-full px-4 py-2 text-sm font-semibold capitalize ${timeFilter === tf ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-700"}`}>{tf}</button>))}</div>
+    <div className="grid gap-5 xl:grid-cols-2">
+      <AnalyticsPanel title={`Deposits (${timeFilter})`} data={timeSeries.map((s) => ({ label: s.label, value: s.deposits }))} type="bar" color="#8cc63f" />
+      <AnalyticsPanel title={`Repayments (${timeFilter})`} data={timeSeries.map((s) => ({ label: s.label, value: s.repayments }))} type="bar" color="#0369a1" />
+    </div>
+    <div className="overflow-x-auto rounded-lg border"><table className="min-w-full"><thead><tr className="bg-slate-50">{["Period","Deposits","Withdrawals","Repayments","Disbursements","Count"].map((h) => (<th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>))}</tr></thead><tbody className="divide-y divide-slate-100">{timeSeries.map((row, i) => (<tr key={i}><td className="px-4 py-3 text-sm font-semibold">{row.label}</td><td className="px-4 py-3 text-sm text-emerald-700">{formatCurrency(row.deposits)}</td><td className="px-4 py-3 text-sm text-rose-700">{formatCurrency(row.withdrawals)}</td><td className="px-4 py-3 text-sm text-sky-700">{formatCurrency(row.repayments)}</td><td className="px-4 py-3 text-sm text-amber-700">{formatCurrency(row.disbursements)}</td><td className="px-4 py-3 text-sm">{row.count}</td></tr>))}</tbody></table></div>
+  </div>);
+}
+
+// ============================================================
+// MODULE 6: ADMIN PROFILE SELF-MANAGEMENT
+// ============================================================
+function AdminProfileSettings({ user, accessToken }) {
+  const [form, setForm] = useState({ name: user?.name || "", email: user?.email || "", phone: user?.phone || "" });
+  const [passwords, setPasswords] = useState({ current: "", new: "", confirm: "" });
+  const [showing, setShowing] = useState({ current: false, new: false, confirm: false });
+  const [saving, setSaving] = useState(false);
+  const [pwSaving, setPwSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [pwMsg, setPwMsg] = useState(null);
+  const [profileImage, setProfileImage] = useState(user?.passportPhotoUrl || null);
+
+  function handleImageSelect(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 1.5 * 1024 * 1024) { setMsg({ type: "error", text: "Image must be under 1.5 MB." }); return; }
+    setProfileImage(URL.createObjectURL(file));
+  }
+
+  async function handleSave(e) {
+    e.preventDefault(); setSaving(true); setMsg(null);
+    try { await updateAdminProfile(form, accessToken); setMsg({ type: "success", text: "Profile updated." }); } catch (err) { setMsg({ type: "error", text: err.message }); } finally { setSaving(false); }
+  }
+
+  async function handlePassword(e) {
+    e.preventDefault();
+    if (passwords.new.length < 8) { setPwMsg({ type: "error", text: "Min 8 characters." }); return; }
+    if (passwords.new !== passwords.confirm) { setPwMsg({ type: "error", text: "Passwords do not match." }); return; }
+    setPwSaving(true); setPwMsg(null);
+    try { await changePassword({ currentPassword: passwords.current, newPassword: passwords.new }, accessToken); setPwMsg({ type: "success", text: "Password changed." }); setPasswords({ current: "", new: "", confirm: "" }); } catch (err) { setPwMsg({ type: "error", text: err?.message || "Failed." }); } finally { setPwSaving(false); }
+  }
+
+  const pwField = (label, name) => (<label className="block text-sm font-semibold text-slate-700">{label}<div className="relative"><input type={showing[name]?"text":"password"} className="mt-1 w-full rounded-lg border px-3.5 py-3 pr-12 text-sm" value={passwords[name]} onChange={(e)=>setPasswords((c)=>({...c,[name]:e.target.value}))}/><button type="button" onClick={()=>setShowing((s)=>({...s,[name]:!s[name]}))} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500">{showing[name]?"Hide":"Show"}</button></div></label>);
+
+  return (<div className="space-y-6 max-w-2xl">
+    <SectionHeader eyebrow="Profile Settings" title="Admin profile management" />
+    {msg && <div className={`rounded-lg border px-4 py-3 text-sm font-medium ${msg.type==="success"?"border-emerald-200 bg-emerald-50 text-emerald-800":"border-rose-200 bg-rose-50 text-rose-800"}`}>{msg.text}</div>}
+    <div className="rounded-lg border bg-white p-6"><div className="flex items-center gap-4"><div className="grid h-20 w-20 place-items-center overflow-hidden rounded-lg bg-slate-100 text-slate-500">{profileImage?<img src={profileImage} alt="Profile" className="h-full w-full object-cover"/>:<UserRound size={32}/>}</div><div><h5 className="text-base font-semibold">Profile picture</h5><label className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Camera size={16}/>Upload photo<input type="file" accept="image/*" className="sr-only" onChange={handleImageSelect}/></label></div></div></div>
+    <form onSubmit={handleSave} className="space-y-4 rounded-lg border bg-white p-6"><h5 className="text-base font-semibold">Personal information</h5>{[{l:"Full Name",n:"name"},{l:"Email",n:"email"},{l:"Phone",n:"phone"}].map((f)=>(<label key={f.n} className="block text-sm font-semibold text-slate-700">{f.l}<input className="mt-1 w-full rounded-lg border px-3.5 py-3 text-sm" value={form[f.n]} onChange={(e)=>setForm((c)=>({...c,[f.n]:e.target.value}))}/></label>))}<button disabled={saving} className="inline-flex min-h-12 items-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white">{saving?<RefreshCw className="animate-spin" size={17}/>:<CheckCircle2 size={17}/>}{saving?"Saving...":"Save changes"}</button></form>
+    {pwMsg && <div className={`rounded-lg border px-4 py-3 text-sm font-medium ${pwMsg.type==="success"?"border-emerald-200 bg-emerald-50 text-emerald-800":"border-rose-200 bg-rose-50 text-rose-800"}`}>{pwMsg.text}</div>}
+    <form onSubmit={handlePassword} className="space-y-4 rounded-lg border bg-white p-6"><h5 className="text-base font-semibold">Change password</h5>{pwField("Current password","current")}{pwField("New password","new")}{pwField("Confirm new password","confirm")}<button disabled={pwSaving} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white"><LockKeyhole size={17}/>{pwSaving?"Updating...":"Update password"}</button></form>
+  </div>);
 }

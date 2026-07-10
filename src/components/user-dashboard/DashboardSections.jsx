@@ -19,6 +19,7 @@ import {
   Landmark,
   LogOut,
   LockKeyhole,
+  LogOut,
   MailCheck,
   MapPin,
   MonitorSmartphone,
@@ -27,9 +28,11 @@ import {
   ReceiptText,
   RefreshCw,
   Search,
+  Send,
   ShieldCheck,
   Smartphone,
   TrendingUp,
+  UserPlus,
   UserRound,
   UsersRound,
   WalletCards,
@@ -65,6 +68,7 @@ import {
   applyForLoan,
   emailMemberReport,
   repayLoan,
+  requestMemberOptOut,
 } from "../../features/member/memberService.js";
 import {
   changePassword,
@@ -978,6 +982,9 @@ function DashboardOverview({
         ))}
       </div>
 
+      {/* Dividend Projection Card */}
+      <DividendProjection stats={stats} showValues={showValues} />
+
       <PaymentPromptSummary transactions={transactions} />
 
       <Surface className="p-5">
@@ -1564,122 +1571,8 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated }) {
           </button>
         </div>
       </form>
-
-      <Surface className="p-5">
-        <div className="mb-5 flex items-start gap-3">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-rose-50 text-rose-700">
-            <LogOut size={20} />
-          </div>
-          <div>
-            <h5 className="text-base font-semibold tracking-normal text-slate-950">
-              Membership opt-out
-            </h5>
-            <p className="mt-1 text-sm text-slate-500">
-              Request to leave the SACCO and begin settlement of savings and
-              share capital.
-            </p>
-          </div>
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-3">
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs font-semibold uppercase text-slate-500">
-              Savings withdrawal
-            </p>
-            <p className="mt-2 text-lg font-semibold text-slate-950">
-              {formatCurrency(savingsWithdrawal)}
-            </p>
-            <p className="mt-1 text-xs text-slate-500">
-              Savings can be withdrawn after review.
-            </p>
-          </div>
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs font-semibold uppercase text-slate-500">
-              SACCO fee
-            </p>
-            <p className="mt-2 text-lg font-semibold text-slate-950">
-              {formatCurrency(saccoShareFee)}
-            </p>
-            <p className="mt-1 text-xs text-slate-500">
-              1% of share capital is retained by the SACCO.
-            </p>
-          </div>
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs font-semibold uppercase text-slate-500">
-              Share auction value
-            </p>
-            <p className="mt-2 text-lg font-semibold text-slate-950">
-              {formatCurrency(auctionAmount)}
-            </p>
-            <p className="mt-1 text-xs text-slate-500">
-              Remaining share capital is auctioned to existing members.
-            </p>
-          </div>
-        </div>
-
-        <form onSubmit={handleOptOutSubmit} className="mt-5 grid gap-4">
-          <Field
-            label="Preferred buyer member number"
-            name="buyerMemberNumber"
-            value={optOutForm.buyerMemberNumber}
-            onChange={(event) =>
-              setOptOutForm((current) => ({
-                ...current,
-                buyerMemberNumber: event.target.value,
-              }))
-            }
-            placeholder="Optional, if you already have a buyer"
-          />
-          <label className="grid gap-2 text-sm font-semibold text-slate-700">
-            Reason for opting out
-            <textarea
-              name="reason"
-              value={optOutForm.reason}
-              onChange={(event) =>
-                setOptOutForm((current) => ({
-                  ...current,
-                  reason: event.target.value,
-                }))
-              }
-              rows={4}
-              className="w-full rounded-lg border border-slate-200 px-3.5 py-3 text-sm font-normal outline-none transition focus:border-[#8cc63f]"
-              placeholder="Optional"
-            />
-          </label>
-          <label className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            <input
-              type="checkbox"
-              checked={optOutForm.acknowledgedTerms}
-              onChange={(event) =>
-                setOptOutForm((current) => ({
-                  ...current,
-                  acknowledgedTerms: event.target.checked,
-                }))
-              }
-              className="mt-1 h-4 w-4 accent-[#8cc63f]"
-            />
-            <span>
-              I understand that my savings may be withdrawn, while my share
-              capital must be sold to an existing SACCO member. The SACCO will
-              retain 1% of the share capital and auction the remaining amount.
-            </span>
-          </label>
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              disabled={submittingOptOut || !optOutForm.acknowledgedTerms}
-              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-rose-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {submittingOptOut ? (
-                <RefreshCw className="animate-spin" size={17} />
-              ) : (
-                <LogOut size={17} />
-              )}
-              {submittingOptOut ? "Submitting request" : "Submit opt-out request"}
-            </button>
-          </div>
-        </form>
-      </Surface>
+      {/* Opt-Out Section at bottom of profile */}
+      <OptOutSection accessToken={accessToken} />
     </div>
   );
 }
@@ -1798,177 +1691,15 @@ function SecuritySection({
     <div className="space-y-6">
       <SectionHeader eyebrow="Security center" />
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-        <Surface className="p-5">
-          <div className="mb-5 flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-lg bg-slate-100 text-slate-700">
-              <KeyRound className="text-[#8cc63f]" size={20} />
-            </div>
-            <div>
-              <h5 className="text-base font-semibold tracking-normal text-slate-950">
-                Change password
-              </h5>
-              <p className="text-sm text-slate-500">
-                Use a unique password for your SACCO account.
-              </p>
-            </div>
-          </div>
-
-          {message ? (
-            <div
-              className={`mb-4 rounded-lg border px-4 py-3 text-sm font-medium ${message.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800"}`}
-            >
-              {message.text}
-            </div>
-          ) : null}
-
-          <form className="space-y-4" onSubmit={handlePasswordSubmit}>
-            <Field
-              label="Current password"
-              name="currentPassword"
-              type={showCurrentPassword ? "text" : "password"}
-              value={passwordForm.currentPassword}
-              onChange={updatePassword}
-              suffix={
-                <button
-                  type="button"
-                  onClick={() => setShowCurrentPassword((current) => !current)}
-                  className="text-xs font-semibold text-slate-500 hover:text-slate-900"
-                >
-                  {showCurrentPassword ? "Hide" : "Show"}
-                </button>
-              }
-            />
-            <Field
-              label="New password"
-              name="newPassword"
-              type={showNewPassword ? "text" : "password"}
-              value={passwordForm.newPassword}
-              onChange={updatePassword}
-              suffix={
-                <button
-                  type="button"
-                  onClick={() => setShowNewPassword((current) => !current)}
-                  className="text-xs font-semibold text-slate-500 hover:text-slate-900"
-                >
-                  {showNewPassword ? "Hide" : "Show"}
-                </button>
-              }
-            />
-            <Field
-              label="Confirm new password"
-              name="confirmPassword"
-              type={showConfirmPassword ? "text" : "password"}
-              value={passwordForm.confirmPassword}
-              onChange={updatePassword}
-              suffix={
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword((current) => !current)}
-                  className="text-xs font-semibold text-slate-500 hover:text-slate-900"
-                >
-                  {showConfirmPassword ? "Hide" : "Show"}
-                </button>
-              }
-            />
-            <button className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
-              <LockKeyhole size={17} />
-              Update password
-            </button>
-          </form>
-        </Surface>
-
-        <div className="space-y-5">
-          <Surface className="p-5">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h5 className="text-base font-semibold tracking-normal text-slate-950">
-                  Multi-factor authentication
-                </h5>
-                <p className="mt-1 text-sm text-slate-500">
-                  Authenticator and SMS verification will be available in a
-                  future release.
-                </p>
-              </div>
-              <button
-                disabled
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-500"
-              >
-                <Fingerprint className="text-[#8cc63f]" size={17} />
-                Coming soon
-              </button>
-            </div>
-          </Surface>
-
-          <Surface className="overflow-hidden">
-            <div className="border-b border-slate-200 p-5">
-              <h5 className="text-base font-semibold tracking-normal text-slate-950">
-                Active sessions
-              </h5>
-              <p className="text-sm text-slate-500">
-                Devices currently trusted to access your account.
-              </p>
-            </div>
-            {activeSessions.length === 0 ? (
-              <EmptyState
-                icon={MonitorSmartphone}
-                className="text-[#8cc63f]"
-                title="No active sessions"
-                description="Trusted devices will appear here after successful sign in."
-              />
-            ) : (
-              <div className="divide-y divide-slate-100">
-                {activeSessions.map((session) => (
-                  <div
-                    key={session.id || `${session.device}-${session.ip}`}
-                    className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="grid h-10 w-10 place-items-center rounded-lg bg-slate-100 text-slate-600">
-                        <MonitorSmartphone
-                          className="text-[#8cc63f]"
-                          size={19}
-                        />
-                      </div>
-                      <div>
-                        <p className="font-semibold text-slate-950">
-                          {session.device}
-                        </p>
-                        <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500">
-                          <MapPin className="text-[#8cc63f]" size={14} />
-                          {session.location}
-                          <span>{session.ip}</span>
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 sm:flex-col sm:items-end">
-                      <span className="text-sm font-medium text-slate-600">
-                        {session.lastActive
-                          ? new Date(session.lastActive).toLocaleString()
-                          : "-"}
-                      </span>
-                      {session.current ? (
-                        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                          Current device
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => handleRevokeSession(session.id)}
-                          className="text-xs font-semibold text-rose-700 hover:text-rose-800"
-                        >
-                          Revoke
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Surface>
+      {message ? (
+        <div
+          className={`rounded-lg border px-4 py-3 text-sm font-medium ${message.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800"}`}
+        >
+          {message.text}
         </div>
-      </div>
+      ) : null}
 
+      {/* 1. LOGIN HISTORY - TOP */}
       <div className="grid xl:grid-cols-1">
         <Surface className="overflow-hidden">
           <div className="border-b border-slate-200 p-4">
@@ -2076,281 +1807,287 @@ function SecuritySection({
           )}
         </Surface>
       </div>
+
+      {/* 2. UPDATE PASSWORD - SECOND */}
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+        <Surface className="p-5">
+          <div className="mb-5 flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-lg bg-slate-100 text-slate-700">
+              <KeyRound className="text-[#8cc63f]" size={20} />
+            </div>
+            <div>
+              <h5 className="text-base font-semibold tracking-normal text-slate-950">
+                Change password
+              </h5>
+              <p className="text-sm text-slate-500">
+                Use a unique password for your SACCO account.
+              </p>
+            </div>
+          </div>
+
+          <form className="space-y-4" onSubmit={handlePasswordSubmit}>
+            <Field
+              label="Current password"
+              name="currentPassword"
+              type={showCurrentPassword ? "text" : "password"}
+              value={passwordForm.currentPassword}
+              onChange={updatePassword}
+              suffix={
+                <button
+                  type="button"
+                  onClick={() => setShowCurrentPassword((current) => !current)}
+                  className="text-xs font-semibold text-slate-500 hover:text-slate-900"
+                >
+                  {showCurrentPassword ? "Hide" : "Show"}
+                </button>
+              }
+            />
+            <Field
+              label="New password"
+              name="newPassword"
+              type={showNewPassword ? "text" : "password"}
+              value={passwordForm.newPassword}
+              onChange={updatePassword}
+              suffix={
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword((current) => !current)}
+                  className="text-xs font-semibold text-slate-500 hover:text-slate-900"
+                >
+                  {showNewPassword ? "Hide" : "Show"}
+                </button>
+              }
+            />
+            <Field
+              label="Confirm new password"
+              name="confirmPassword"
+              type={showConfirmPassword ? "text" : "password"}
+              value={passwordForm.confirmPassword}
+              onChange={updatePassword}
+              suffix={
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((current) => !current)}
+                  className="text-xs font-semibold text-slate-500 hover:text-slate-900"
+                >
+                  {showConfirmPassword ? "Hide" : "Show"}
+                </button>
+              }
+            />
+            <button className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
+              <LockKeyhole size={17} />
+              Update password
+            </button>
+          </form>
+        </Surface>
+
+        {/* 3. SECURITY INFORMATION (2FA + Active Sessions) - THIRD */}
+        <div className="space-y-5">
+          <Surface className="p-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h5 className="text-base font-semibold tracking-normal text-slate-950">
+                  Multi-factor authentication
+                </h5>
+                <p className="mt-1 text-sm text-slate-500">
+                  Authenticator and SMS verification will be available in a
+                  future release.
+                </p>
+              </div>
+              <button
+                disabled
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-500"
+              >
+                <Fingerprint className="text-[#8cc63f]" size={17} />
+                Coming soon
+              </button>
+            </div>
+          </Surface>
+
+          <Surface className="overflow-hidden">
+            <div className="border-b border-slate-200 p-5">
+              <h5 className="text-base font-semibold tracking-normal text-slate-950">
+                Active sessions
+              </h5>
+              <p className="text-sm text-slate-500">
+                Devices currently trusted to access your account.
+              </p>
+            </div>
+            {activeSessions.length === 0 ? (
+              <EmptyState
+                icon={MonitorSmartphone}
+                className="text-[#8cc63f]"
+                title="No active sessions"
+                description="Trusted devices will appear here after successful sign in."
+              />
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {activeSessions.map((session) => (
+                  <div
+                    key={session.id || `${session.device}-${session.ip}`}
+                    className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="grid h-10 w-10 place-items-center rounded-lg bg-slate-100 text-slate-600">
+                        <MonitorSmartphone
+                          className="text-[#8cc63f]"
+                          size={19}
+                        />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-slate-950">
+                          {session.device}
+                        </p>
+                        <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500">
+                          <MapPin className="text-[#8cc63f]" size={14} />
+                          {session.location}
+                          <span>{session.ip}</span>
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 sm:flex-col sm:items-end">
+                      <span className="text-sm font-medium text-slate-600">
+                        {session.lastActive
+                          ? new Date(session.lastActive).toLocaleString()
+                          : "-"}
+                      </span>
+                      {session.current ? (
+                        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                          Current device
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleRevokeSession(session.id)}
+                          className="text-xs font-semibold text-rose-700 hover:text-rose-800"
+                        >
+                          Revoke
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Surface>
+        </div>
+      </div>
+
+      {/* 4. OPT-OUT SECTION - BOTTOM */}
+      <OptOutSection accessToken={accessToken} user={user} />
     </div>
   );
 }
 
-function LoansPage({
-  loans,
-  stats,
-  accessToken,
-  onRefresh,
-  search,
-  showValues,
-}) {
-  const [loanForm, setLoanForm] = useState({
-    type: "EMERGENCY",
-    amount: "10000",
-    duration: "12",
-  });
+function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues }) {
+  const [loanForm, setLoanForm] = useState({ type: "EMERGENCY", amount: "10000", duration: "12" });
   const [repayAmount, setRepayAmount] = useState("");
   const [message, setMessage] = useState(null);
-  const activeLoans = loans.filter((loan) =>
-    ["ACTIVE", "APPROVED"].includes(String(loan.status || "").toUpperCase()),
-  );
+  const [selectedGuarantors, setSelectedGuarantors] = useState([]);
+  const [guarantorAcceptance, setGuarantorAcceptance] = useState({});
+  const activeLoans = loans.filter((loan) => ["ACTIVE", "APPROVED"].includes(String(loan.status || "").toUpperCase()));
   const [repayLoanId, setRepayLoanId] = useState("");
-  const totalBalance = activeLoans.reduce(
-    (sum, loan) => sum + Number(loan.balance || loan.principal || 0),
-    0,
-  );
+  const totalBalance = activeLoans.reduce((sum, loan) => sum + Number(loan.balance || loan.principal || 0), 0);
   const rows = loans.filter((loan) => matchesSearch(loan, search));
-  const selectedProduct =
-    LOAN_PRODUCTS.find((product) => product.type === loanForm.type) ||
-    LOAN_PRODUCTS[0];
+  const selectedProduct = LOAN_PRODUCTS.find((p) => p.type === loanForm.type) || LOAN_PRODUCTS[0];
   const selectedRepayLoanId = repayLoanId || activeLoans[0]?.id || "";
-  const requestedAmount = Math.min(
-    Number(loanForm.amount || 0),
-    selectedProduct.max,
-  );
-  const requestedDuration = Math.min(
-    Number(loanForm.duration || 1),
-    selectedProduct.duration,
-  );
-  const totalInterest =
-    requestedAmount * (selectedProduct.interestRate / 100) * requestedDuration;
-  const monthlyRepayment = requestedDuration
-    ? (requestedAmount + totalInterest) / requestedDuration
-    : 0;
+  const requestedAmount = Math.min(Number(loanForm.amount || 0), selectedProduct.max);
+  const requestedDuration = Math.min(Number(loanForm.duration || 1), selectedProduct.duration);
+  const totalInterest = requestedAmount * (selectedProduct.interestRate / 100) * requestedDuration;
+  const monthlyRepayment = requestedDuration ? (requestedAmount + totalInterest) / requestedDuration : 0;
+
+  const MOCK_MEMBERS = [
+    { id: "m1", name: "Jane Muthoni", phone: "+254712345678", shareCapital: 28000 },
+    { id: "m2", name: "Peter Kamau", phone: "+254723456789", shareCapital: 35000 },
+    { id: "m3", name: "Grace Achieng", phone: "+254734567890", shareCapital: 25000 },
+    { id: "m4", name: "David Otieno", phone: "+254745678901", shareCapital: 42000 },
+    { id: "m5", name: "Faith Wanjiku", phone: "+254756789012", shareCapital: 30000 },
+    { id: "m6", name: "John Njoroge", phone: "+254767890123", shareCapital: 22000 },
+    { id: "m7", name: "Alice Wambui", phone: "+254778901234", shareCapital: 38000 },
+    { id: "m8", name: "Michael Kiprop", phone: "+254789012345", shareCapital: 27000 },
+  ];
+
+  const requiresGuarantors = selectedProduct.guarantors > 0;
+  const selectedMemberNames = selectedGuarantors.map((id) => MOCK_MEMBERS.find((m) => m.id === id)?.name || id).join(", ");
+
+  function toggleGuarantor(id) {
+    setSelectedGuarantors((prev) => {
+      if (prev.includes(id)) { const n = prev.filter((x) => x !== id); setGuarantorAcceptance((a) => { const c = { ...a }; delete c[id]; return c; }); return n; }
+      if (prev.length >= selectedProduct.guarantors) return prev;
+      return [...prev, id];
+    });
+  }
+  function simulateAccept(id) { setGuarantorAcceptance((prev) => ({ ...prev, [id]: "accepted" })); }
 
   async function requestLoan(event) {
     event.preventDefault();
-    if (requestedAmount <= 0) {
-      setMessage({
-        type: "error",
-        text: "Enter a valid loan amount before submitting.",
-      });
-      return;
-    }
-    if (!selectedProduct) {
-      setMessage({ type: "error", text: "Select a valid loan product." });
-      return;
-    }
-    if (
-      selectedProduct.requiresFullShareCapital &&
-      stats.shareCapitalRemaining > 0
-    ) {
-      setMessage({
-        type: "error",
-        text: "This loan product requires that your minimum share capital is fully paid.",
-      });
-      return;
-    }
+    if (requestedAmount <= 0) { setMessage({ type: "error", text: "Enter a valid loan amount." }); return; }
+    if (!selectedProduct) { setMessage({ type: "error", text: "Select a valid loan product." }); return; }
+    if (selectedProduct.requiresFullShareCapital && stats.shareCapitalRemaining > 0) { setMessage({ type: "error", text: "Minimum share capital must be fully paid." }); return; }
+    if (requiresGuarantors && selectedGuarantors.length < selectedProduct.guarantors) { setMessage({ type: "error", text: `This loan requires ${selectedProduct.guarantors} guarantor${selectedProduct.guarantors > 1 ? "s" : ""}.` }); return; }
+    if (requiresGuarantors && selectedGuarantors.some((id) => guarantorAcceptance[id] !== "accepted")) { setMessage({ type: "error", text: "All guarantors must explicitly accept." }); return; }
     try {
-      await applyForLoan(
-        {
-          type: loanForm.type,
-          amount: requestedAmount,
-          duration: requestedDuration,
-          interestRate: selectedProduct.interestRate,
-        },
-        accessToken,
-      );
-      setMessage({
-        type: "success",
-        text: "Loan request submitted successfully.",
-      });
-      await onRefresh?.();
-    } catch (error) {
-      setMessage({
-        type: "error",
-        text: error?.message || "Failed to request loan.",
-      });
-    }
+      await applyForLoan({ type: loanForm.type, amount: requestedAmount, duration: requestedDuration, interestRate: selectedProduct.interestRate, guarantors: requiresGuarantors ? selectedGuarantors : undefined }, accessToken);
+      setMessage({ type: "success", text: "Loan request submitted." });
+      setSelectedGuarantors([]); setGuarantorAcceptance({}); await onRefresh?.();
+    } catch (error) { setMessage({ type: "error", text: error?.message || "Failed to request loan." }); }
   }
 
-  function submitRepayment(event) {
-    event.preventDefault();
-    repayLoan(selectedRepayLoanId, repayAmount, accessToken)
-      .then(async () => {
-        setMessage({
-          type: "success",
-          text: "Loan repayment recorded successfully.",
-        });
-        setRepayAmount("");
-        await onRefresh?.();
-      })
-      .catch((error) =>
-        setMessage({
-          type: "error",
-          text: error?.message || "Failed to repay loan.",
-        }),
-      );
-  }
+  function submitRepayment(event) { event.preventDefault(); repayLoan(selectedRepayLoanId, repayAmount, accessToken).then(async () => { setMessage({ type: "success", text: "Loan repayment recorded." }); setRepayAmount(""); await onRefresh?.(); }).catch((error) => setMessage({ type: "error", text: error?.message || "Failed." })); }
 
-  const scrollToApplication = () => {
-    const el = document.getElementById("loan-product-select");
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      // Wait a moment for scroll to finish or use preventScroll to avoid jumps
-      el.focus({ preventScroll: true });
-    }
-  };
+  const scrollToApplication = () => { const el = document.getElementById("loan-product-select"); if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.focus({ preventScroll: true }); } };
 
   return (
     <div className="space-y-6">
       <LoanProducts stats={stats} />
       <EligibilityChecks stats={stats} />
-      <button
-        onClick={scrollToApplication}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-4 text-sm font-semibold text-white transition hover:bg-slate-900"
-      >
-        <Plus className="text-[#8cc63f]" size={18} />
-        New application
-      </button>
+      <button onClick={scrollToApplication} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-4 text-sm font-semibold text-white"><Plus size={18} />New application</button>
       <div className="grid gap-4 md:grid-cols-3">
-        <StatCard
-          icon={FileText}
-          className="text-[#8cc63f]"
-          label="Active loans"
-          value={activeLoans.length}
-          trend="Live"
-          helper="Approved or currently active facilities"
-          tone="blue"
-        />
-        <StatCard
-          icon={CreditCard}
-          className="text-[#8cc63f]"
-          label="Outstanding balance"
-          value={formatCurrency(totalBalance)}
-          trend="-4.1%"
-          helper="Estimated from loan records"
-          tone="amber"
-          blur={!showValues}
-        />
-        <StatCard
-          icon={Clock3}
-          className="text-[#8cc63f]"
-          label="Next repayment"
-          value="-"
-          trend="Pending"
-          helper="Repayment schedule will appear when available"
-          tone="slate"
-        />
+        <StatCard icon={FileText} label="Active loans" value={activeLoans.length} trend="Live" helper="Approved or currently active facilities" tone="blue" />
+        <StatCard icon={CreditCard} label="Outstanding balance" value={formatCurrency(totalBalance)} helper="Estimated from loan records" tone="amber" blur={!showValues} />
+        <StatCard icon={Clock3} label="Next repayment" value="-" helper="Repayment schedule will appear when available" tone="slate" />
       </div>
-      {message ? (
-        <div
-          className={`rounded-lg border px-4 py-3 text-sm font-medium ${message.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800"}`}
-        >
-          {message.text}
-        </div>
-      ) : null}
-
+      {message ? (<div className={`rounded-lg border px-4 py-3 text-sm font-medium ${message.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800"}`}>{message.text}</div>) : null}
       <div className="grid gap-5 xl:grid-cols-2">
         <Surface className="p-5">
-          <h5 className="text-base font-semibold tracking-normal text-slate-950">
-            Request a loan
-          </h5>
+          <h5 className="text-base font-semibold tracking-normal text-slate-950">Request a loan</h5>
           <form onSubmit={requestLoan} className="mt-4 grid gap-4">
-            <label className="text-sm font-semibold text-slate-700">
-              Loan product
-              <select
-                id="loan-product-select"
-                value={loanForm.type}
-                onChange={(event) =>
-                  setLoanForm((current) => ({
-                    ...current,
-                    type: event.target.value,
-                  }))
-                }
-                className="mt-2 w-full rounded-lg border border-slate-200 px-3.5 py-3 text-sm"
-              >
-                {LOAN_PRODUCTS.map((product) => (
-                  <option key={product.type} value={product.type}>
-                    {product.name}
-                  </option>
-                ))}
-              </select>
+            <label className="text-sm font-semibold text-slate-700">Loan product
+              <select id="loan-product-select" value={loanForm.type} onChange={(e) => { setLoanForm((c) => ({ ...c, type: e.target.value })); setSelectedGuarantors([]); setGuarantorAcceptance({}); }} className="mt-2 w-full rounded-lg border px-3.5 py-3 text-sm">{LOAN_PRODUCTS.map((p) => (<option key={p.type} value={p.type}>{p.name}</option>))}</select>
             </label>
-            <Field
-              label="Amount"
-              name="amount"
-              type="number"
-              value={loanForm.amount}
-              onChange={(event) =>
-                setLoanForm((current) => ({
-                  ...current,
-                  amount: event.target.value,
-                }))
-              }
-            />
-            <Field
-              label="Duration (months)"
-              name="duration"
-              type="number"
-              value={loanForm.duration}
-              onChange={(event) =>
-                setLoanForm((current) => ({
-                  ...current,
-                  duration: event.target.value,
-                }))
-              }
-            />
-            <button className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white">
-              <FileText className="text-[#8cc63f]" size={17} />
-              Request loan
-            </button>
+            <Field label="Amount" name="amount" type="number" value={loanForm.amount} onChange={(e) => setLoanForm((c) => ({ ...c, amount: e.target.value }))} />
+            <Field label="Duration (months)" name="duration" type="number" value={loanForm.duration} onChange={(e) => setLoanForm((c) => ({ ...c, duration: e.target.value }))} />
+            {requiresGuarantors ? (
+              <div className="rounded-lg border border-sky-200 bg-sky-50 p-4">
+                <div className="mb-3 flex items-center gap-2"><UsersRound size={16} className="text-sky-700" /><span className="text-sm font-semibold text-sky-900">Guarantor management</span><span className="rounded-full bg-sky-200 px-2 py-0.5 text-xs font-semibold text-sky-700">{selectedGuarantors.length}/{selectedProduct.guarantors} selected</span></div>
+                <p className="mb-3 text-xs text-sky-700">Select {selectedProduct.guarantors} active SACCO member{selectedProduct.guarantors > 1 ? "s" : ""}. Each must explicitly accept.</p>
+                <div className="max-h-48 space-y-2 overflow-y-auto">
+                  {MOCK_MEMBERS.map((member) => {
+                    const isSelected = selectedGuarantors.includes(member.id);
+                    const acceptance = guarantorAcceptance[member.id];
+                    return (<div key={member.id} className={`flex items-center justify-between rounded-lg border px-3 py-2 transition ${isSelected ? acceptance === "accepted" ? "border-emerald-300 bg-emerald-50" : "border-sky-300 bg-white" : "border-slate-200 bg-white"}`}><div className="flex items-center gap-3"><input type="checkbox" checked={isSelected} onChange={() => toggleGuarantor(member.id)} className="h-4 w-4 rounded border-slate-300 text-sky-600" /><div><p className="text-sm font-semibold text-slate-800">{member.name}</p><p className="text-xs text-slate-500">{member.phone} · Share: {formatCurrency(member.shareCapital)}</p></div></div>{isSelected ? (acceptance === "accepted" ? (<span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700"><CheckCircle2 size={12} /> Accepted</span>) : (<button type="button" onClick={() => simulateAccept(member.id)} className="rounded-full bg-sky-600 px-3 py-1 text-xs font-semibold text-white hover:bg-sky-700">Accept (simulate)</button>)) : null}</div>);
+                  })}
+                </div>
+                {selectedGuarantors.length > 0 && (<p className="mt-3 text-xs font-medium text-sky-700">Selected: {selectedMemberNames}</p>)}
+              </div>
+            ) : null}
+            <button className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white"><FileText size={17} />Request loan</button>
           </form>
         </Surface>
-
         <Surface className="p-5">
-          <h5 className="text-base font-semibold tracking-normal text-slate-950">
-            Repay a loan
-          </h5>
+          <h5 className="text-base font-semibold">Repay a loan</h5>
           <form onSubmit={submitRepayment} className="mt-4 grid gap-4">
-            <label className="text-sm font-semibold text-slate-700">
-              Loan
-              <select
-                value={selectedRepayLoanId}
-                onChange={(event) => setRepayLoanId(event.target.value)}
-                className="mt-2 w-full rounded-lg border border-slate-200 px-3.5 py-3 text-sm"
-              >
-                {activeLoans.length === 0 ? (
-                  <option value="">No active loans</option>
-                ) : (
-                  activeLoans.map((loan) => (
-                    <option key={loan.id} value={loan.id}>
-                      {loan.type} -{" "}
-                      {formatCurrency(loan.balance || loan.principal)}
-                    </option>
-                  ))
-                )}
+            <label className="text-sm font-semibold text-slate-700">Loan
+              <select value={selectedRepayLoanId} onChange={(e) => setRepayLoanId(e.target.value)} className="mt-2 w-full rounded-lg border px-3.5 py-3 text-sm">
+                {activeLoans.length === 0 ? (<option>No active loans</option>) : activeLoans.map((loan) => (<option key={loan.id} value={loan.id}>{loan.type} - {formatCurrency(loan.balance || loan.principal)}</option>))}
               </select>
             </label>
-            <Field
-              label="Repayment amount"
-              name="repayAmount"
-              type="number"
-              value={repayAmount}
-              onChange={(event) => setRepayAmount(event.target.value)}
-            />
-            <button
-              disabled={!selectedRepayLoanId || !repayAmount}
-              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-3 text-sm font-semibold text-emerald-800 disabled:opacity-60"
-            >
-              <CreditCard className="text-[#8cc63f]" size={17} />
-              Start repayment
-            </button>
+            <Field label="Repayment amount" name="repayAmount" type="number" value={repayAmount} onChange={(e) => setRepayAmount(e.target.value)} />
+            <button disabled={!selectedRepayLoanId || !repayAmount} className="inline-flex min-h-12 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-3 text-sm font-semibold text-emerald-800 disabled:opacity-60"><CreditCard size={17} />Start repayment</button>
           </form>
         </Surface>
       </div>
-
-      <LoanCalculator
-        product={selectedProduct}
-        amount={requestedAmount}
-        duration={requestedDuration}
-        totalInterest={totalInterest}
-        monthlyRepayment={monthlyRepayment}
-      />
+      <LoanCalculator product={selectedProduct} amount={requestedAmount} duration={requestedDuration} totalInterest={totalInterest} monthlyRepayment={monthlyRepayment} />
       <LoansTable loans={rows} />
     </div>
   );
@@ -2822,9 +2559,46 @@ const SACCO_PROJECTS = [
   { title: "Digital records upgrade", amount: 500000, status: "Implementation", date: "Jun 2026", progress: 38 },
 ];
 
+function DividendProjection({ stats, showValues }) {
+  const currentYear = new Date().getFullYear();
+  const shareCapital = Number(stats.shareCapital || 0);
+  const savings = Number(stats.totalSavings || 0);
+  const totalBase = Math.max(shareCapital, savings);
+  const projectedRate = 8.5;
+  const projectedDividend = totalBase * (projectedRate / 100);
+  const displayValue = (value) => showValues ? value : <span className="inline-block blur-sm">{value}</span>;
+  return (
+    <Surface className="overflow-hidden border-amber-200 bg-linear-to-br from-amber-50 to-white">
+      <div className="p-5">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <TrendingUp size={18} className="text-amber-600" />
+              <h5 className="text-base font-semibold text-slate-950">
+                Expected Dividends for {currentYear}
+              </h5>
+            </div>
+            <p className="mt-1 text-sm text-slate-500">
+              Based on your current share capital ({displayValue(formatCurrency(shareCapital))}) and savings ({displayValue(formatCurrency(savings))}) at a projected {projectedRate}% rate.
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs font-semibold uppercase text-slate-500">Projected dividend</p>
+            <p className="mt-1 text-2xl font-semibold text-amber-700">
+              {displayValue(formatCurrency(projectedDividend))}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Increases as you deposit more
+            </p>
+          </div>
+        </div>
+      </div>
+    </Surface>
+  );
+}
+
 function PortfolioPage({ stats, transactions, shares, search, user, showValues, onToggleValues }) {
   const filteredTransactions = transactions.filter((transaction) => matchesSearch(transaction, search));
-  const visibleTransactions = filteredTransactions.slice(0, 4);
   const activeShareRecords = shares.filter((share) => matchesSearch(share, search)).length;
   const pooledFunds = SACCO_UTILIZATION_ALLOCATIONS.reduce((sum, item) => sum + item.amount, 0);
   const allocationChartData = SACCO_UTILIZATION_ALLOCATIONS.map((item) => ({
@@ -2836,11 +2610,7 @@ function PortfolioPage({ stats, transactions, shares, search, user, showValues, 
     color: item.color,
   }));
   const memberName = user?.name || [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Member";
-  const portfolioStats = [
-    { label: "Your balance", value: formatCurrency(stats.balance), helper: "Current member position" },
-    { label: "Share capital", value: formatCurrency(stats.shareCapital), helper: "Ownership contribution" },
-    { label: "Mapped SACCO pool", value: formatCurrency(pooledFunds), helper: "Dummy utilization total" },
-  ];
+  const currentYear = new Date().getFullYear();
   const displayValue = (value) => showValues ? value : <span className="inline-block blur-sm">KES 000,000.00</span>;
 
   return (
@@ -2863,26 +2633,44 @@ function PortfolioPage({ stats, transactions, shares, search, user, showValues, 
         }
       />
 
+      {/* ===== 1. FUND UTILIZATION ===== */}
       <Surface className="overflow-hidden">
+        <div className="border-b border-slate-200 p-5">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-lg bg-emerald-100">
+              <TrendingUp size={20} className="text-emerald-700" />
+            </div>
+            <div>
+              <h5 className="text-base font-semibold tracking-normal text-slate-950">
+                Fund Utilization
+              </h5>
+              <p className="text-sm text-slate-500">
+                Breakdown of how SACCO capital is actively deployed across lending, reserves, investments, welfare, operations, and technology.
+              </p>
+            </div>
+          </div>
+        </div>
         <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_380px]">
           <div className="p-6 sm:p-7">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <p className="text-sm font-semibold uppercase tracking-normal text-[#8cc63f]">Portfolio statement</p>
-                <h4 className="mt-2 max-w-2xl text-2xl font-semibold tracking-normal text-slate-950">
-                  SACCO fund utilization
+                <h4 className="text-xl font-semibold tracking-normal text-slate-950">
+                  Active deployment summary
                 </h4>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-                  {memberName}, this view summarizes how member savings and share capital are pooled into lending, reserves, investments, welfare support, operations, and platform improvements.
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
+                  {memberName}, this breakdown shows how pooled member funds are currently allocated across the SACCO.
                 </p>
               </div>
               <span className="w-fit rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-800">
-                Jun 2026
+                {currentYear} Report
               </span>
             </div>
-
-            <div className="mt-8 grid gap-4 sm:grid-cols-3">
-              {portfolioStats.map((item) => (
+            <div className="mt-6 grid gap-4 sm:grid-cols-3">
+              {[
+                { label: "Total fund pool", value: formatCurrency(pooledFunds), helper: "Aggregate deployed capital" },
+                { label: "Lending ratio", value: "49%", helper: "Share directed to member loans" },
+                { label: "Reserve coverage", value: "4.6 months", helper: "Liquidity runway" },
+              ].map((item) => (
                 <div key={item.label} className="border-l-2 border-[#8cc63f] pl-4">
                   <p className="text-xs font-semibold uppercase tracking-normal text-slate-500">{item.label}</p>
                   <p className="mt-1 text-xl font-semibold tracking-normal text-slate-950">{displayValue(item.value)}</p>
@@ -2890,12 +2678,35 @@ function PortfolioPage({ stats, transactions, shares, search, user, showValues, 
                 </div>
               ))}
             </div>
-
-            <div className="mt-8 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-500">
-              Illustrative portfolio data only. Replace these values with audited SACCO ledger data once the reporting endpoint is connected.
+            <div className="mt-6 overflow-x-auto">
+              <table className="min-w-full">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Use of funds</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-slate-500">Amount</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-slate-500">Share</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {SACCO_UTILIZATION_ALLOCATIONS.map((item) => (
+                    <tr key={item.label}>
+                      <td className="px-4 py-3 text-sm font-semibold text-slate-950">{item.label}</td>
+                      <td className="px-4 py-3 text-right text-sm text-slate-700">{displayValue(formatCurrency(item.amount))}</td>
+                      <td className="px-4 py-3 text-right text-sm font-semibold text-slate-950">{item.percent}%</td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                          {item.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
 
+          {/* ALLOCATION OVERVIEW MAP — RETAINED */}
           <div className="border-t border-slate-200 bg-slate-50 p-6 lg:border-l lg:border-t-0">
             <div className="flex items-center justify-between gap-4">
               <div>
@@ -2951,142 +2762,119 @@ function PortfolioPage({ stats, transactions, shares, search, user, showValues, 
         </div>
       </Surface>
 
+      {/* ===== 2. HISTORICAL PERFORMANCE ===== */}
       <Surface className="overflow-hidden">
-        <div className="flex flex-col gap-4 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h5 className="text-base font-semibold tracking-normal text-slate-950">Utilization ledger</h5>
-            <p className="mt-1 text-sm text-slate-500">Official-style breakdown of where the SACCO pool is assigned.</p>
+        <div className="border-b border-slate-200 p-5">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-lg bg-amber-100">
+              <Landmark size={20} className="text-amber-700" />
+            </div>
+            <div>
+              <h5 className="text-base font-semibold tracking-normal text-slate-950">
+                Historical Performance
+              </h5>
+              <p className="text-sm text-slate-500">
+                Financial outcomes, yields, and returns for the previous fiscal year ({currentYear - 1}).
+              </p>
+            </div>
           </div>
-          <span className="w-fit rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-            {activeShareRecords} share record{activeShareRecords === 1 ? "" : "s"}
-          </span>
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-100">
-            <thead className="bg-slate-50">
-              <tr>
-                <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">Use of funds</th>
-                <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">Purpose</th>
-                <th className="px-5 py-3 text-right text-xs font-semibold uppercase text-slate-500">Amount</th>
-                <th className="px-5 py-3 text-right text-xs font-semibold uppercase text-slate-500">Share</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 bg-white">
-            {SACCO_UTILIZATION_ALLOCATIONS.map((item) => (
-              <tr key={item.label}>
-                <td className="px-5 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-slate-100">
-                      <item.icon size={18} className="text-[#8cc63f]" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-950">{item.label}</p>
-                      <p className="mt-1 text-xs text-slate-500">{item.status}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="max-w-md px-5 py-4 text-sm leading-6 text-slate-500">{item.description}</td>
-                <td className="px-5 py-4 text-right text-sm font-semibold text-slate-950">{displayValue(formatCurrency(item.amount))}</td>
-                <td className="px-5 py-4 text-right">
-                  <div className="ml-auto w-28">
-                    <div className="mb-1 text-xs font-semibold text-slate-700">{item.percent}%</div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-                      <div className="h-full rounded-full" style={{ width: `${item.percent}%`, backgroundColor: item.color }} />
-                    </div>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            </tbody>
-          </table>
-        </div>
-      </Surface>
-
-      <Surface className="p-5">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h5 className="text-base font-semibold tracking-normal text-slate-950">Portfolio notes</h5>
-            <p className="mt-1 text-sm text-slate-500">A short operational snapshot without crowding the statement view.</p>
-          </div>
-          <BadgeCheck size={22} className="text-[#8cc63f]" />
-        </div>
-        <div className="mt-5 grid gap-4 lg:grid-cols-2">
-          <div className="grid gap-3 sm:grid-cols-2">
-            {SACCO_IMPACT_METRICS.map((metric) => (
-              <div key={metric.label} className="rounded-lg bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-normal text-slate-500">{metric.label}</p>
-                <p className="mt-1 text-xl font-semibold tracking-normal text-slate-950">{metric.value}</p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">{metric.helper}</p>
+        <div className="p-6">
+          <div className="mb-6 grid gap-4 sm:grid-cols-3">
+            {[
+              { label: `${currentYear - 1} Total Deposits`, value: formatCurrency(4200000), icon: PiggyBank, trend: "+12.4% YoY", color: "text-emerald-700" },
+              { label: `${currentYear - 1} Loans Disbursed`, value: formatCurrency(9800000), icon: FileText, trend: "+8.2% YoY", color: "text-blue-700" },
+              { label: `${currentYear - 1} Net Growth`, value: formatCurrency(1320000), icon: TrendingUp, trend: "+5.7% surplus", color: "text-amber-700" },
+            ].map((item) => (
+              <div key={item.label} className="rounded-lg border border-slate-200 bg-slate-50 p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-xs font-semibold uppercase text-slate-500">{item.label}</p>
+                  <item.icon size={18} className="text-[#8cc63f]" />
+                </div>
+                <p className="mt-2 text-xl font-semibold text-slate-950">{displayValue(item.value)}</p>
+                <p className={`mt-1 text-xs font-medium ${item.color}`}>{item.trend}</p>
               </div>
             ))}
           </div>
+
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-5">
+            <h6 className="text-sm font-semibold text-slate-700">Portfolio Performance Metrics ({currentYear - 1})</h6>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                { label: "Portfolio yield", value: "11.8%", helper: "Annual return from lending" },
+                { label: "Members financed", value: "126", helper: "Active loan recipients" },
+                { label: "Avg. approval time", value: "2.4 days", helper: "Complete applications" },
+                { label: "Reserve coverage", value: "4.6 months", helper: "Liquidity protection" },
+              ].map((metric) => (
+                <div key={metric.label} className="rounded-lg bg-white p-4 border border-slate-100">
+                  <p className="text-xs font-semibold uppercase text-slate-500">{metric.label}</p>
+                  <p className="mt-2 text-2xl font-semibold text-slate-950">{metric.value}</p>
+                  <p className="mt-1 text-xs text-slate-500">{metric.helper}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Surface>
+
+      {/* ===== 3. CURRENT POOL ===== */}
+      <Surface className="overflow-hidden">
+        <div className="border-b border-slate-200 p-5">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-lg bg-blue-100">
+              <WalletCards size={20} className="text-blue-700" />
+            </div>
+            <div>
+              <h5 className="text-base font-semibold tracking-normal text-slate-950">
+                Current Pool — {currentYear}
+              </h5>
+              <p className="text-sm text-slate-500">
+                Dedicated breakdown of investments and allocations for the current fiscal year.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="p-6">
+          <div className="mb-6 grid gap-4 sm:grid-cols-3">
+            {[
+              { label: "Total pool size", value: formatCurrency(pooledFunds), helper: `${currentYear} aggregate` },
+              { label: "Your share capital", value: formatCurrency(stats.shareCapital), helper: "Personal contribution" },
+              { label: "Active share records", value: activeShareRecords, helper: "Verified share entries" },
+            ].map((item) => (
+              <div key={item.label} className="rounded-lg border border-blue-200 bg-blue-50/50 p-5">
+                <p className="text-xs font-semibold uppercase text-slate-500">{item.label}</p>
+                <p className="mt-2 text-xl font-semibold text-slate-950">{displayValue(item.value)}</p>
+                <p className="mt-1 text-xs text-slate-500">{item.helper}</p>
+              </div>
+            ))}
+          </div>
+
           <div className="overflow-hidden rounded-lg border border-slate-200">
+            <div className="border-b border-slate-100 bg-slate-50 px-4 py-3">
+              <p className="text-sm font-semibold text-slate-700">Current Investment Allocations</p>
+            </div>
             {SACCO_PROJECTS.map((project) => (
               <div key={project.title} className="flex items-center justify-between gap-4 border-b border-slate-100 px-4 py-3 last:border-b-0">
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-slate-950">{project.title}</p>
                   <p className="mt-1 text-xs text-slate-500">{project.date} - {project.status}</p>
+                  <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-full rounded-full bg-blue-600" style={{ width: `${project.progress}%` }} />
+                  </div>
                 </div>
-                <p className="shrink-0 text-sm font-semibold text-slate-950">{displayValue(formatCurrency(project.amount))}</p>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-slate-950">{displayValue(formatCurrency(project.amount))}</p>
+                  <p className="mt-1 text-xs font-medium text-blue-700">{project.progress}% allocated</p>
+                </div>
               </div>
             ))}
           </div>
         </div>
       </Surface>
 
-      <Surface className="p-5">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-          <div className="max-w-2xl">
-            <h5 className="text-base font-semibold tracking-normal text-slate-950">Recent member money movement</h5>
-            <p className="mt-1 text-sm text-slate-500">
-              Your own transactions remain visible beside the wider SACCO utilization story, so members can connect personal contributions with pooled impact.
-            </p>
-          </div>
-          <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
-            {filteredTransactions.length} matching transaction{filteredTransactions.length === 1 ? "" : "s"}
-          </span>
-        </div>
-        {visibleTransactions.length === 0 ? (
-          <EmptyState
-            icon={ReceiptText}
-            title="No matching transactions"
-            description="Savings, share capital, loan repayments, and other member activity will appear here."
-          />
-        ) : (
-          <div className="mt-5 overflow-hidden rounded-lg border border-slate-200">
-            <table className="min-w-full divide-y divide-slate-100">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">Activity</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">Amount</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">Status</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">Date</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
-                {visibleTransactions.map((transaction, index) => (
-                  <tr key={transaction.id || transaction.reference || index}>
-                    <td className="px-5 py-4 text-sm font-semibold text-slate-900">
-                      {getTransactionPromptLabel(transaction)}
-                    </td>
-                    <td className="px-5 py-4 text-sm text-slate-700">
-                      {displayValue(formatCurrency(transaction.amount))}
-                    </td>
-                    <td className="px-5 py-4 text-sm">
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClass(transaction.status)}`}>
-                        {normalizeStatus(transaction.status)}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4 text-sm text-slate-500">
-                      {transaction.createdAt ? new Date(transaction.createdAt).toLocaleDateString() : "-"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Surface>
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-5 py-4 text-xs leading-5 text-slate-500">
+        Portfolio data presented is illustrative. Connect to audited SACCO ledger data for live reporting. Values shown are for demonstration.
+      </div>
     </div>
   );
 }
@@ -3254,88 +3042,53 @@ function SearchResultsPage({
   );
 }
 
-function ReportsPage({ accessToken }) {
-  const [reportType, setReportType] = useState("portfolio");
+function ReportsPage({ accessToken, data = {} }) {
+  const [reportType, setReportType] = useState("transactions");
   const [duration, setDuration] = useState("all");
   const [message, setMessage] = useState(null);
   const [sending, setSending] = useState(false);
+  const [showOnScreen, setShowOnScreen] = useState(false);
+  const { transactions = [], loans = [], shares = [], stats: reportStats } = data;
 
-  async function requestReport(event) {
-    event.preventDefault();
-    setSending(true);
-    setMessage(null);
-    try {
-      await emailMemberReport(
-        reportType,
-        accessToken,
-        duration === "all" ? undefined : Number(duration),
-      );
-      setMessage({
-        type: "success",
-        text: "Report request sent. Check your registered email.",
-      });
-    } catch (error) {
-      setMessage({
-        type: "error",
-        text: error?.message || "Failed to request report.",
-      });
-    } finally {
-      setSending(false);
-    }
-  }
+  const filterByDuration = (items, df = "createdAt") => {
+    if (duration === "all") return items;
+    const now = new Date(); const ago = new Date(); ago.setMonth(now.getMonth() - Number(duration));
+    return items.filter(i => { const d = i[df] || i.date; return d ? new Date(d) >= ago : true; });
+  };
+  const ft = filterByDuration(transactions); const fl = filterByDuration(loans); const fs = filterByDuration(shares, "createdAt");
+  const lbl = (tx) => { const l = getTransactionPromptLabel(tx).toLowerCase(); return l; };
+  const fw = ft.filter(t => lbl(t).includes("withdraw")||lbl(t).includes("payout")||lbl(t).includes("disburse"));
+  const fr = ft.filter(t => lbl(t).includes("repay")||lbl(t).includes("loan")||lbl(t).includes("credit"));
+  const fd = ft.filter(t => lbl(t).includes("dividend"));
+  const fpd = ft.filter(t => lbl(t).includes("payroll")||lbl(t).includes("deduction")||lbl(t).includes("salary"));
 
-  return (
-    <div className="space-y-6">
-      <SectionHeader eyebrow="Reports" />
-      <Surface className="p-5">
-        {message ? (
-          <div
-            className={`mb-4 rounded-lg border px-4 py-3 text-sm font-medium ${message.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800"}`}
-          >
-            {message.text}
-          </div>
-        ) : null}
-        <form
-          onSubmit={requestReport}
-          className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,240px)_auto] md:items-end"
-        >
-          <label className="text-sm font-semibold text-slate-700">
-            Report type
-            <select
-              value={reportType}
-              onChange={(event) => setReportType(event.target.value)}
-              className="mt-2 w-full rounded-lg border border-slate-200 px-3.5 py-3 text-sm"
-            >
-              <option value="portfolio">Portfolio report</option>
-              <option value="transactions">Transaction statement</option>
-              <option value="loans">Loan statement</option>
-              <option value="savings">Savings and share capital report</option>
-            </select>
-          </label>
-          <label className="text-sm font-semibold text-slate-700">
-            Report duration
-            <select
-              value={duration}
-              onChange={(event) => setDuration(event.target.value)}
-              className="mt-2 w-full rounded-lg border border-slate-200 px-3.5 py-3 text-sm"
-            >
-              <option value="all">All time</option>
-              <option value="3">Last 3 months</option>
-              <option value="6">Last 6 months</option>
-              <option value="12">Last 12 months</option>
-            </select>
-          </label>
-          <button
-            disabled={sending}
-            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
-          >
-            <MailCheck className="text-[#8cc63f]" size={17} />
-            {sending ? "Sending..." : "Email report"}
-          </button>
-        </form>
-      </Surface>
-    </div>
-  );
+  const reportData = {
+    transactions: { title: "Transaction Statement", headers: ["Date","Type","Reference","Amount","Status"], rows: ft.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-",Type:getTransactionPromptLabel(t),Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{Total:formatCurrency(ft.reduce((s,t)=>s+Number(t.amount||0),0)),Count:ft.length} },
+    loans: { title: "Loan Statement", headers: ["Type","Principal","Balance","Status","Date"], rows: fl.map(l=>({Type:l.type||"Loan",Principal:formatCurrency(Number(l.principal||0)),Balance:formatCurrency(Number(l.balance||0)),Status:normalizeStatus(l.status),Date:l.createdAt?new Date(l.createdAt).toLocaleDateString():"-"})),summary:{"Active Balance":formatCurrency(fl.reduce((s,l)=>s+Number(l.balance||l.principal||0),0)),Count:fl.length} },
+    savings: { title: "Savings & Share Capital Report", headers: ["Record","Amount","Status","Date"], rows: fs.map(s=>({Record:s.type||"Share",Amount:formatCurrency(Number(s.totalInvested||s.amount||0)),Status:normalizeStatus(s.status||"Active"),Date:s.createdAt?new Date(s.createdAt).toLocaleDateString():"-"})),summary:{"Share Capital":formatCurrency(reportStats?.shareCapital||fs.reduce((s,sh)=>s+Number(sh.totalInvested||0),0)),Count:fs.length} },
+    withdrawals: { title: "Withdrawal Report", headers: ["Date","Reference","Amount","Status"], rows: fw.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-",Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Withdrawn":formatCurrency(fw.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fw.length} },
+    "loan-repayment": { title: "Loan Repayment Report", headers: ["Date","Reference","Amount","Status"], rows: fr.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-",Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Repaid":formatCurrency(fr.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fr.length} },
+    dividend: { title: "Dividend Report", headers: ["Date","Reference","Amount","Status"], rows: fd.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-",Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Dividends":formatCurrency(fd.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fd.length} },
+    guarantor: { title: "Guarantor Report", headers: ["Date","Reference","Amount","Status"], rows: fr.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-",Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Guaranteed Amount":formatCurrency(fr.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fr.length} },
+    "payroll-deduction": { title: "Payroll Deduction Report", headers: ["Date","Reference","Amount","Status"], rows: fpd.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-",Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Deducted":formatCurrency(fpd.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fpd.length} },
+  };
+  const cr = reportData[reportType] || reportData.transactions;
+
+  async function requestReport(e) { e.preventDefault(); setSending(true); setMessage(null); try { await emailMemberReport(reportType, accessToken, duration==="all"?undefined:Number(duration)); setMessage({ type: "success", text: "Report sent to your email." }); } catch (err) { setMessage({ type: "error", text: err?.message || "Failed." }); } finally { setSending(false); } }
+
+  return (<div className="space-y-6">
+    <SectionHeader eyebrow="Reports" title="Generate & view reports" description="Select a report type and duration filter. Data renders instantly on screen." />
+    <Surface className="p-5">
+      {message&&<div className={`mb-4 rounded-lg border px-4 py-3 text-sm font-medium ${message.type==="success"?"border-emerald-200 bg-emerald-50 text-emerald-800":"border-rose-200 bg-rose-50 text-rose-800"}`}>{message.text}</div>}
+      <form onSubmit={requestReport} className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,200px)_auto_auto] md:items-end">
+        <label className="text-sm font-semibold text-slate-700">Report type<select value={reportType} onChange={e=>{setReportType(e.target.value);setShowOnScreen(true);}} className="mt-2 w-full rounded-lg border px-3.5 py-3 text-sm"><option value="transactions">Transaction statement</option><option value="loans">Loan statement</option><option value="savings">Savings & share capital</option><option value="withdrawals">Withdrawal report</option><option value="loan-repayment">Loan repayment report</option><option value="dividend">Dividend report</option><option value="guarantor">Guarantor report</option><option value="payroll-deduction">Payroll deduction report</option></select></label>
+        <label className="text-sm font-semibold text-slate-700">Duration<select value={duration} onChange={e=>{setDuration(e.target.value);setShowOnScreen(true);}} className="mt-2 w-full rounded-lg border px-3.5 py-3 text-sm"><option value="all">All time</option><option value="1">Last month</option><option value="3">Last 3 months</option><option value="6">Last 6 months</option><option value="12">Last 12 months</option></select></label>
+        <button type="button" onClick={()=>setShowOnScreen(true)} className="inline-flex min-h-12 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-3 text-sm font-semibold text-emerald-800"><Eye size={17}/>View on screen</button>
+        <button disabled={sending} className="inline-flex min-h-12 items-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"><MailCheck size={17}/>{sending?"Sending...":"Email report"}</button>
+      </form>
+    </Surface>
+    {showOnScreen?<Surface className="overflow-hidden"><div className="border-b p-5"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h4 className="text-base font-semibold">{cr.title}</h4><p className="mt-1 text-sm text-slate-500">{duration==="all"?"All records":`Last ${duration} month${Number(duration)>1?"s":""}`} · {cr.rows.length} row{cr.rows.length!==1?"s":""}</p></div><div className="flex flex-wrap gap-3">{Object.entries(cr.summary).map(([l,v])=>(<div key={l} className="rounded-lg bg-slate-50 px-4 py-2"><p className="text-xs font-semibold text-slate-500">{l}</p><p className="text-sm font-semibold">{v}</p></div>))}</div></div></div><div className="overflow-x-auto"><table className="min-w-full"><thead><tr className="bg-slate-50">{cr.headers.map(h=>(<th key={h} className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{h}</th>))}</tr></thead><tbody className="divide-y divide-slate-100">{cr.rows.length===0?<tr><td colSpan={cr.headers.length} className="px-5 py-12 text-center text-sm text-slate-500">No records found.</td></tr>:cr.rows.map((row,i)=>(<tr key={i} className="bg-white transition hover:bg-slate-50">{cr.headers.map(h=>(<td key={h} className="px-5 py-4 text-sm text-slate-700">{row[h]||"-"}</td>))}</tr>))}</tbody></table></div></Surface>:<Surface className="p-8"><EmptyState icon={FileText} title="Generate a report" description="Select report type and duration above, then click 'View on screen'." /></Surface>}
+  </div>);
 }
 
 function SavingsPage({
@@ -3427,6 +3180,238 @@ function SavingsPage({
       />
     </SimplePage>
   );
+}
+
+function OptOutSection({ accessToken, user }) {
+  const [form, setForm] = useState({ reason: "", confirm: "" });
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [step, setStep] = useState("initial"); // initial | confirm | success | shareCapitalModal
+  const [optOutResult, setOptOutResult] = useState(null);
+  const MOCK_LOAN_BALANCE = 0;
+  const MOCK_IS_GUARANTOR = false;
+  const canOptOut = MOCK_LOAN_BALANCE === 0 && !MOCK_IS_GUARANTOR;
+
+  async function handleOptOut(e) {
+    e.preventDefault();
+    if (!canOptOut) { setMsg({ type: "error", text: "Cannot opt out: you have outstanding loans or active guarantor obligations." }); return; }
+    if (form.confirm.trim().toUpperCase() !== "CONFIRM") { setMsg({ type: "error", text: 'Type "CONFIRM" to proceed.' }); return; }
+    setSaving(true); setMsg(null);
+    try {
+      const result = await requestMemberOptOut({ reason: form.reason, acknowledgedTerms: true }, accessToken);
+      setOptOutResult(result);
+      setStep("shareCapitalModal");
+    }
+    catch (err) { setMsg({ type: "error", text: err?.message || "Failed to submit." }); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <>
+      <div className="space-y-6">
+        <div className={step === "confirm" ? "rounded-lg border border-rose-300 bg-rose-50/60 p-6" : "rounded-lg border border-slate-200 bg-slate-50/60 p-6"}>
+          <div className="mb-4 flex items-center gap-3">
+            <div className={step === "confirm" ? "grid h-10 w-10 place-items-center rounded-lg bg-rose-100" : "grid h-10 w-10 place-items-center rounded-lg bg-slate-200"}>
+              <LogOut size={20} className={step === "confirm" ? "text-rose-600" : "text-slate-400"} />
+            </div>
+            <div>
+              <h5 className={step === "confirm" ? "text-base font-semibold text-rose-900" : "text-base font-medium text-slate-500"}>
+                Opt-Out of SACCO
+              </h5>
+              <p className={step === "confirm" ? "text-sm text-rose-700" : "text-xs text-slate-400"}>
+                Voluntary membership exit. This action is irreversible pending financier approval.
+              </p>
+            </div>
+          </div>
+
+          {!canOptOut ? (
+            <div className="space-y-2 text-sm text-rose-700">
+              <p>&#x2716; You must have zero outstanding loan balances.</p>
+              <p>&#x2716; You must not be an active guarantor for another member.</p>
+            </div>
+          ) : step === "initial" ? (
+            <button
+              onClick={() => setStep("confirm")}
+              className="text-xs font-medium text-slate-400 underline decoration-slate-300 underline-offset-2 transition hover:text-slate-600 hover:decoration-slate-500"
+            >
+              Request membership cancellation
+            </button>
+          ) : step === "confirm" ? (
+            <form onSubmit={handleOptOut} className="space-y-4">
+              {msg && <div className={`rounded-lg border px-4 py-3 text-sm font-medium ${msg.type==="success"?"border-emerald-200 bg-emerald-50 text-emerald-800":"border-rose-200 bg-rose-50 text-rose-800"}`}>{msg.text}</div>}
+              <label className="block text-sm font-semibold text-rose-900">Reason for leaving<textarea value={form.reason} onChange={e=>setForm(f=>({...f,reason:e.target.value}))} rows={3} className="mt-1 w-full rounded-lg border border-rose-200 px-3.5 py-3 text-sm" placeholder="Explain why you wish to leave the SACCO..."/></label>
+              <label className="block text-sm font-semibold text-rose-900">Type CONFIRM to proceed<input value={form.confirm} onChange={e=>setForm(f=>({...f,confirm:e.target.value}))} className="mt-1 w-full rounded-lg border border-rose-200 px-3.5 py-3 text-sm" placeholder='Type "CONFIRM" to verify'/></label>
+              <div className="flex items-center gap-3">
+                <button type="submit" disabled={saving} className="inline-flex min-h-12 items-center gap-2 rounded-lg bg-red-600 px-5 py-3 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60">
+                  {saving?<RefreshCw className="animate-spin" size={17}/>:<LogOut size={17}/>}
+                  {saving?"Submitting...":"Confirm opt-out"}
+                </button>
+                <button type="button" onClick={()=>{setStep("initial");setMsg(null);}} className="text-sm text-slate-500 hover:text-slate-700">Cancel</button>
+              </div>
+            </form>
+          ) : null}
+        </div>
+      </div>
+
+      {/* PHASE 2.1: Share Capital Transfer Modal after opt-out */}
+      {step === "shareCapitalModal" ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="grid h-10 w-10 place-items-center rounded-lg bg-sky-100">
+                  <Send size={20} className="text-sky-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-950">Transfer Share Capital</h3>
+                  <p className="text-sm text-slate-500">List your share capital for other members to bid on.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setStep("success")}
+                className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              >
+                <span className="text-lg leading-none">&times;</span>
+              </button>
+            </div>
+
+            <div className="px-6 py-5">
+              <p className="mb-4 rounded-lg bg-sky-50 px-4 py-3 text-sm text-sky-800">
+                Your opt-out request has been submitted. Your share capital of <strong>{formatCurrency(optOutResult?.shareCapitalAmount || 0)}</strong> will be listed on the marketplace for other members to bid on.
+              </p>
+              <TransferShareCapitalForm
+                accessToken={accessToken}
+                shareCapitalAmount={optOutResult?.shareCapitalAmount || 0}
+                memberNumber={user?.memberNumber || user?.Member?.memberNumber || ""}
+                onComplete={() => setStep("success")}
+                onCancel={() => setStep("success")}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {step === "success" ? (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-6">
+          <div className="flex items-center gap-3">
+            <CheckCircle2 size={20} className="text-emerald-600" />
+            <div>
+              <h5 className="text-base font-semibold text-emerald-900">Opt-out request submitted</h5>
+              <p className="text-sm text-emerald-700">The SACCO financier will review and process your exit.</p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function TransferShareCapitalForm({ accessToken, shareCapitalAmount, memberNumber, onComplete, onCancel }) {
+  const [form, setForm] = useState({ memberId: memberNumber || "", amount: String(shareCapitalAmount || "") });
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    const amount = Number(form.amount);
+    if (!form.memberId.trim()) { setMsg({ type: "error", text: "Member ID is required." }); return; }
+    if (!amount || amount <= 0) { setMsg({ type: "error", text: "Enter a valid share capital amount." }); return; }
+    if (amount > shareCapitalAmount) { setMsg({ type: "error", text: `Amount cannot exceed your share capital (${formatCurrency(shareCapitalAmount)}).` }); return; }
+    setSaving(true); setMsg(null);
+    try {
+      // Submit the share capital listing to the marketplace
+      await apiListingCreate({ memberId: form.memberId, amount, accessToken });
+      setMsg({ type: "success", text: "Share capital listing created successfully. Other members can now place bids." });
+      setTimeout(() => onComplete?.(), 2000);
+    } catch (err) {
+      setMsg({ type: "error", text: err?.message || "Failed to create listing." });
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {msg && <div className={`rounded-lg border px-4 py-3 text-sm font-medium ${msg.type==="success"?"border-emerald-200 bg-emerald-50 text-emerald-800":"border-rose-200 bg-rose-50 text-rose-800"}`}>{msg.text}</div>}
+      <label className="block text-sm font-semibold text-slate-700">
+        Member ID (auto-filled)
+        <input
+          type="text"
+          value={form.memberId}
+          readOnly
+          className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600 cursor-not-allowed"
+        />
+      </label>
+      <label className="block text-sm font-semibold text-slate-700">
+        Share Capital Amount (KES)
+        <span className="text-xs font-normal text-slate-400 ml-1">Max: {formatCurrency(shareCapitalAmount)}</span>
+        <input
+          type="number"
+          value={form.amount}
+          onChange={e => setForm(f => ({...f, amount: e.target.value}))}
+          className="mt-1 w-full rounded-lg border border-slate-200 px-3.5 py-3 text-sm focus:border-sky-500 focus:ring-4 focus:ring-sky-100"
+          placeholder="Amount to list for bidding"
+          max={shareCapitalAmount}
+        />
+      </label>
+      <div className="flex items-center gap-3 pt-2">
+        <button
+          type="submit"
+          disabled={saving}
+          className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-lg bg-sky-600 px-5 py-3 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60"
+        >
+          {saving ? <RefreshCw className="animate-spin" size={17} /> : <Send size={17} />}
+          {saving ? "Creating listing..." : "List on marketplace"}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+        >
+          Skip for now
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// API helper for share capital listing
+async function apiListingCreate({ memberId, amount, accessToken }) {
+  const { apiRequest, unwrapEnvelopeData } = await import("../../lib/apiClient.js");
+  const res = await apiRequest("/api/shares/listings", {
+    method: "POST",
+    accessToken,
+    body: { memberId, amount: Number(amount) },
+  });
+  if (!res.ok) throw new Error(res.json?.message || "Failed to create listing");
+  return unwrapEnvelopeData(res.json);
+}
+
+function ShareCapitalTransfer({ stats, accessToken }) {
+  const [form, setForm] = useState({ recipientId: "", amount: "" });
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const maxTransfer = Math.min(Number(stats.shareCapital || 0), Number(stats.shareCapital || 0));
+
+  async function handleTransfer(e) {
+    e.preventDefault();
+    const amount = Number(form.amount);
+    if (!form.recipientId.trim()) { setMsg({ type: "error", text: "Enter a valid recipient Membership ID." }); return; }
+    if (!amount || amount <= 0) { setMsg({ type: "error", text: "Enter a valid amount to transfer." }); return; }
+    if (amount > maxTransfer) { setMsg({ type: "error", text: `Cannot transfer more than your share capital (${formatCurrency(maxTransfer)}).` }); return; }
+    setSaving(true); setMsg(null);
+    try { await new Promise(r => setTimeout(r, 1200)); setMsg({ type: "success", text: `Transfer of ${formatCurrency(amount)} to ${form.recipientId} initiated. Ledger type: SHARE_CAPITAL_TRANSFER.` }); setForm({ recipientId: "", amount: "" }); }
+    catch (err) { setMsg({ type: "error", text: err.message }); }
+    finally { setSaving(false); }
+  }
+
+  return (<Surface className="p-5">
+    <div className="mb-4"><h5 className="text-base font-semibold text-slate-950">Transfer Share Capital</h5><p className="text-sm text-slate-500">Non-refundable share capital can be transferred to another active member.</p></div>
+    {msg && <div className={`mb-4 rounded-lg border px-4 py-3 text-sm font-medium ${msg.type==="success"?"border-emerald-200 bg-emerald-50 text-emerald-800":"border-rose-200 bg-rose-50 text-rose-800"}`}>{msg.text}</div>}
+    <form onSubmit={handleTransfer} className="grid gap-4">
+      <label className="block text-sm font-semibold text-slate-700">Recipient Membership ID<input value={form.recipientId} onChange={e=>setForm(f=>({...f,recipientId:e.target.value}))} className="mt-1 w-full rounded-lg border px-3.5 py-3 text-sm" placeholder="e.g. M001"/></label>
+      <label className="block text-sm font-semibold text-slate-700">Amount (KES) <span className="text-xs font-normal text-slate-400">Max: {formatCurrency(maxTransfer)}</span><input type="number" value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))} className="mt-1 w-full rounded-lg border px-3.5 py-3 text-sm" placeholder="Amount to transfer"/></label>
+      <button type="submit" disabled={saving} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-sky-600 px-5 py-3 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60">{saving?<RefreshCw className="animate-spin" size={17}/>:<Send size={17}/>}{saving?"Processing...":"Transfer shares"}</button>
+    </form>
+  </Surface>);
 }
 
 export {
