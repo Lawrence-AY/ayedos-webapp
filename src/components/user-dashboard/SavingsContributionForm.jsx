@@ -92,9 +92,30 @@ export default function SavingsContributionForm({ accessToken, user, onRefresh, 
     }
   }
 
+  const [showStkConfirm, setShowStkConfirm] = useState(false);
+
   async function submitContribution(event) {
     event.preventDefault();
+    if (!amountIsValid) {
+      onMessage?.({ type: "error", text: "Amount must be at least KES 1." });
+      return;
+    }
+    if (!phoneIsValid) {
+      onMessage?.({ type: "error", text: "Enter a valid numeric MPESA phone number." });
+      return;
+    }
+    // For STK, show confirmation dialog first
+    if (paymentMode === "STK") {
+      setShowStkConfirm(true);
+      return;
+    }
+    // For Paybill, proceed directly
+    await executeContribution();
+  }
+
+  async function executeContribution() {
     setSubmitting(true);
+    setShowStkConfirm(false);
     try {
       if (!amountIsValid) {
         onMessage?.({ type: "error", text: "Amount must be at least KES 1." });
@@ -232,6 +253,58 @@ export default function SavingsContributionForm({ accessToken, user, onRefresh, 
           )}
         </div>
       ) : null}
+
+      {/* STK Confirmation Dialog */}
+      {showStkConfirm && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 px-4">
+          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-semibold text-slate-950">Confirm Payment</h3>
+                <p className="text-sm text-slate-500">You are about to send an M-PESA payment request.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowStkConfirm(false)}
+                className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50"
+                aria-label="Close confirmation"
+              >
+                <X size={17} />
+              </button>
+            </div>
+            <div className="space-y-3 mb-5">
+              <div className="rounded-lg bg-slate-50 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Amount</p>
+                <p className="mt-1 text-xl font-bold text-slate-950">KSh {Number(amount || 0).toLocaleString()}</p>
+              </div>
+              <div className="rounded-lg bg-slate-50 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Phone Number</p>
+                <p className="mt-1 text-lg font-semibold text-slate-950">{phoneDigits}</p>
+              </div>
+              <div className="rounded-lg bg-slate-50 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Payment Type</p>
+                <p className="mt-1 text-lg font-semibold text-slate-950 capitalize">{stkContributionType.replace('_', ' ')}</p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowStkConfirm(false)}
+                className="flex-1 min-h-12 rounded-lg border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={executeContribution}
+                className="flex-1 min-h-12 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-900"
+              >
+                Confirm & Pay
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

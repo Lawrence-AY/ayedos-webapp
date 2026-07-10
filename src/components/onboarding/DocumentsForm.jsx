@@ -51,17 +51,22 @@ export const DocumentsForm = ({
     }
   }, [idDocument]);
 
+  // Determine what to show based on ID type
+  const isPassport = idType === 'passport';
+  const isDriverLicense = idType === 'driverlicense';
+  const isNationalId = idType === 'national' || !idType; // default to national ID behavior
+
   return (
     <form onSubmit={onSubmit} className="space-y-5">
-      {/* Identity Document Upload (for Passport / Driver's License) */}
-      {(idType === 'passport' || idType === 'driverlicense') && (
+      {/* Passport upload - only show passport image, no ID front/back */}
+      {isPassport && (
         <div className="space-y-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
           <Label htmlFor="idDocument">
-            Upload {idType === 'passport' ? 'Passport' : "Driver's License"} <span className="text-destructive">*</span>
+            Upload Passport <span className="text-destructive">*</span>
           </Label>
           <FileUpload
-            label={`Upload ${idType === 'passport' ? 'Passport' : "Driver's License"} (.jpeg, .png, .jpg, .pdf)`}
-            accept=".pdf,.jpeg,.jpg,.png"
+            label="Upload Passport (.jpg, .jpeg, .png)"
+            accept=".jpg,.jpeg,.png"
             onFileChange={(file) => onIdDocumentChange?.('idDocument', file)}
             required
             file={idDocument}
@@ -69,63 +74,85 @@ export const DocumentsForm = ({
           {docPreview && (
             <div className="mt-2">
               <p className="text-sm text-gray-600 mb-1">Preview:</p>
-              {idDocument?.type?.startsWith('image/') ? (
-                <img
-                  src={docPreview}
-                  alt="Document Preview"
-                  className="w-full max-h-40 rounded-lg border shadow-sm object-contain bg-white"
-                />
-              ) : (
-                <div className="w-full max-h-40 rounded-lg border shadow-sm p-4 bg-white text-center">
-                  <p className="text-sm text-gray-600">PDF file selected: {idDocument?.name}</p>
-                </div>
-              )}
+              <img
+                src={docPreview}
+                alt="Passport Preview"
+                className="w-full max-h-40 rounded-lg border shadow-sm object-contain bg-white"
+              />
             </div>
           )}
         </div>
       )}
 
-      {/* Two upload columns */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="flex-1">
+      {/* Driver's License upload - only show license image, no ID front/back */}
+      {isDriverLicense && (
+        <div className="space-y-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <Label htmlFor="idDocument">
+            Upload Driver's License <span className="text-destructive">*</span>
+          </Label>
           <FileUpload
-            label="Upload ID Front (.jpeg, .png, .jpg)"
-            accept="image/*"
-            onFileChange={(file) => onFileChange('idFile', file)}
+            label="Upload Driver's License (.jpg, .jpeg, .png)"
+            accept=".jpg,.jpeg,.png"
+            onFileChange={(file) => onIdDocumentChange?.('idDocument', file)}
             required
-            file={idFile}
+            file={idDocument}
           />
-          {idPreview && (
+          {docPreview && (
             <div className="mt-2">
               <p className="text-sm text-gray-600 mb-1">Preview:</p>
               <img
-                src={idPreview}
-                alt="ID Front Preview"
-                className="w-full max-h-40 rounded-lg border shadow-sm object-contain bg-gray-50"
+                src={docPreview}
+                alt="Driver's License Preview"
+                className="w-full max-h-40 rounded-lg border shadow-sm object-contain bg-white"
               />
             </div>
           )}
         </div>
-        <div className="flex-1">
-          <FileUpload
-            label="ID Back (.jpeg, .png, .jpg)"
-            accept="image/*"
-            onFileChange={(file) => onFileChange('photoFile', file)}
-            required
-            file={photoFile}
-          />
-          {photoPreview && (
-            <div className="mt-2">
-              <p className="text-sm text-gray-600 mb-1">Preview:</p>
-              <img
-                src={photoPreview}
-                alt="ID Back Preview"
-                className="w-full max-h-40 rounded-lg border shadow-sm object-contain bg-gray-50"
-              />
-            </div>
-          )}
+      )}
+
+      {/* National ID - show front and back uploads */}
+      {isNationalId && (
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex-1">
+            <FileUpload
+              label="Upload ID Front (.jpg, .jpeg, .png)"
+              accept=".jpg,.jpeg,.png"
+              onFileChange={(file) => onFileChange('idFile', file)}
+              required
+              file={idFile}
+            />
+            {idPreview && (
+              <div className="mt-2">
+                <p className="text-sm text-gray-600 mb-1">Preview:</p>
+                <img
+                  src={idPreview}
+                  alt="ID Front Preview"
+                  className="w-full max-h-40 rounded-lg border shadow-sm object-contain bg-gray-50"
+                />
+              </div>
+            )}
+          </div>
+          <div className="flex-1">
+            <FileUpload
+              label="ID Back (.jpg, .jpeg, .png)"
+              accept=".jpg,.jpeg,.png"
+              onFileChange={(file) => onFileChange('photoFile', file)}
+              required
+              file={photoFile}
+            />
+            {photoPreview && (
+              <div className="mt-2">
+                <p className="text-sm text-gray-600 mb-1">Preview:</p>
+                <img
+                  src={photoPreview}
+                  alt="ID Back Preview"
+                  className="w-full max-h-40 rounded-lg border shadow-sm object-contain bg-gray-50"
+                />
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Buttons - uniform styling */}
       <div className="flex flex-col sm:flex-row justify-between gap-4">
