@@ -14,7 +14,7 @@ import { changePassword } from "../services/authService.js";
 import {
   approveLoan, disburseLoan, getAllCompanies, getAllDeductions, getAllDividends,
   getAllLoans, getAllMembers, getAllShares, getAllTransactions, getFinancialReports,
-  rejectLoan, verifyTransaction, voidTransaction, writeOffLoan,
+  rejectLoan, sendFinanceNotification, verifyTransaction, voidTransaction, writeOffLoan,
 } from "../features/finance/financeService.js";
 import {
   AnalyticsPanel, DataTable, DashboardHero, KpiCard, SectionHeader,
@@ -100,7 +100,7 @@ function getFinanceStats(data) {
 function exportToCSV(rows, columns, filename = "export.csv") {
   const headers = columns.map((c) => typeof c === "string" ? c : c.label).join(",");
   const body = rows.map((row) => columns.map((c) => {
-    const val = typeof c === "string" ? row[c] : c.render ? c.render(row[c.key], row) : row[c.key];
+    const val = typeof c === "string" ? row[c] : c.csv ? c.csv(row[c.key], row) : c.render ? c.render(row[c.key], row) : row[c.key];
     return `"${String(val || "").replace(/"/g,'""')}"`;
   }).join(",")).join("\n");
   const blob = new Blob([headers + "\n" + body], { type: "text/csv" }); const url = URL.createObjectURL(blob);
@@ -157,7 +157,7 @@ export default function FinanceDashboard() {
   }
 
   useEffect(() => { loadAllData(); }, [accessToken]);
-  useEffect(() => { const interval = setInterval(() => loadAllData({ showLoading: false }), 15000); return () => clearInterval(interval); }, [accessToken]);
+  useEffect(() => { const interval = setInterval(() => loadAllData({ showLoading: false }), 5 * 60 * 1000); return () => clearInterval(interval); }, [accessToken]);
 
   const stats = useMemo(() => getFinanceStats(data), [data]);
   function markAllNotificationsRead() { setNotifications((prev) => prev.map((n) => ({ ...n, read: true }))); }
@@ -179,7 +179,7 @@ export default function FinanceDashboard() {
       case "dividends": return <DividendsPage dividends={data.dividends} />;
       case "reports": return <FinancialReportsPage data={data} />;
       case "settings": return <FinancierProfileSettings user={user} stats={stats} accessToken={accessToken} />;
-      case "notifications": return <NotificationsPanel notifications={notifications} onMarkAllRead={markAllNotificationsRead} />;
+      case "notifications": return <NotificationsPanel notifications={notifications} members={data.members} onMarkAllRead={markAllNotificationsRead} accessToken={accessToken} />;
       default: return <FinanceHome data={data} stats={stats} globalSearch={globalSearch} onVerifyTransaction={handleVerifyTransaction} />;
     }
   }
@@ -202,8 +202,11 @@ export default function FinanceDashboard() {
 // ============================================================
 // NOTIFICATIONS
 // ============================================================
-function NotificationsPanel({ notifications, onMarkAllRead }) {
+function NotificationsPanel({ notifications, members = [], onMarkAllRead, accessToken }) {
   const [notifTab, setNotifTab] = useState("all");
+  const [form, setForm] = useState({ audience: "MEMBER", recipientUserId: "", category: "announcement", severity: "info", title: "", body: "" });
+  const [sending, setSending] = useState(false);
+  const [message, setMessage] = useState(null);
   const filtered = notifTab === "all" ? notifications : notifications.filter((n) => n.type === notifTab);
   const typeLabel = (n) => {
     if (n.type === "LOAN") return n.subtype === "application" ? "Loan Request" : n.subtype === "repayment" ? "Repayment" : n.subtype === "overdue" ? "Overdue" : "LOAN";
@@ -216,8 +219,31 @@ function NotificationsPanel({ notifications, onMarkAllRead }) {
     return "bg-rose-100 text-rose-700";
   };
   const counts = { all: notifications.length, LOAN: notifications.filter((n)=>n.type==="LOAN").length, TRANSACTION: notifications.filter((n)=>n.type==="TRANSACTION").length, OVERDUE: notifications.filter((n)=>n.type==="OVERDUE"||(n.type==="LOAN"&&n.subtype==="overdue")).length };
+  async function handleSendNotification(e) {
+    e.preventDefault();
+    setSending(true);
+    setMessage(null);
+    try {
+      const result = await sendFinanceNotification(form, accessToken);
+      setMessage({ type: "success", text: `Notification sent to ${result?.sent || 0} recipient${result?.sent === 1 ? "" : "s"}.` });
+      setForm((current) => ({ ...current, title: "", body: "" }));
+    } catch (error) {
+      setMessage({ type: "error", text: error?.message || "Failed to send notification." });
+    } finally {
+      setSending(false);
+    }
+  }
   return (<div className="space-y-6">
     <SectionHeader eyebrow="Notifications" title="Alert center" description="Categorized real-time alerts for loan applications, repayments, deposits, withdrawals, and overdue accounts." />
+    <form onSubmit={handleSendNotification} className="grid gap-4 rounded-lg border bg-white p-5 lg:grid-cols-[1fr_1fr_1fr]">
+      <label className="text-sm font-semibold text-slate-700">Audience<select value={form.audience} onChange={(e)=>setForm((c)=>({...c,audience:e.target.value,recipientUserId:e.target.value==="INDIVIDUAL"?c.recipientUserId:""}))} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"><option value="MEMBER">All Members</option><option value="INDIVIDUAL">One Member</option><option value="FINANCE">Finance team</option><option value="ADMINS">Admins</option><option value="ALL">Everyone</option></select></label>
+      <label className="text-sm font-semibold text-slate-700">Category<select value={form.category} onChange={(e)=>setForm((c)=>({...c,category:e.target.value}))} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"><option value="announcement">Announcement</option><option value="loan">Loan</option><option value="transaction">Transaction</option><option value="deduction">Deduction</option><option value="security">Security</option></select></label>
+      <label className="text-sm font-semibold text-slate-700">Priority<select value={form.severity} onChange={(e)=>setForm((c)=>({...c,severity:e.target.value}))} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"><option value="info">Info</option><option value="success">Success</option><option value="warning">Warning</option><option value="critical">Critical</option></select></label>
+      {form.audience==="INDIVIDUAL"&&<label className="text-sm font-semibold text-slate-700 lg:col-span-3">Member<select required value={form.recipientUserId} onChange={(e)=>setForm((c)=>({...c,recipientUserId:e.target.value}))} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"><option value="">Select member</option>{members.filter((m)=>m.userId).map((m)=><option key={m.userId} value={m.userId}>{m.name || m.id} {m.phone ? `- ${m.phone}` : ""}</option>)}</select></label>}
+      <label className="text-sm font-semibold text-slate-700 lg:col-span-3">Title<input required value={form.title} onChange={(e)=>setForm((c)=>({...c,title:e.target.value}))} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" /></label>
+      <label className="text-sm font-semibold text-slate-700 lg:col-span-3">Message<textarea required value={form.body} onChange={(e)=>setForm((c)=>({...c,body:e.target.value}))} className="mt-1 min-h-28 w-full rounded-lg border px-3 py-2 text-sm" /></label>
+      <div className="flex items-center gap-3 lg:col-span-3"><button disabled={sending} className="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{sending?<RefreshCw className="animate-spin" size={14}/>:<Bell size={14}/>}Send notification</button>{message&&<span className={`text-sm font-semibold ${message.type==="success"?"text-emerald-700":"text-rose-700"}`}>{message.text}</span>}</div>
+    </form>
     <div className="flex items-center justify-between">
       <div className="flex gap-2">
         {[{key:"all",label:"All",count:counts.all,icon:Bell},{key:"LOAN",label:"Loans",count:counts.LOAN,icon:FileText},{key:"TRANSACTION",label:"Transactions",count:counts.TRANSACTION,icon:ReceiptText},{key:"OVERDUE",label:"Overdue",count:counts.OVERDUE,icon:AlertTriangle}].map((tab)=>(<button key={tab.key} type="button" onClick={()=>setNotifTab(tab.key)} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${notifTab===tab.key?"bg-slate-950 text-white":"bg-slate-100 text-slate-700 hover:bg-slate-200"}`}><tab.icon size={14}/>{tab.label} ({tab.count})</button>))}
@@ -242,16 +268,16 @@ function FinanceHome({ data, stats, globalSearch = "", onVerifyTransaction }) {
   const transactionSeries = getMonthlySeries(data.transactions);
   const repaymentSeries = getMonthlySeries(data.transactions.filter((t) => String(t.type||"").toUpperCase().includes("REPAYMENT")));
   const txCards = [
-    { label: "Daily Transactions", value: stats.dailyTransactions, icon: ReceiptText, tone: "blue", path: "/transactions" },
-    { label: "Deposits", value: formatCurrency(stats.totalDeposits), icon: TrendingUp, tone: "emerald", path: "/transactions" },
-    { label: "Withdrawals", value: formatCurrency(stats.totalWithdrawals), icon: TrendingDown, tone: "rose", path: "/transactions" },
+    { label: "Daily Transactions", value: stats.dailyTransactions, icon: ReceiptText, tone: "blue", path: "/transactions?period=today" },
+    { label: "Deposits", value: formatCurrency(stats.totalDeposits), icon: TrendingUp, tone: "emerald", path: "/transactions?type=deposit" },
+    { label: "Withdrawals", value: formatCurrency(stats.totalWithdrawals), icon: TrendingDown, tone: "rose", path: "/transactions?type=withdrawal" },
   ];
   const loanCards = [
-    { label: "Active Loans", value: stats.activeLoans, icon: Landmark, tone: "blue", path: "/loans" },
-    { label: "Repayments", value: formatCurrency(stats.loanRepayments), icon: CreditCard, tone: "emerald", path: "/loans" },
-    { label: "Pending Disburse", value: stats.pendingDisbursements, icon: Banknote, tone: "amber", path: "/loans" },
-    { label: "Overdue", value: stats.overdueLoans, icon: AlertTriangle, tone: "rose", path: "/loans" },
-    { label: "Arrears", value: formatCurrency(stats.totalArrears), icon: ShieldAlert, tone: "rose", path: "/loans" },
+    { label: "Active Loans", value: stats.activeLoans, icon: Landmark, tone: "blue", path: "/loans?status=active" },
+    { label: "Repayments", value: formatCurrency(stats.loanRepayments), icon: CreditCard, tone: "emerald", path: "/transactions?type=repayment" },
+    { label: "Pending Disburse", value: stats.pendingDisbursements, icon: Banknote, tone: "amber", path: "/loans?status=approved" },
+    { label: "Overdue", value: stats.overdueLoans, icon: AlertTriangle, tone: "rose", path: "/loans?status=overdue" },
+    { label: "Arrears", value: formatCurrency(stats.totalArrears), icon: ShieldAlert, tone: "rose", path: "/loans?status=overdue" },
   ];
   return (<div className="space-y-6">
     <DashboardHero eyebrow="Finance operations" title="Financial control desk" description="Verify payments, manage loans, track deductions, and generate reports."/>
@@ -271,17 +297,36 @@ function FinanceHome({ data, stats, globalSearch = "", onVerifyTransaction }) {
 // TRANSACTIONS
 // ============================================================
 function TransactionsPage({ data, embedded = false, onVerifyTransaction, onVoidTransaction, globalSearch = "" }) {
-  const [search, setSearch] = useState(""); const [fromDate, setFromDate] = useState(""); const [toDate, setToDate] = useState(""); const [depositFilter, setDepositFilter] = useState("all");
+  const { search: routeSearch } = useLocation();
+  const routeParams = new URLSearchParams(routeSearch);
+  const initialType = routeParams.get("type") || "all";
+  const initialPeriod = routeParams.get("period") || "";
+  const today = new Date().toISOString().slice(0, 10);
+  const [search, setSearch] = useState(""); const [fromDate, setFromDate] = useState(initialPeriod === "today" ? today : ""); const [toDate, setToDate] = useState(initialPeriod === "today" ? today : ""); const [depositFilter, setDepositFilter] = useState(["deposit","withdrawal","repayment","share","savings"].includes(initialType) ? initialType : "all");
+  useEffect(() => {
+    setDepositFilter(["deposit","withdrawal","repayment","share","savings"].includes(initialType) ? initialType : "all");
+    setFromDate(initialPeriod === "today" ? today : "");
+    setToDate(initialPeriod === "today" ? today : "");
+  }, [initialType, initialPeriod, today]);
   const transactions = data.transactions || [];
   let filtered = filterRows(filterRows(transactions, globalSearch, ["id","type","description","status","reference"]), search, ["id","type","description","status","reference"]);
   if (fromDate) filtered = filtered.filter((t) => { const d = t.createdAt||t.date; return d ? new Date(d) >= new Date(fromDate) : true; });
-  if (toDate) filtered = filtered.filter((t) => { const d = t.createdAt||t.date; return d ? new Date(d) <= new Date(toDate) : true; });
+  if (toDate) filtered = filtered.filter((t) => {
+    const d = t.createdAt||t.date;
+    if (!d) return true;
+    const endDate = new Date(toDate);
+    endDate.setHours(23, 59, 59, 999);
+    return new Date(d) <= endDate;
+  });
   if (depositFilter === "share") filtered = filtered.filter((t) => { const type = String(t.type||"").toLowerCase(); return type.includes("share")||type.includes("capital"); });
   if (depositFilter === "savings") filtered = filtered.filter((t) => { const type = String(t.type||"").toLowerCase(); return type.includes("savings")||type.includes("deposit"); });
+  if (depositFilter === "deposit") filtered = filtered.filter((t) => String(t.type||"").toLowerCase().includes("deposit"));
+  if (depositFilter === "withdrawal") filtered = filtered.filter((t) => String(t.type||"").toLowerCase().includes("withdraw"));
+  if (depositFilter === "repayment") filtered = filtered.filter((t) => String(t.type||"").toLowerCase().includes("repayment"));
   const columns = [
-    { key: "id", label: "Reference", render: (v,r) => r.reference || v || "-" }, { key: "type", label: "Type" },
-    { key: "amount", label: "Amount", render: (v) => formatCurrency(v) }, { key: "status", label: "Status", render: (v) => <StatusBadge status={v||"Pending"} /> },
-    { key: "description", label: "Description", render: (v) => v||"-" }, { key: "createdAt", label: "Date", render: (v,r) => formatDate(v||r.date) },
+    { key: "id", label: "Reference", render: (v,r) => r.reference || v || "-", csv: (v,r) => r.reference || v || "-" }, { key: "type", label: "Type" },
+    { key: "amount", label: "Amount", render: (v) => formatCurrency(v), csv: (v) => formatCurrency(v) }, { key: "status", label: "Status", render: (v) => <StatusBadge status={v||"Pending"} />, csv: (v) => v || "Pending" },
+    { key: "description", label: "Description", render: (v) => v||"-", csv: (v) => v || "-" }, { key: "createdAt", label: "Date", render: (v,r) => formatDate(v||r.date), csv: (v,r) => formatDate(v||r.date) },
   ];
   const content = (<div className="space-y-4">
     <div className="flex flex-wrap items-center gap-3">
@@ -289,7 +334,7 @@ function TransactionsPage({ data, embedded = false, onVerifyTransaction, onVoidT
         <input type="date" value={fromDate} onChange={(e)=>setFromDate(e.target.value)} className="rounded border px-2 py-1 text-sm" /><span>to</span>
         <input type="date" value={toDate} onChange={(e)=>setToDate(e.target.value)} className="rounded border px-2 py-1 text-sm" />
       </div>
-      <select value={depositFilter} onChange={(e)=>setDepositFilter(e.target.value)} className="rounded border px-3 py-1 text-sm"><option value="all">All Deposits</option><option value="share">Share Capital</option><option value="savings">Savings Only</option></select>
+      <select value={depositFilter} onChange={(e)=>setDepositFilter(e.target.value)} className="rounded border px-3 py-1 text-sm"><option value="all">All Transactions</option><option value="deposit">Deposits</option><option value="withdrawal">Withdrawals</option><option value="repayment">Repayments</option><option value="share">Share Capital</option><option value="savings">Savings Only</option></select>
       <button onClick={() => exportToCSV(filtered, columns, "transactions.csv")} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold hover:bg-slate-50"><Download size={14} />Export CSV</button>
     </div>
     <DataTable title={embedded?"Recent transactions":"Transaction processing"} description="Verify deposits, withdrawals, fees, disbursements, repayments, and dividend transactions" search={search} onSearch={setSearch}
@@ -304,7 +349,9 @@ function TransactionsPage({ data, embedded = false, onVerifyTransaction, onVoidT
 // UNIFIED LOAN MANAGEMENT
 // ============================================================
 function UnifiedLoansPage({ loans, onApproveLoan, onRejectLoan, onDisburseLoan, onWriteOffLoan, globalSearch = "" }) {
-  const [loanTab, setLoanTab] = useState("all"); const [search, setSearch] = useState(""); const [showAmortization, setShowAmortization] = useState(null);
+  const { search: routeSearch } = useLocation();
+  const initialStatus = new URLSearchParams(routeSearch).get("status") || "all";
+  const [loanTab, setLoanTab] = useState(initialStatus); const [search, setSearch] = useState(""); const [showAmortization, setShowAmortization] = useState(null);
   const queueMap = {
     all: { label: "All Loans", filter: () => true, icon: Landmark }, pending: { label: "Pending", filter: (l) => String(l.status||"").toUpperCase()==="PENDING", icon: Clock3 },
     approved: { label: "Approved", filter: (l) => String(l.status||"").toUpperCase()==="APPROVED", icon: CheckCircle2 },
@@ -314,14 +361,15 @@ function UnifiedLoansPage({ loans, onApproveLoan, onRejectLoan, onDisburseLoan, 
     writtenOff: { label: "Written Off", filter: (l) => String(l.status||"").toUpperCase()==="WRITTEN_OFF", icon: FileText },
   };
   const queue = queueMap[loanTab] || queueMap.all;
+  useEffect(() => { setLoanTab(queueMap[initialStatus] ? initialStatus : "all"); }, [initialStatus]);
   const filtered = filterRows(filterRows(loans.filter(queue.filter), globalSearch, ["id","type","member","memberName","memberId","status"]), search, ["id","type","member","memberName","memberId","status"]);
   const totalDisbursed = loans.filter((l) => ["DISBURSED","ACTIVE","OVERDUE"].includes(String(l.status||"").toUpperCase())).reduce((s,l) => s+Number(l.principal||0),0);
   const totalRepaid = loans.reduce((s,l)=>s+Number(l.paid||0),0);
   const loanColumns = [
-    { key: "member", label: "Member", render: (v,r) => v||r.memberName||"-" }, { key: "type", label: "Type" },
-    { key: "principal", label: "Principal", render: (v) => formatCurrency(v) }, { key: "balance", label: "Balance", render: (v) => formatCurrency(v||0) },
-    { key: "nextPayment", label: "Next Payment", render: (v) => v?formatCurrency(v):"-" }, { key: "status", label: "Status", render: (v) => <StatusBadge status={v||"Pending"} /> },
-    { key: "disbursedDate", label: "Disbursed", render: (v) => formatDateSafe(v) },
+    { key: "member", label: "Member", render: (v,r) => v||r.memberName||"-", csv: (v,r) => v||r.memberName||"-" }, { key: "type", label: "Type" },
+    { key: "principal", label: "Principal", render: (v) => formatCurrency(v), csv: (v) => formatCurrency(v) }, { key: "balance", label: "Balance", render: (v) => formatCurrency(v||0), csv: (v) => formatCurrency(v||0) },
+    { key: "nextPayment", label: "Next Payment", render: (v) => v?formatCurrency(v):"-", csv: (v) => v?formatCurrency(v):"-" }, { key: "status", label: "Status", render: (v) => <StatusBadge status={v||"Pending"} />, csv: (v) => v || "Pending" },
+    { key: "disbursedDate", label: "Disbursed", render: (v) => formatDateSafe(v), csv: (v) => formatDateSafe(v) },
   ];
   return (<div className="space-y-6">
     <SectionHeader eyebrow="Loan Management" title="Unified loan control center" description="Full lifecycle management with amortization, arrears, and product revenue." />
@@ -342,7 +390,7 @@ function UnifiedLoansPage({ loans, onApproveLoan, onRejectLoan, onDisburseLoan, 
           {s==="OVERDUE"&&<button onClick={()=>onWriteOffLoan?.(v)} className="text-xs font-semibold text-rose-700">Write Off</button>}
         </div>);}}]}
       data={filtered} emptyTitle="No loans" />
-    <button onClick={() => exportToCSV(loans, [{key:"member"},{key:"type"},{key:"principal"},{key:"balance"},{key:"status"}], "loans.csv")} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold hover:bg-slate-50"><Download size={14} />Export CSV</button>
+    <button onClick={() => exportToCSV(filtered, loanColumns, "loans.csv")} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold hover:bg-slate-50"><Download size={14} />Export CSV</button>
     {showAmortization ? <AmortizationPanel loan={showAmortization} onClose={()=>setShowAmortization(null)} /> : null}
     <div className="rounded-lg border border-rose-200 bg-rose-50 p-5">
       <div className="flex items-center gap-3"><ShieldAlert size={20} className="text-rose-700" /><h5 className="text-base font-semibold text-rose-900">Arrears & Risk</h5></div>
@@ -374,15 +422,24 @@ function SalaryDeductionPage({ data, accessToken, onRefresh }) {
   const [showAddCompany, setShowAddCompany] = useState(false); const [showAddMember, setShowAddMember] = useState(false);
   const companyMembers = selectedCompany === "all" ? members : members.filter((m) => m.company === selectedCompany);
   const unassociated = members.filter((m) => !m.company);
+  const displayedMembers = selectedCompany === "unassociated" ? unassociated : companyMembers;
+  const deductionColumns = [
+    { key: "name", label: "Member" },
+    { key: "company", label: "Company", csv: (v) => v || "-" },
+    { key: "salary", label: "Salary", csv: (v) => v ? formatCurrency(v) : "-" },
+    { key: "deduction", label: "Deduction", csv: (v) => v ? formatCurrency(v) : "-" },
+    { key: "savings", label: "Savings", csv: (v) => formatCurrency(v || 0) },
+    { key: "status", label: "Status", csv: (v) => v || "Active" },
+  ];
   return (<div className="space-y-6">
     <SectionHeader eyebrow="Salary deductions" title="Deduction & Company Linkage" description="Filter by company, manage deductions, add companies, and add members." action={<div className="flex gap-2">
       <button onClick={() => setShowAddCompany(true)} className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white"><Building2 size={14} />Add Company</button>
       <button onClick={() => setShowAddMember(true)} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"><Plus size={14} />Add Member</button>
-      <button onClick={() => exportToCSV(members, [{key:"name"},{key:"company"},{key:"salary"},{key:"deduction"},{key:"status"}], "deductions.csv")} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold"><Download size={14} />Export</button>
+      <button onClick={() => exportToCSV(displayedMembers, deductionColumns, "deductions.csv")} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold"><Download size={14} />Export</button>
     </div>} />
     <div className="grid gap-4 md:grid-cols-4">{companies.slice(0,4).map((c) => (<button key={c.id} onClick={() => setSelectedCompany(selectedCompany===c.name?"all":c.name)} className={`rounded-lg border p-4 text-left transition ${selectedCompany===c.name?"border-sky-400 bg-sky-50 ring-2 ring-sky-200":"border-slate-200 bg-white hover:border-sky-200"}`}><Building2 size={20} className="text-[#8cc63f]" /><p className="mt-2 font-semibold">{c.name}</p><p className="mt-1 text-xs text-slate-500">{c.employees} employees · {formatCurrency(c.totalDeductions)}</p></button>))}</div>
     <div className="flex gap-2"><button onClick={()=>setSelectedCompany("all")} className={`rounded-full px-4 py-2 text-sm font-semibold ${selectedCompany==="all"?"bg-slate-950 text-white":"bg-slate-100 text-slate-700"}`}>All ({companyMembers.length})</button><button onClick={()=>setSelectedCompany("unassociated")} className={`rounded-full px-4 py-2 text-sm font-semibold ${selectedCompany==="unassociated"?"bg-slate-950 text-white":"bg-slate-100 text-slate-700"}`}>Unassociated ({unassociated.length})</button></div>
-    <div className="overflow-x-auto rounded-lg border"><table className="min-w-full"><thead><tr className="bg-slate-50">{["Member","Company","Salary","Deduction","Savings","Status","Edit"].map(h=><th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{(selectedCompany==="unassociated"?unassociated:companyMembers).map((m,i)=>(<tr key={m.id||i} className="hover:bg-slate-50"><td className="px-4 py-3 text-sm font-semibold">{m.name}</td><td className="px-4 py-3 text-sm">{m.company||"—"}</td><td className="px-4 py-3 text-sm">{m.salary?formatCurrency(m.salary):"—"}</td><td className="px-4 py-3 text-sm">{editingDeduction===m.id?<input type="number" defaultValue={m.deduction} className="w-24 rounded border px-2 py-1 text-sm" onBlur={(e)=>{m.deduction=Number(e.target.value);setEditingDeduction(null);}}/>:<span>{m.deduction?formatCurrency(m.deduction):"—"}</span>}</td><td className="px-4 py-3 text-sm">{formatCurrency(m.savings||0)}</td><td className="px-4 py-3 text-sm"><StatusBadge status={m.status||"Active"}/></td><td className="px-4 py-3 text-sm"><button onClick={()=>setEditingDeduction(m.id)} className="text-xs font-semibold text-sky-700">Edit</button></td></tr>))}</tbody></table></div>
+    <div className="overflow-x-auto rounded-lg border"><table className="min-w-full"><thead><tr className="bg-slate-50">{["Member","Company","Salary","Deduction","Savings","Status","Edit"].map(h=><th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{displayedMembers.map((m,i)=>(<tr key={m.id||i} className="hover:bg-slate-50"><td className="px-4 py-3 text-sm font-semibold">{m.name}</td><td className="px-4 py-3 text-sm">{m.company||"—"}</td><td className="px-4 py-3 text-sm">{m.salary?formatCurrency(m.salary):"—"}</td><td className="px-4 py-3 text-sm">{editingDeduction===m.id?<input type="number" defaultValue={m.deduction} className="w-24 rounded border px-2 py-1 text-sm" onBlur={(e)=>{m.deduction=Number(e.target.value);setEditingDeduction(null);}}/>:<span>{m.deduction?formatCurrency(m.deduction):"—"}</span>}</td><td className="px-4 py-3 text-sm">{formatCurrency(m.savings||0)}</td><td className="px-4 py-3 text-sm"><StatusBadge status={m.status||"Active"}/></td><td className="px-4 py-3 text-sm"><button onClick={()=>setEditingDeduction(m.id)} className="text-xs font-semibold text-sky-700">Edit</button></td></tr>))}</tbody></table></div>
     {showAddCompany && <AddCompanyModal onClose={()=>setShowAddCompany(false)} onSubmit={(c)=>{companies.push({id:"c"+(companies.length+1),...c,employees:0,totalDeductions:0,status:"Active"});setShowAddCompany(false);}} />}
     {showAddMember && <AddMemberModal companies={companies} onClose={()=>setShowAddMember(false)} onSubmit={(m)=>{members.push({id:"M00"+(members.length+1),...m,risk:"Low",status:"Active",savings:0,loans:0,shares:0});setShowAddMember(false);}} />}
   </div>);
@@ -592,3 +649,4 @@ function FinancierProfileSettings({ user, stats, accessToken }) {
 function FinancierSecuritySection({ user, accessToken }) {
   return <FinancierProfileSettings user={user} accessToken={accessToken} />;
 }
+
