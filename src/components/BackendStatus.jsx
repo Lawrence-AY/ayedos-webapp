@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { apiRequest } from '../lib/apiClient.js'
 
 async function checkHealth() {
-  const res = await apiRequest('/health', {
+  const res = await apiRequest('/api/health', {
     method: 'GET',
     timeoutMs: 8000,
     retry: true,

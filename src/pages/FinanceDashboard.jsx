@@ -14,7 +14,7 @@ import { changePassword } from "../services/authService.js";
 import {
   approveLoan, disburseLoan, getAllCompanies, getAllDeductions, getAllDividends,
   getAllLoans, getAllMembers, getAllShares, getAllTransactions, getFinancialReports,
-  rejectLoan, verifyTransaction, voidTransaction, writeOffLoan,
+  rejectLoan, sendFinanceNotification, verifyTransaction, voidTransaction, writeOffLoan,
 } from "../features/finance/financeService.js";
 import {
   AnalyticsPanel,
@@ -111,7 +111,7 @@ function getFinanceStats(data) {
 function exportToCSV(rows, columns, filename = "export.csv") {
   const headers = columns.map((c) => typeof c === "string" ? c : c.label).join(",");
   const body = rows.map((row) => columns.map((c) => {
-    const val = typeof c === "string" ? row[c] : c.render ? c.render(row[c.key], row) : row[c.key];
+    const val = typeof c === "string" ? row[c] : c.csv ? c.csv(row[c.key], row) : c.render ? c.render(row[c.key], row) : row[c.key];
     return `"${String(val || "").replace(/"/g,'""')}"`;
   }).join(",")).join("\n");
   const blob = new Blob([headers + "\n" + body], { type: "text/csv" }); const url = URL.createObjectURL(blob);
@@ -152,7 +152,7 @@ export default function FinanceDashboard() {
       </div>
 
   useEffect(() => { loadAllData(); }, [accessToken]);
-  useEffect(() => { const interval = setInterval(() => loadAllData({ showLoading: false }), 15000); return () => clearInterval(interval); }, [accessToken]);
+  useEffect(() => { const interval = setInterval(() => loadAllData({ showLoading: false }), 5 * 60 * 1000); return () => clearInterval(interval); }, [accessToken]);
 
   const stats = useMemo(() => getFinanceStats(data), [data]);
   function markAllNotificationsRead() { setNotifications((prev) => prev.map((n) => ({ ...n, read: true }))); }
@@ -202,7 +202,7 @@ function TransactionsPage({ transactions, embedded = false, onVerifyTransaction,
       case "dividends": return <DividendsPage dividends={data.dividends} />;
       case "reports": return <FinancialReportsPage data={data} />;
       case "settings": return <FinancierProfileSettings user={user} stats={stats} accessToken={accessToken} />;
-      case "notifications": return <NotificationsPanel notifications={notifications} onMarkAllRead={markAllNotificationsRead} />;
+      case "notifications": return <NotificationsPanel notifications={notifications} members={data.members} onMarkAllRead={markAllNotificationsRead} accessToken={accessToken} />;
       default: return <FinanceHome data={data} stats={stats} globalSearch={globalSearch} onVerifyTransaction={handleVerifyTransaction} />;
     }
   }
@@ -222,6 +222,58 @@ function TransactionsPage({ transactions, embedded = false, onVerifyTransaction,
   );
 }
 
+<<<<<<< HEAD
+// ============================================================
+// NOTIFICATIONS
+// ============================================================
+function NotificationsPanel({ notifications, members = [], onMarkAllRead, accessToken }) {
+  const [notifTab, setNotifTab] = useState("all");
+  const [form, setForm] = useState({ audience: "MEMBER", recipientUserId: "", category: "announcement", severity: "info", title: "", body: "" });
+  const [sending, setSending] = useState(false);
+  const [message, setMessage] = useState(null);
+  const filtered = notifTab === "all" ? notifications : notifications.filter((n) => n.type === notifTab);
+  const typeLabel = (n) => {
+    if (n.type === "LOAN") return n.subtype === "application" ? "Loan Request" : n.subtype === "repayment" ? "Repayment" : n.subtype === "overdue" ? "Overdue" : "LOAN";
+    if (n.type === "TRANSACTION") return n.subtype === "deposit" ? "Deposit" : n.subtype === "withdrawal" ? "Withdrawal" : "TRANSACTION";
+    return n.type;
+  };
+  const typeColor = (n) => {
+    if (n.type === "LOAN") return n.subtype === "application" ? "bg-sky-100 text-sky-700" : n.subtype === "overdue" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700";
+    if (n.type === "TRANSACTION") return n.subtype === "deposit" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700";
+    return "bg-rose-100 text-rose-700";
+  };
+  const counts = { all: notifications.length, LOAN: notifications.filter((n)=>n.type==="LOAN").length, TRANSACTION: notifications.filter((n)=>n.type==="TRANSACTION").length, OVERDUE: notifications.filter((n)=>n.type==="OVERDUE"||(n.type==="LOAN"&&n.subtype==="overdue")).length };
+  async function handleSendNotification(e) {
+    e.preventDefault();
+    setSending(true);
+    setMessage(null);
+    try {
+      const result = await sendFinanceNotification(form, accessToken);
+      setMessage({ type: "success", text: `Notification sent to ${result?.sent || 0} recipient${result?.sent === 1 ? "" : "s"}.` });
+      setForm((current) => ({ ...current, title: "", body: "" }));
+    } catch (error) {
+      setMessage({ type: "error", text: error?.message || "Failed to send notification." });
+    } finally {
+      setSending(false);
+    }
+  }
+  return (<div className="space-y-6">
+    <SectionHeader eyebrow="Notifications" title="Alert center" description="Categorized real-time alerts for loan applications, repayments, deposits, withdrawals, and overdue accounts." />
+    <form onSubmit={handleSendNotification} className="grid gap-4 rounded-lg border bg-white p-5 lg:grid-cols-[1fr_1fr_1fr]">
+      <label className="text-sm font-semibold text-slate-700">Audience<select value={form.audience} onChange={(e)=>setForm((c)=>({...c,audience:e.target.value,recipientUserId:e.target.value==="INDIVIDUAL"?c.recipientUserId:""}))} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"><option value="MEMBER">All Members</option><option value="INDIVIDUAL">One Member</option><option value="FINANCE">Finance team</option><option value="ADMINS">Admins</option><option value="ALL">Everyone</option></select></label>
+      <label className="text-sm font-semibold text-slate-700">Category<select value={form.category} onChange={(e)=>setForm((c)=>({...c,category:e.target.value}))} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"><option value="announcement">Announcement</option><option value="loan">Loan</option><option value="transaction">Transaction</option><option value="deduction">Deduction</option><option value="security">Security</option></select></label>
+      <label className="text-sm font-semibold text-slate-700">Priority<select value={form.severity} onChange={(e)=>setForm((c)=>({...c,severity:e.target.value}))} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"><option value="info">Info</option><option value="success">Success</option><option value="warning">Warning</option><option value="critical">Critical</option></select></label>
+      {form.audience==="INDIVIDUAL"&&<label className="text-sm font-semibold text-slate-700 lg:col-span-3">Member<select required value={form.recipientUserId} onChange={(e)=>setForm((c)=>({...c,recipientUserId:e.target.value}))} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"><option value="">Select member</option>{members.filter((m)=>m.userId).map((m)=><option key={m.userId} value={m.userId}>{m.name || m.id} {m.phone ? `- ${m.phone}` : ""}</option>)}</select></label>}
+      <label className="text-sm font-semibold text-slate-700 lg:col-span-3">Title<input required value={form.title} onChange={(e)=>setForm((c)=>({...c,title:e.target.value}))} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" /></label>
+      <label className="text-sm font-semibold text-slate-700 lg:col-span-3">Message<textarea required value={form.body} onChange={(e)=>setForm((c)=>({...c,body:e.target.value}))} className="mt-1 min-h-28 w-full rounded-lg border px-3 py-2 text-sm" /></label>
+      <div className="flex items-center gap-3 lg:col-span-3"><button disabled={sending} className="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{sending?<RefreshCw className="animate-spin" size={14}/>:<Bell size={14}/>}Send notification</button>{message&&<span className={`text-sm font-semibold ${message.type==="success"?"text-emerald-700":"text-rose-700"}`}>{message.text}</span>}</div>
+    </form>
+    <div className="flex items-center justify-between">
+      <div className="flex gap-2">
+        {[{key:"all",label:"All",count:counts.all,icon:Bell},{key:"LOAN",label:"Loans",count:counts.LOAN,icon:FileText},{key:"TRANSACTION",label:"Transactions",count:counts.TRANSACTION,icon:ReceiptText},{key:"OVERDUE",label:"Overdue",count:counts.OVERDUE,icon:AlertTriangle}].map((tab)=>(<button key={tab.key} type="button" onClick={()=>setNotifTab(tab.key)} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${notifTab===tab.key?"bg-slate-950 text-white":"bg-slate-100 text-slate-700 hover:bg-slate-200"}`}><tab.icon size={14}/>{tab.label} ({tab.count})</button>))}
+      </div>
+      <button onClick={onMarkAllRead} className="rounded-lg border px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Mark all read</button>
+=======
 function LoansPage({ loans, mode = "all", onApproveLoan, onRejectLoan, onDisburseLoan, onReviewLoan, globalSearch = "" }) {
   const [search, setSearch] = useState("");
   const filteredByMode = useMemo(
@@ -276,6 +328,7 @@ function LoansPage({ loans, mode = "all", onApproveLoan, onRejectLoan, onDisburs
         emptyTitle="No loan records found"
         emptyDescription="Loan records for finance processing will appear here."
       />
+>>>>>>> c2f7f6f808e2967142a0b02a26fe674bc218412f
     </div>
     <div className="space-y-3">{filtered.map((n) => (
       <div key={n.id} className={`rounded-lg border p-4 ${n.read ? "bg-white" : "border-rose-200 bg-rose-50"}`}>
@@ -286,6 +339,33 @@ function LoansPage({ loans, mode = "all", onApproveLoan, onRejectLoan, onDisburs
   </div>);
 }
 
+<<<<<<< HEAD
+// ============================================================
+// OVERVIEW
+// ============================================================
+function FinanceHome({ data, stats, globalSearch = "", onVerifyTransaction }) {
+  const navigate = useNavigate();
+  const dashboardBase = getDashboardPath("FINANCE");
+  const transactionSeries = getMonthlySeries(data.transactions);
+  const repaymentSeries = getMonthlySeries(data.transactions.filter((t) => String(t.type||"").toUpperCase().includes("REPAYMENT")));
+  const txCards = [
+    { label: "Daily Transactions", value: stats.dailyTransactions, icon: ReceiptText, tone: "blue", path: "/transactions?period=today" },
+    { label: "Deposits", value: formatCurrency(stats.totalDeposits), icon: TrendingUp, tone: "emerald", path: "/transactions?type=deposit" },
+    { label: "Withdrawals", value: formatCurrency(stats.totalWithdrawals), icon: TrendingDown, tone: "rose", path: "/transactions?type=withdrawal" },
+  ];
+  const loanCards = [
+    { label: "Active Loans", value: stats.activeLoans, icon: Landmark, tone: "blue", path: "/loans?status=active" },
+    { label: "Repayments", value: formatCurrency(stats.loanRepayments), icon: CreditCard, tone: "emerald", path: "/transactions?type=repayment" },
+    { label: "Pending Disburse", value: stats.pendingDisbursements, icon: Banknote, tone: "amber", path: "/loans?status=approved" },
+    { label: "Overdue", value: stats.overdueLoans, icon: AlertTriangle, tone: "rose", path: "/loans?status=overdue" },
+    { label: "Arrears", value: formatCurrency(stats.totalArrears), icon: ShieldAlert, tone: "rose", path: "/loans?status=overdue" },
+  ];
+  return (<div className="space-y-6">
+    <DashboardHero eyebrow="Finance operations" title="Financial control desk" description="Verify payments, manage loans, track deductions, and generate reports."/>
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      {txCards.map((c)=>(<div key={c.label} onClick={()=>navigate(`${dashboardBase}${c.path}`)} className="cursor-pointer"><KpiCard {...c} trend="Live" /></div>))}
+      {loanCards.map((c)=>(<div key={c.label} onClick={()=>navigate(`${dashboardBase}${c.path}`)} className="cursor-pointer"><KpiCard {...c} trend="Live" /></div>))}
+=======
 function SavingsPage({ shares, globalSearch = "" }) {
   const [search, setSearch] = useState("");
   const rows = useMemo(
@@ -317,6 +397,7 @@ function SavingsPage({ shares, globalSearch = "" }) {
         emptyTitle="No contribution records"
         emptyDescription="Savings and share account records will appear here."
       />
+>>>>>>> c2f7f6f808e2967142a0b02a26fe674bc218412f
     </div>
   );
 }
@@ -357,6 +438,51 @@ function DeductionsPage({ deductions, globalSearch = "" }) {
   </div>);
 }
 
+<<<<<<< HEAD
+// ============================================================
+// TRANSACTIONS
+// ============================================================
+function TransactionsPage({ data, embedded = false, onVerifyTransaction, onVoidTransaction, globalSearch = "" }) {
+  const { search: routeSearch } = useLocation();
+  const routeParams = new URLSearchParams(routeSearch);
+  const initialType = routeParams.get("type") || "all";
+  const initialPeriod = routeParams.get("period") || "";
+  const today = new Date().toISOString().slice(0, 10);
+  const [search, setSearch] = useState(""); const [fromDate, setFromDate] = useState(initialPeriod === "today" ? today : ""); const [toDate, setToDate] = useState(initialPeriod === "today" ? today : ""); const [depositFilter, setDepositFilter] = useState(["deposit","withdrawal","repayment","share","savings"].includes(initialType) ? initialType : "all");
+  useEffect(() => {
+    setDepositFilter(["deposit","withdrawal","repayment","share","savings"].includes(initialType) ? initialType : "all");
+    setFromDate(initialPeriod === "today" ? today : "");
+    setToDate(initialPeriod === "today" ? today : "");
+  }, [initialType, initialPeriod, today]);
+  const transactions = data.transactions || [];
+  let filtered = filterRows(filterRows(transactions, globalSearch, ["id","type","description","status","reference"]), search, ["id","type","description","status","reference"]);
+  if (fromDate) filtered = filtered.filter((t) => { const d = t.createdAt||t.date; return d ? new Date(d) >= new Date(fromDate) : true; });
+  if (toDate) filtered = filtered.filter((t) => {
+    const d = t.createdAt||t.date;
+    if (!d) return true;
+    const endDate = new Date(toDate);
+    endDate.setHours(23, 59, 59, 999);
+    return new Date(d) <= endDate;
+  });
+  if (depositFilter === "share") filtered = filtered.filter((t) => { const type = String(t.type||"").toLowerCase(); return type.includes("share")||type.includes("capital"); });
+  if (depositFilter === "savings") filtered = filtered.filter((t) => { const type = String(t.type||"").toLowerCase(); return type.includes("savings")||type.includes("deposit"); });
+  if (depositFilter === "deposit") filtered = filtered.filter((t) => String(t.type||"").toLowerCase().includes("deposit"));
+  if (depositFilter === "withdrawal") filtered = filtered.filter((t) => String(t.type||"").toLowerCase().includes("withdraw"));
+  if (depositFilter === "repayment") filtered = filtered.filter((t) => String(t.type||"").toLowerCase().includes("repayment"));
+  const columns = [
+    { key: "id", label: "Reference", render: (v,r) => r.reference || v || "-", csv: (v,r) => r.reference || v || "-" }, { key: "type", label: "Type" },
+    { key: "amount", label: "Amount", render: (v) => formatCurrency(v), csv: (v) => formatCurrency(v) }, { key: "status", label: "Status", render: (v) => <StatusBadge status={v||"Pending"} />, csv: (v) => v || "Pending" },
+    { key: "description", label: "Description", render: (v) => v||"-", csv: (v) => v || "-" }, { key: "createdAt", label: "Date", render: (v,r) => formatDate(v||r.date), csv: (v,r) => formatDate(v||r.date) },
+  ];
+  const content = (<div className="space-y-4">
+    <div className="flex flex-wrap items-center gap-3">
+      <div className="flex items-center gap-2 text-sm"><span className="font-semibold text-slate-700">Date range:</span>
+        <input type="date" value={fromDate} onChange={(e)=>setFromDate(e.target.value)} className="rounded border px-2 py-1 text-sm" /><span>to</span>
+        <input type="date" value={toDate} onChange={(e)=>setToDate(e.target.value)} className="rounded border px-2 py-1 text-sm" />
+      </div>
+      <select value={depositFilter} onChange={(e)=>setDepositFilter(e.target.value)} className="rounded border px-3 py-1 text-sm"><option value="all">All Transactions</option><option value="deposit">Deposits</option><option value="withdrawal">Withdrawals</option><option value="repayment">Repayments</option><option value="share">Share Capital</option><option value="savings">Savings Only</option></select>
+      <button onClick={() => exportToCSV(filtered, columns, "transactions.csv")} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold hover:bg-slate-50"><Download size={14} />Export CSV</button>
+=======
 function DividendsPage({ dividends, onReviewDividend, globalSearch = "" }) {
   const [search, setSearch] = useState("");
   const rows = useMemo(
@@ -388,6 +514,7 @@ function DividendsPage({ dividends, onReviewDividend, globalSearch = "" }) {
         emptyTitle="No dividends found"
         emptyDescription="Dividend declarations will appear here when available."
       />
+>>>>>>> c2f7f6f808e2967142a0b02a26fe674bc218412f
     </div>
     <DataTable title={embedded?"Recent transactions":"Transaction processing"} description="Verify deposits, withdrawals, fees, disbursements, repayments, and dividend transactions" search={search} onSearch={setSearch}
       columns={[...columns, { key: "id", label: "Action", render: (v,r) => (<div className="flex gap-2"><button onClick={()=>onVerifyTransaction?.(v)} className="text-sm font-semibold text-emerald-700">Verify</button>{onVoidTransaction?<button onClick={()=>onVoidTransaction(v,r)} className="text-sm font-semibold text-rose-700">Void</button>:null}</div>)}]}
@@ -397,6 +524,61 @@ function DividendsPage({ dividends, onReviewDividend, globalSearch = "" }) {
   return (<div className="space-y-6"><SectionHeader eyebrow="Transactions" title="Transaction processing" description="Verify, filter by date range, classify deposits, and export data." />{content}</div>);
 }
 
+<<<<<<< HEAD
+// ============================================================
+// UNIFIED LOAN MANAGEMENT
+// ============================================================
+function UnifiedLoansPage({ loans, onApproveLoan, onRejectLoan, onDisburseLoan, onWriteOffLoan, globalSearch = "" }) {
+  const { search: routeSearch } = useLocation();
+  const initialStatus = new URLSearchParams(routeSearch).get("status") || "all";
+  const [loanTab, setLoanTab] = useState(initialStatus); const [search, setSearch] = useState(""); const [showAmortization, setShowAmortization] = useState(null);
+  const queueMap = {
+    all: { label: "All Loans", filter: () => true, icon: Landmark }, pending: { label: "Pending", filter: (l) => String(l.status||"").toUpperCase()==="PENDING", icon: Clock3 },
+    approved: { label: "Approved", filter: (l) => String(l.status||"").toUpperCase()==="APPROVED", icon: CheckCircle2 },
+    active: { label: "Active/Disbursed", filter: (l) => ["ACTIVE","DISBURSED"].includes(String(l.status||"").toUpperCase()), icon: TrendingUp },
+    overdue: { label: "Overdue", filter: (l) => String(l.status||"").toUpperCase()==="OVERDUE", icon: AlertTriangle },
+    rejected: { label: "Rejected", filter: (l) => String(l.status||"").toUpperCase()==="REJECTED", icon: XCircle },
+    writtenOff: { label: "Written Off", filter: (l) => String(l.status||"").toUpperCase()==="WRITTEN_OFF", icon: FileText },
+  };
+  const queue = queueMap[loanTab] || queueMap.all;
+  useEffect(() => { setLoanTab(queueMap[initialStatus] ? initialStatus : "all"); }, [initialStatus]);
+  const filtered = filterRows(filterRows(loans.filter(queue.filter), globalSearch, ["id","type","member","memberName","memberId","status"]), search, ["id","type","member","memberName","memberId","status"]);
+  const totalDisbursed = loans.filter((l) => ["DISBURSED","ACTIVE","OVERDUE"].includes(String(l.status||"").toUpperCase())).reduce((s,l) => s+Number(l.principal||0),0);
+  const totalRepaid = loans.reduce((s,l)=>s+Number(l.paid||0),0);
+  const loanColumns = [
+    { key: "member", label: "Member", render: (v,r) => v||r.memberName||"-", csv: (v,r) => v||r.memberName||"-" }, { key: "type", label: "Type" },
+    { key: "principal", label: "Principal", render: (v) => formatCurrency(v), csv: (v) => formatCurrency(v) }, { key: "balance", label: "Balance", render: (v) => formatCurrency(v||0), csv: (v) => formatCurrency(v||0) },
+    { key: "nextPayment", label: "Next Payment", render: (v) => v?formatCurrency(v):"-", csv: (v) => v?formatCurrency(v):"-" }, { key: "status", label: "Status", render: (v) => <StatusBadge status={v||"Pending"} />, csv: (v) => v || "Pending" },
+    { key: "disbursedDate", label: "Disbursed", render: (v) => formatDateSafe(v), csv: (v) => formatDateSafe(v) },
+  ];
+  return (<div className="space-y-6">
+    <SectionHeader eyebrow="Loan Management" title="Unified loan control center" description="Full lifecycle management with amortization, arrears, and product revenue." />
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+      <KpiCard label="Disbursed" value={formatCurrency(totalDisbursed)} icon={Banknote} tone="blue" /><KpiCard label="Repaid" value={formatCurrency(totalRepaid)} icon={CreditCard} tone="emerald" />
+      <KpiCard label="Active" value={loans.filter((l)=>["ACTIVE","DISBURSED"].includes(String(l.status||"").toUpperCase())).length} icon={Landmark} tone="blue" />
+      <KpiCard label="Overdue" value={loans.filter((l)=>String(l.status||"").toUpperCase()==="OVERDUE").length} icon={AlertTriangle} tone="rose" />
+      <KpiCard label="Rate" value={`${Math.round((totalRepaid/Math.max(totalDisbursed,1))*100)}%`} icon={TrendingUp} tone="emerald" />
+      <KpiCard label="Arrears" value={formatCurrency(loans.reduce((s,l)=>s+Number(l.arrears||0),0))} icon={ShieldAlert} tone="rose" />
+    </div>
+    <div className="flex flex-wrap gap-2">{Object.entries(queueMap).map(([k,q])=>(<button key={k} onClick={()=>setLoanTab(k)} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${loanTab===k?"bg-slate-950 text-white":"bg-slate-100 text-slate-700 hover:bg-slate-200"}`}><q.icon size={14}/>{q.label} ({loans.filter(q.filter).length})</button>))}</div>
+    <DataTable title={`${queue.label} (${filtered.length})`} description="Loan lifecycle tracking" search={search} onSearch={setSearch}
+      columns={[...loanColumns, { key: "id", label: "Actions", render: (v,r) => { const s = String(r.status||"").toUpperCase();
+        return (<div className="flex flex-wrap gap-1">
+          {s==="PENDING"&&<><button onClick={()=>onApproveLoan?.(v)} className="text-xs font-semibold text-emerald-700">Approve</button><button onClick={()=>onRejectLoan?.(v)} className="text-xs font-semibold text-rose-700">Reject</button></>}
+          {s==="APPROVED"&&<button onClick={()=>onDisburseLoan?.(v)} className="text-xs font-semibold text-sky-700">Disburse</button>}
+          {(s==="ACTIVE"||s==="DISBURSED")&&<button onClick={()=>setShowAmortization(r)} className="text-xs font-semibold text-sky-700">Schedule</button>}
+          {s==="OVERDUE"&&<button onClick={()=>onWriteOffLoan?.(v)} className="text-xs font-semibold text-rose-700">Write Off</button>}
+        </div>);}}]}
+      data={filtered} emptyTitle="No loans" />
+    <button onClick={() => exportToCSV(filtered, loanColumns, "loans.csv")} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold hover:bg-slate-50"><Download size={14} />Export CSV</button>
+    {showAmortization ? <AmortizationPanel loan={showAmortization} onClose={()=>setShowAmortization(null)} /> : null}
+    <div className="rounded-lg border border-rose-200 bg-rose-50 p-5">
+      <div className="flex items-center gap-3"><ShieldAlert size={20} className="text-rose-700" /><h5 className="text-base font-semibold text-rose-900">Arrears & Risk</h5></div>
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <div className="rounded-lg bg-white p-4"><p className="text-xs text-slate-500">Total Arrears</p><p className="mt-1 text-xl font-semibold text-rose-700">{formatCurrency(loans.reduce((s,l)=>s+Number(l.arrears||0),0))}</p></div>
+        <div className="rounded-lg bg-white p-4"><p className="text-xs text-slate-500">Penalties</p><p className="mt-1 text-xl font-semibold text-rose-700">{formatCurrency(loans.filter((l)=>String(l.status||"").toUpperCase()==="OVERDUE").reduce((s,l)=>s+Number(l.balance||0)*0.02,0))}</p></div>
+        <div className="rounded-lg bg-white p-4"><p className="text-xs text-slate-500">In Default</p><p className="mt-1 text-xl font-semibold text-rose-700">{loans.filter((l)=>String(l.status||"").toUpperCase()==="OVERDUE").length}</p></div>
+=======
 function ReportsPage({ data }) {
   const exportReport = (filename) => {
     exportRowsToCsv({
@@ -438,6 +620,7 @@ function ReportsPage({ data }) {
         <AnalyticsPanel title="Dividend distribution" data={getMonthlySeries(data.dividends, (item) => item.amount)} color="#0369a1" />
         <AnalyticsPanel title="Loan repayments" data={getMonthlySeries(data.transactions.filter((item) => String(item.type || "").toUpperCase().includes("REPAYMENT")))} color="#047857" />
         <AnalyticsPanel title="Savings reports" data={getMonthlySeries(data.shares, (item) => item.totalInvested || item.shares)} color="#b45309" />
+>>>>>>> c2f7f6f808e2967142a0b02a26fe674bc218412f
       </div>
     </div>
   </div>);
@@ -461,6 +644,39 @@ export default function FinanceDashboard() {
     deductions: [],
   });
 
+<<<<<<< HEAD
+// ============================================================
+// SALARY DEDUCTION PAGE
+// ============================================================
+function SalaryDeductionPage({ data, accessToken, onRefresh }) {
+  const { companies = MOCK_COMPANIES, members = MOCK_MEMBERS_PROFILE } = data;
+  const [selectedCompany, setSelectedCompany] = useState("all"); const [editingDeduction, setEditingDeduction] = useState(null);
+  const [showAddCompany, setShowAddCompany] = useState(false); const [showAddMember, setShowAddMember] = useState(false);
+  const companyMembers = selectedCompany === "all" ? members : members.filter((m) => m.company === selectedCompany);
+  const unassociated = members.filter((m) => !m.company);
+  const displayedMembers = selectedCompany === "unassociated" ? unassociated : companyMembers;
+  const deductionColumns = [
+    { key: "name", label: "Member" },
+    { key: "company", label: "Company", csv: (v) => v || "-" },
+    { key: "salary", label: "Salary", csv: (v) => v ? formatCurrency(v) : "-" },
+    { key: "deduction", label: "Deduction", csv: (v) => v ? formatCurrency(v) : "-" },
+    { key: "savings", label: "Savings", csv: (v) => formatCurrency(v || 0) },
+    { key: "status", label: "Status", csv: (v) => v || "Active" },
+  ];
+  return (<div className="space-y-6">
+    <SectionHeader eyebrow="Salary deductions" title="Deduction & Company Linkage" description="Filter by company, manage deductions, add companies, and add members." action={<div className="flex gap-2">
+      <button onClick={() => setShowAddCompany(true)} className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white"><Building2 size={14} />Add Company</button>
+      <button onClick={() => setShowAddMember(true)} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"><Plus size={14} />Add Member</button>
+      <button onClick={() => exportToCSV(displayedMembers, deductionColumns, "deductions.csv")} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold"><Download size={14} />Export</button>
+    </div>} />
+    <div className="grid gap-4 md:grid-cols-4">{companies.slice(0,4).map((c) => (<button key={c.id} onClick={() => setSelectedCompany(selectedCompany===c.name?"all":c.name)} className={`rounded-lg border p-4 text-left transition ${selectedCompany===c.name?"border-sky-400 bg-sky-50 ring-2 ring-sky-200":"border-slate-200 bg-white hover:border-sky-200"}`}><Building2 size={20} className="text-[#8cc63f]" /><p className="mt-2 font-semibold">{c.name}</p><p className="mt-1 text-xs text-slate-500">{c.employees} employees · {formatCurrency(c.totalDeductions)}</p></button>))}</div>
+    <div className="flex gap-2"><button onClick={()=>setSelectedCompany("all")} className={`rounded-full px-4 py-2 text-sm font-semibold ${selectedCompany==="all"?"bg-slate-950 text-white":"bg-slate-100 text-slate-700"}`}>All ({companyMembers.length})</button><button onClick={()=>setSelectedCompany("unassociated")} className={`rounded-full px-4 py-2 text-sm font-semibold ${selectedCompany==="unassociated"?"bg-slate-950 text-white":"bg-slate-100 text-slate-700"}`}>Unassociated ({unassociated.length})</button></div>
+    <div className="overflow-x-auto rounded-lg border"><table className="min-w-full"><thead><tr className="bg-slate-50">{["Member","Company","Salary","Deduction","Savings","Status","Edit"].map(h=><th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{displayedMembers.map((m,i)=>(<tr key={m.id||i} className="hover:bg-slate-50"><td className="px-4 py-3 text-sm font-semibold">{m.name}</td><td className="px-4 py-3 text-sm">{m.company||"—"}</td><td className="px-4 py-3 text-sm">{m.salary?formatCurrency(m.salary):"—"}</td><td className="px-4 py-3 text-sm">{editingDeduction===m.id?<input type="number" defaultValue={m.deduction} className="w-24 rounded border px-2 py-1 text-sm" onBlur={(e)=>{m.deduction=Number(e.target.value);setEditingDeduction(null);}}/>:<span>{m.deduction?formatCurrency(m.deduction):"—"}</span>}</td><td className="px-4 py-3 text-sm">{formatCurrency(m.savings||0)}</td><td className="px-4 py-3 text-sm"><StatusBadge status={m.status||"Active"}/></td><td className="px-4 py-3 text-sm"><button onClick={()=>setEditingDeduction(m.id)} className="text-xs font-semibold text-sky-700">Edit</button></td></tr>))}</tbody></table></div>
+    {showAddCompany && <AddCompanyModal onClose={()=>setShowAddCompany(false)} onSubmit={(c)=>{companies.push({id:"c"+(companies.length+1),...c,employees:0,totalDeductions:0,status:"Active"});setShowAddCompany(false);}} />}
+    {showAddMember && <AddMemberModal companies={companies} onClose={()=>setShowAddMember(false)} onSubmit={(m)=>{members.push({id:"M00"+(members.length+1),...m,risk:"Low",status:"Active",savings:0,loans:0,shares:0});setShowAddMember(false);}} />}
+  </div>);
+}
+=======
   async function loadDashboardData({ showLoading = true } = {}) {
     if (!accessToken) {
       setLoading(false);
@@ -487,6 +703,7 @@ export default function FinanceDashboard() {
     });
     setLoading(false);
   }
+>>>>>>> c2f7f6f808e2967142a0b02a26fe674bc218412f
 
 function AddCompanyModal({ onClose, onSubmit }) {
   const [form, setForm] = useState({ name: "", registrationNumber: "", contactEmail: "", contactPhone: "" });
@@ -739,3 +956,4 @@ function FinancialReportsPage({ data }) {
 function FinancierSecuritySection({ user, accessToken }) {
   return <FinancierProfileSettings user={user} accessToken={accessToken} />;
 }
+

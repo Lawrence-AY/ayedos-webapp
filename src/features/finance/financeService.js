@@ -282,3 +282,14 @@ export async function getRepaymentPerformance(accessToken, filters = {}) {
   if (!res.ok) throw new Error(res.json?.message || 'Failed to fetch repayment performance')
   return unwrapEnvelopeData(res.json)
 }
+
+export async function sendFinanceNotification(data, accessToken) {
+  const res = await apiRequest('/api/notifications/send', {
+    method: 'POST',
+    accessToken,
+    body: data,
+    cache: false,
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to send notification')
+  return unwrapEnvelopeData(res.json)
+}
