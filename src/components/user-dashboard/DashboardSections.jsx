@@ -19,7 +19,6 @@ import {
   Landmark,
   LogOut,
   LockKeyhole,
-  LogOut,
   MailCheck,
   MapPin,
   MonitorSmartphone,
@@ -68,7 +67,6 @@ import {
   applyForLoan,
   emailMemberReport,
   repayLoan,
-  requestMemberOptOut,
 } from "../../features/member/memberService.js";
 import {
   changePassword,
