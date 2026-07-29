@@ -1,10 +1,10 @@
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
-  AlertTriangle, Banknote, Bell, BriefcaseBusiness, Building2, Camera, CheckCircle2,
-  Clock3, CreditCard, Download, FileText, Filter, KeyRound, Landmark, LockKeyhole,
-  PieChart, Plus, ReceiptText, RefreshCw, Search, ShieldAlert,
-  TrendingDown, TrendingUp, UserRound, UsersRound, X, XCircle,
+  AlertTriangle, Banknote, Bell, Building2, Camera, CheckCircle2,
+  Clock3, CreditCard, Download, FileText, Landmark, LockKeyhole,
+  Plus, ReceiptText, RefreshCw, Search, ShieldAlert,
+  TrendingDown, TrendingUp, UserRound, X, XCircle,
 } from "lucide-react";
 import { AuthContext } from "../context/AuthContext.jsx";
 import Sidebar from "../components/layout/Sidebar.jsx";
@@ -135,7 +135,7 @@ export default function FinanceDashboard() {
 
   const [data, setData] = useState({ transactions:[], loans:[], shares:[], deductions:[], dividends:[], members:[], companies:[], reports:{} });
 
-  async function loadAllData({ showLoading = true } = {}) {
+  const loadAllData = useCallback(async ({ showLoading = true } = {}) => {
     if (!accessToken) { setLoading(false); return; }
     if (showLoading) setLoading(true);
     const results = await Promise.allSettled([
@@ -154,10 +154,10 @@ export default function FinanceDashboard() {
       reports: results[7].status==="fulfilled"?results[7].value:{},
     });
     setLoading(false);
-  }
+  }, [accessToken]);
 
-  useEffect(() => { loadAllData(); }, [accessToken]);
-  useEffect(() => { const interval = setInterval(() => loadAllData({ showLoading: false }), 5 * 60 * 1000); return () => clearInterval(interval); }, [accessToken]);
+  useEffect(() => { loadAllData(); }, [loadAllData]);
+  useEffect(() => { const interval = setInterval(() => loadAllData({ showLoading: false }), 5 * 60 * 1000); return () => clearInterval(interval); }, [loadAllData]);
 
   const stats = useMemo(() => getFinanceStats(data), [data]);
   function markAllNotificationsRead() { setNotifications((prev) => prev.map((n) => ({ ...n, read: true }))); }
@@ -352,16 +352,16 @@ function UnifiedLoansPage({ loans, onApproveLoan, onRejectLoan, onDisburseLoan, 
   const { search: routeSearch } = useLocation();
   const initialStatus = new URLSearchParams(routeSearch).get("status") || "all";
   const [loanTab, setLoanTab] = useState(initialStatus); const [search, setSearch] = useState(""); const [showAmortization, setShowAmortization] = useState(null);
-  const queueMap = {
+  const queueMap = useMemo(() => ({
     all: { label: "All Loans", filter: () => true, icon: Landmark }, pending: { label: "Pending", filter: (l) => String(l.status||"").toUpperCase()==="PENDING", icon: Clock3 },
     approved: { label: "Approved", filter: (l) => String(l.status||"").toUpperCase()==="APPROVED", icon: CheckCircle2 },
     active: { label: "Active/Disbursed", filter: (l) => ["ACTIVE","DISBURSED"].includes(String(l.status||"").toUpperCase()), icon: TrendingUp },
     overdue: { label: "Overdue", filter: (l) => String(l.status||"").toUpperCase()==="OVERDUE", icon: AlertTriangle },
     rejected: { label: "Rejected", filter: (l) => String(l.status||"").toUpperCase()==="REJECTED", icon: XCircle },
     writtenOff: { label: "Written Off", filter: (l) => String(l.status||"").toUpperCase()==="WRITTEN_OFF", icon: FileText },
-  };
+  }), []);
   const queue = queueMap[loanTab] || queueMap.all;
-  useEffect(() => { setLoanTab(queueMap[initialStatus] ? initialStatus : "all"); }, [initialStatus]);
+  useEffect(() => { setLoanTab(queueMap[initialStatus] ? initialStatus : "all"); }, [initialStatus, queueMap]);
   const filtered = filterRows(filterRows(loans.filter(queue.filter), globalSearch, ["id","type","member","memberName","memberId","status"]), search, ["id","type","member","memberName","memberId","status"]);
   const totalDisbursed = loans.filter((l) => ["DISBURSED","ACTIVE","OVERDUE"].includes(String(l.status||"").toUpperCase())).reduce((s,l) => s+Number(l.principal||0),0);
   const totalRepaid = loans.reduce((s,l)=>s+Number(l.paid||0),0);
@@ -473,7 +473,7 @@ function MemberProfileDetail({ member, onBack }) {
 // ============================================================
 function FinancialReportsPage({ data }) {
   const [timeFilter, setTimeFilter] = useState("monthly");
-  const transactions = data.transactions || [];
+  const transactions = useMemo(() => data.transactions || [], [data.transactions]);
   const loans = data.loans || MOCK_LOANS_QUEUE;
 
   const timeSeries = useMemo(() => {
@@ -579,7 +579,6 @@ function FinancierProfileSettings({ user, stats, accessToken }) {
   const [message, setMessage] = useState(null);
   const [pwMessage, setPwMessage] = useState(null);
   const [profileImage, setProfileImage] = useState(user?.passportPhotoUrl || null);
-  const [imageFile, setImageFile] = useState(null);
 
   function handleImageSelect(e) {
     const file = e.target.files?.[0];
@@ -587,7 +586,6 @@ function FinancierProfileSettings({ user, stats, accessToken }) {
     if (file.size > 1.5 * 1024 * 1024) { setMessage({ type: "error", text: "Image must be under 1.5 MB." }); return; }
     const preview = URL.createObjectURL(file);
     setProfileImage((prev) => { if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev); return preview; });
-    setImageFile(file);
   }
 
   async function handleSaveProfile(e) {
@@ -644,9 +642,5 @@ function FinancierProfileSettings({ user, stats, accessToken }) {
       <button disabled={pwSaving} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white"><LockKeyhole size={17}/>{pwSaving?"Updating...":"Update password"}</button>
     </form>
   </div>);
-}
-
-function FinancierSecuritySection({ user, accessToken }) {
-  return <FinancierProfileSettings user={user} accessToken={accessToken} />;
 }
 

@@ -14,9 +14,7 @@ import {
   Settings,
   Shield,
   TrendingUp,
-  UserRound,
   UsersRound,
-  WalletCards,
   X,
 } from "lucide-react";
 import { AuthContext } from "../../context/AuthContext.jsx";

@@ -31,7 +31,6 @@ import {
   ShieldCheck,
   Smartphone,
   TrendingUp,
-  UserPlus,
   UserRound,
   UsersRound,
   WalletCards,
@@ -1143,12 +1142,6 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated }) {
   const [alert, setAlert] = useState(null);
   const [preview, setPreview] = useState(user?.passportPhotoUrl || null);
   const [photoFile, setPhotoFile] = useState(null);
-  const [optOutForm, setOptOutForm] = useState({
-    reason: "",
-    buyerMemberNumber: "",
-    acknowledgedTerms: false,
-  });
-  const [submittingOptOut, setSubmittingOptOut] = useState(false);
   useEffect(() => {
     setForm(buildProfileForm(user));
     setPreview(user?.passportPhotoUrl || null);
@@ -1171,11 +1164,6 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated }) {
   const maskedNationalId = form.nationalId
     ? maskNationalId(form.nationalId)
     : "—";
-  const shareCapital = Number(stats.shareCapital || 0);
-  const savingsWithdrawal = Number(stats.totalSavings || 0);
-  const saccoShareFee = shareCapital * 0.01;
-  const auctionAmount = Math.max(shareCapital - saccoShareFee, 0);
-
   function update(event) {
     setForm((current) => ({
       ...current,
@@ -1329,46 +1317,6 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated }) {
       });
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function handleOptOutSubmit(event) {
-    event.preventDefault();
-    if (!optOutForm.acknowledgedTerms) {
-      setAlert({
-        type: "error",
-        message: "Please acknowledge the opt-out terms before submitting.",
-      });
-      return;
-    }
-
-    setSubmittingOptOut(true);
-    try {
-      await requestMemberOptOut(
-        {
-          reason: optOutForm.reason,
-          buyerMemberNumber: optOutForm.buyerMemberNumber,
-          acknowledgedTerms: optOutForm.acknowledgedTerms,
-        },
-        accessToken,
-      );
-      setOptOutForm({
-        reason: "",
-        buyerMemberNumber: "",
-        acknowledgedTerms: false,
-      });
-      setAlert({
-        type: "success",
-        message:
-          "Opt-out request submitted successfully. The SACCO team will review your savings withdrawal and share capital auction details.",
-      });
-    } catch (error) {
-      setAlert({
-        type: "error",
-        message: error?.message || "Failed to submit opt-out request.",
-      });
-    } finally {
-      setSubmittingOptOut(false);
     }
   }
 
@@ -2543,13 +2491,6 @@ const SACCO_UTILIZATION_ALLOCATIONS = [
   },
 ];
 
-const SACCO_IMPACT_METRICS = [
-  { label: "Members financed", value: "126", helper: "Across emergency, welfare, education, and development loans." },
-  { label: "Average approval time", value: "2.4 days", helper: "For complete applications with verified member details." },
-  { label: "Portfolio yield", value: "11.8%", helper: "Estimated annual return from lending and low-risk placements." },
-  { label: "Reserve coverage", value: "4.6 months", helper: "Operating runway held for liquidity and member protection." },
-];
-
 const SACCO_PROJECTS = [
   { title: "Education loan cycle", amount: 2100000, status: "Disbursed", date: "May 2026", progress: 82 },
   { title: "Member emergency advances", amount: 1450000, status: "Revolving", date: "May 2026", progress: 64 },
@@ -2596,7 +2537,6 @@ function DividendProjection({ stats, showValues }) {
 }
 
 function PortfolioPage({ stats, transactions, shares, search, user, showValues, onToggleValues }) {
-  const filteredTransactions = transactions.filter((transaction) => matchesSearch(transaction, search));
   const activeShareRecords = shares.filter((share) => matchesSearch(share, search)).length;
   const pooledFunds = SACCO_UTILIZATION_ALLOCATIONS.reduce((sum, item) => sum + item.amount, 0);
   const allocationChartData = SACCO_UTILIZATION_ALLOCATIONS.map((item) => ({
@@ -3381,35 +3321,6 @@ async function apiListingCreate({ memberId, amount, accessToken }) {
   });
   if (!res.ok) throw new Error(res.json?.message || "Failed to create listing");
   return unwrapEnvelopeData(res.json);
-}
-
-function ShareCapitalTransfer({ stats, accessToken }) {
-  const [form, setForm] = useState({ recipientId: "", amount: "" });
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState(null);
-  const maxTransfer = Math.min(Number(stats.shareCapital || 0), Number(stats.shareCapital || 0));
-
-  async function handleTransfer(e) {
-    e.preventDefault();
-    const amount = Number(form.amount);
-    if (!form.recipientId.trim()) { setMsg({ type: "error", text: "Enter a valid recipient Membership ID." }); return; }
-    if (!amount || amount <= 0) { setMsg({ type: "error", text: "Enter a valid amount to transfer." }); return; }
-    if (amount > maxTransfer) { setMsg({ type: "error", text: `Cannot transfer more than your share capital (${formatCurrency(maxTransfer)}).` }); return; }
-    setSaving(true); setMsg(null);
-    try { await new Promise(r => setTimeout(r, 1200)); setMsg({ type: "success", text: `Transfer of ${formatCurrency(amount)} to ${form.recipientId} initiated. Ledger type: SHARE_CAPITAL_TRANSFER.` }); setForm({ recipientId: "", amount: "" }); }
-    catch (err) { setMsg({ type: "error", text: err.message }); }
-    finally { setSaving(false); }
-  }
-
-  return (<Surface className="p-5">
-    <div className="mb-4"><h5 className="text-base font-semibold text-slate-950">Transfer Share Capital</h5><p className="text-sm text-slate-500">Non-refundable share capital can be transferred to another active member.</p></div>
-    {msg && <div className={`mb-4 rounded-lg border px-4 py-3 text-sm font-medium ${msg.type==="success"?"border-emerald-200 bg-emerald-50 text-emerald-800":"border-rose-200 bg-rose-50 text-rose-800"}`}>{msg.text}</div>}
-    <form onSubmit={handleTransfer} className="grid gap-4">
-      <label className="block text-sm font-semibold text-slate-700">Recipient Membership ID<input value={form.recipientId} onChange={e=>setForm(f=>({...f,recipientId:e.target.value}))} className="mt-1 w-full rounded-lg border px-3.5 py-3 text-sm" placeholder="e.g. M001"/></label>
-      <label className="block text-sm font-semibold text-slate-700">Amount (KES) <span className="text-xs font-normal text-slate-400">Max: {formatCurrency(maxTransfer)}</span><input type="number" value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))} className="mt-1 w-full rounded-lg border px-3.5 py-3 text-sm" placeholder="Amount to transfer"/></label>
-      <button type="submit" disabled={saving} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-sky-600 px-5 py-3 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60">{saving?<RefreshCw className="animate-spin" size={17}/>:<Send size={17}/>}{saving?"Processing...":"Transfer shares"}</button>
-    </form>
-  </Surface>);
 }
 
 export {

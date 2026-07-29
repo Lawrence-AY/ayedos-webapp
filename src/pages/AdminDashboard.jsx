@@ -1,28 +1,26 @@
-import { useContext, useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import {
-  AlertTriangle, BadgeCheck, Bell, BriefcaseBusiness, Camera, CheckCircle2,
-  Clock3, CreditCard, Download, FileText, Filter, KeyRound, Landmark, LockKeyhole,
-  PieChart, ReceiptText, RefreshCw, Search, Send, Settings, ShieldAlert, TrendingUp,
-  UserRound, UsersRound, WalletCards, XCircle, LogOut,
+  Camera, CheckCircle2,
+  Clock3, Download, FileText, LockKeyhole,
+  RefreshCw, Search, Send, ShieldAlert,
+  UserRound, UsersRound, LogOut,
 } from "lucide-react";
 import { AuthContext } from "../context/AuthContext.jsx";
 import Sidebar from "../components/layout/Sidebar.jsx";
 import TopNavbar from "../components/layout/TopNavbar.jsx";
-import { getDashboardPath } from "../utils/dashboardRoutes.js";
 import { changePassword } from "../services/authService.js";
-import { uploadProfilePhoto } from "../lib/supabaseStorage.js";
 import {
-  getAllUsers, getAllApplications, getSystemStats, reviewApplication, toggleUserStatus,
-  getArchivedMembers, getMemberFinancialProfile, getAdminNotifications,
+  getAllUsers, getAllApplications, getSystemStats, reviewApplication,
+  getArchivedMembers,
   sendGlobalBroadcast, sendDirectNotification, getAuditLogs, updateAdminProfile,
 } from "../features/admin/adminService.js";
 import {
   getAllTransactions, getAllLoans, getAllShares, getAllDividends, getAllDeductions,
 } from "../features/finance/financeService.js";
 import {
-  AnalyticsPanel, DataTable, DashboardHero, KpiCard, SectionHeader,
-  SkeletonDashboard, StatusBadge, formatCurrency, formatDate, getMonthlySeries,
+  AnalyticsPanel, DashboardHero, KpiCard, SectionHeader,
+  SkeletonDashboard, StatusBadge, formatCurrency,
 } from "../components/dashboard/EnterpriseDashboard.jsx";
 
 function filterRows(rows, search, keys) {
@@ -72,7 +70,6 @@ const MOCK_ADMIN_NOTIFICATIONS = [
 
 export default function AdminDashboard() {
   const location = useLocation();
-  const navigate = useNavigate();
   const { user, accessToken } = useContext(AuthContext);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -81,7 +78,7 @@ export default function AdminDashboard() {
   const [notifications, setNotifications] = useState(MOCK_ADMIN_NOTIFICATIONS);
   const unreadCount = notifications.filter((n) => !n.read).length;
 
-  const path = location.pathname; const db = getDashboardPath("ADMIN");
+  const path = location.pathname;
   let section = "home";
   if (path.includes("/members")) section = "members";
   else if (path.includes("/loans")) section = "loans";
@@ -95,7 +92,7 @@ export default function AdminDashboard() {
 
   const [data, setData] = useState({ users: [], applications: [], stats: {}, archived: [], transactions: [], loans: [], shares: [], dividends: [], deductions: [], auditLogs: [] });
 
-  async function loadData({ showLoading = true } = {}) {
+  const loadData = useCallback(async ({ showLoading = true } = {}) => {
     if (!accessToken) { setLoading(false); return; }
     if (showLoading) setLoading(true);
     const r = await Promise.allSettled([
@@ -117,9 +114,9 @@ export default function AdminDashboard() {
       auditLogs: r[9].status === "fulfilled" && Array.isArray(r[9].value) ? r[9].value : MOCK_AUDIT_LOGS,
     });
     setLoading(false);
-  }
-  useEffect(() => { loadData(); }, [accessToken]);
-  useEffect(() => { const iv = setInterval(() => loadData({ showLoading: false }), 30000); return () => clearInterval(iv); }, [accessToken]);
+  }, [accessToken]);
+  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { const iv = setInterval(() => loadData({ showLoading: false }), 30000); return () => clearInterval(iv); }, [loadData]);
 
   function markAllRead() { setNotifications((p) => p.map((n) => ({ ...n, read: true }))); }
 
@@ -366,8 +363,8 @@ function AdminAuditLogs({ data }) {
 // ============================================================
 function AdminReportsPage({ data }) {
   const [timeFilter, setTimeFilter] = useState("monthly");
-  const transactions = data.transactions || [];
   const timeSeries = useMemo(() => {
+    const transactions = data.transactions || [];
     const series = {};
     const formatKey = (d) => {
       if (timeFilter === "daily") return d.toISOString().split("T")[0];
@@ -387,7 +384,7 @@ function AdminReportsPage({ data }) {
       series[key].count++;
     });
     return Object.entries(series).sort(([a], [b]) => a.localeCompare(b)).slice(-30).map(([label, vals]) => ({ label, ...vals }));
-  }, [transactions, timeFilter]);
+  }, [data.transactions, timeFilter]);
 
   const reportColumns = [{ key: "label", label: "Period" },{ key: "deposits", label: "Deposits", render: (v) => formatCurrency(v) },{ key: "withdrawals", label: "Withdrawals", render: (v) => formatCurrency(v) },{ key: "repayments", label: "Repayments", render: (v) => formatCurrency(v) },{ key: "disbursements", label: "Disbursements", render: (v) => formatCurrency(v) },{ key: "count", label: "Count" }];
 
