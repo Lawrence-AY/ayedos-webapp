@@ -56,7 +56,7 @@ export async function getSystemStats(accessToken) {
 
 // Member financial profile (read-only aggregate for admin drill-down)
 export async function getMemberFinancialProfile(memberId, accessToken) {
-  const res = await apiRequest(`/api/admin/members/${memberId}/full-profile`, { method: 'GET', accessToken })
+  const res = await apiRequest(`/api/finance/members/${memberId}/profile`, { method: 'GET', accessToken })
   if (!res.ok) throw new Error(res.json?.message || 'Failed to fetch member profile')
   return unwrapEnvelopeData(res.json)
 }

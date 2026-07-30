@@ -1119,6 +1119,11 @@ function buildProfileForm(profile = {}) {
 }
 
 function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated }) {
+  const memberNumber =
+    user?.memberNumber ||
+    user?.Member?.memberNumber ||
+    user?.member?.memberNumber ||
+    "";
   const [form, setForm] = useState(() => ({
     ...emptyProfile,
     fullName: user?.name || user?.fullName || "",
@@ -1429,6 +1434,13 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated }) {
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="text-sm font-medium">Member Number</label>
+              <p className="mt-1 font-mono text-sm font-semibold text-foreground">
+                {memberNumber || "Not assigned"}
+              </p>
+            </div>
+
             {/* Full Name */}
             <div>
               <label className="text-sm font-medium">Full Name</label>
@@ -1978,6 +1990,8 @@ function SecuritySection({
 }
 
 function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues }) {
+  const isLoanEligible = Number(stats.shareCapital || 0) >= MIN_SHARE_CAPITAL;
+  const loanEligibilityMessage = "You are not yet eligible to apply for a loan. Please complete the minimum required share capital purchase before submitting a loan application.";
   const [loanForm, setLoanForm] = useState({ type: "EMERGENCY", amount: "10000", duration: "12" });
   const [repayAmount, setRepayAmount] = useState("");
   const [message, setMessage] = useState(null);
@@ -2019,6 +2033,7 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
 
   async function requestLoan(event) {
     event.preventDefault();
+    if (!isLoanEligible) { setMessage({ type: "error", text: loanEligibilityMessage }); return; }
     if (requestedAmount <= 0) { setMessage({ type: "error", text: "Enter a valid loan amount." }); return; }
     if (!selectedProduct) { setMessage({ type: "error", text: "Select a valid loan product." }); return; }
     if (selectedProduct.requiresFullShareCapital && stats.shareCapitalRemaining > 0) { setMessage({ type: "error", text: "Minimum share capital must be fully paid." }); return; }
@@ -2033,13 +2048,25 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
 
   function submitRepayment(event) { event.preventDefault(); repayLoan(selectedRepayLoanId, repayAmount, accessToken).then(async () => { setMessage({ type: "success", text: "Loan repayment recorded." }); setRepayAmount(""); await onRefresh?.(); }).catch((error) => setMessage({ type: "error", text: error?.message || "Failed." })); }
 
-  const scrollToApplication = () => { const el = document.getElementById("loan-product-select"); if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.focus({ preventScroll: true }); } };
+  const scrollToApplication = () => {
+    if (!isLoanEligible) {
+      setMessage({ type: "error", text: loanEligibilityMessage });
+      return;
+    }
+    const el = document.getElementById("loan-product-select");
+    if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.focus({ preventScroll: true }); }
+  };
 
   return (
     <div className="space-y-6">
       <LoanProducts stats={stats} />
       <EligibilityChecks stats={stats} />
-      <button onClick={scrollToApplication} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-4 text-sm font-semibold text-white"><Plus size={18} />New application</button>
+      {!isLoanEligible ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900" role="alert">
+          {loanEligibilityMessage}
+        </div>
+      ) : null}
+      <button onClick={scrollToApplication} aria-disabled={!isLoanEligible} className={`inline-flex w-full items-center justify-center gap-2 rounded-lg px-5 py-4 text-sm font-semibold text-white ${isLoanEligible ? "bg-slate-950" : "cursor-not-allowed bg-slate-400"}`}><Plus size={18} />New application</button>
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard icon={FileText} label="Active loans" value={activeLoans.length} trend="Live" helper="Approved or currently active facilities" tone="blue" />
         <StatCard icon={CreditCard} label="Outstanding balance" value={formatCurrency(totalBalance)} helper="Estimated from loan records" tone="amber" blur={!showValues} />
@@ -2050,6 +2077,7 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
         <Surface className="p-5">
           <h5 className="text-base font-semibold tracking-normal text-slate-950">Request a loan</h5>
           <form onSubmit={requestLoan} className="mt-4 grid gap-4">
+            <fieldset disabled={!isLoanEligible} className="contents">
             <label className="text-sm font-semibold text-slate-700">Loan product
               <select id="loan-product-select" value={loanForm.type} onChange={(e) => { setLoanForm((c) => ({ ...c, type: e.target.value })); setSelectedGuarantors([]); setGuarantorAcceptance({}); }} className="mt-2 w-full rounded-lg border px-3.5 py-3 text-sm">{LOAN_PRODUCTS.map((p) => (<option key={p.type} value={p.type}>{p.name}</option>))}</select>
             </label>
@@ -2069,7 +2097,8 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
                 {selectedGuarantors.length > 0 && (<p className="mt-3 text-xs font-medium text-sky-700">Selected: {selectedMemberNames}</p>)}
               </div>
             ) : null}
-            <button className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white"><FileText size={17} />Request loan</button>
+            <button className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"><FileText size={17} />Request loan</button>
+            </fieldset>
           </form>
         </Surface>
         <Surface className="p-5">
@@ -2099,9 +2128,7 @@ function LoanProducts({ stats }) {
       </h5>
       <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {LOAN_PRODUCTS.map((product) => {
-          const eligible =
-            !product.requiresFullShareCapital ||
-            stats.shareCapitalRemaining === 0;
+          const eligible = Number(stats.shareCapital || 0) >= MIN_SHARE_CAPITAL;
           return (
             <div
               key={product.type}
@@ -3169,6 +3196,7 @@ function SavingsPage({
         user={user}
         onRefresh={onRefresh}
         onMessage={setMessage}
+        loanEligible={Number(stats.shareCapital || 0) >= MIN_SHARE_CAPITAL}
       />
       <TransactionsTable
         transactions={savingsTransactions}

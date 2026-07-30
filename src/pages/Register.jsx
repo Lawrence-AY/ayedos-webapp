@@ -47,13 +47,15 @@ export default function Register() {
     if (!lastName.trim()) return setFormError("Last name is required");
     if (!email.trim()) return setFormError("Email is required");
     if (!phone.trim()) return setFormError("Phone number is required");
+    if (password.length < 8)
+      return setFormError("Password must be at least 8 characters");
     if (password !== confirmPassword)
       return setFormError("Passwords do not match");
 
     setIsRegistering(true);
 
     try {
-      await register({
+      const result = await register({
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         email: email.trim(),
@@ -61,6 +63,17 @@ export default function Register() {
         password,
         role: "MEMBER",
       });
+
+      if (result?.accountExists && result?.nextAction === "LOGIN") {
+        navigate("/login", {
+          replace: true,
+          state: {
+            email: result.email || email.trim(),
+            message: "Your account already exists. Sign in to continue.",
+          },
+        });
+        return;
+      }
 
       setPendingEmail(email.trim());
       setOtpDialogOpen(true);
@@ -281,6 +294,7 @@ export default function Register() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 style={inputStyle}
+                minLength={8}
                 required
               />
             </div>
@@ -292,6 +306,7 @@ export default function Register() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 style={inputStyle}
+                minLength={8}
                 required
               />
             </div>
