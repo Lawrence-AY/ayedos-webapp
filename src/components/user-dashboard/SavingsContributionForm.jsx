@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { getContributionStatus, initiateContribution } from "../../features/member/memberService.js";
 
@@ -50,7 +50,7 @@ function SelectField({ label, value, onChange, children }) {
   );
 }
 
-export default function SavingsContributionForm({ accessToken, user, onRefresh, onMessage }) {
+export default function SavingsContributionForm({ accessToken, user, onRefresh, onMessage, loanEligible = false }) {
   const [amount, setAmount] = useState("");
   const [phone, setPhone] = useState(user?.phone || "");
   const [paymentMode, setPaymentMode] = useState("STK");
@@ -59,6 +59,15 @@ export default function SavingsContributionForm({ accessToken, user, onRefresh, 
   const [submitting, setSubmitting] = useState(false);
   const [paymentResult, setPaymentResult] = useState(null);
   const [showPaybillDialog, setShowPaybillDialog] = useState(false);
+  const availablePromptOptions = useMemo(
+    () => promptOptions.filter((option) => option.value !== "loans_repayment" || loanEligible),
+    [loanEligible],
+  );
+
+  useEffect(() => {
+    if (!loanEligible && stkContributionType === "loans_repayment") setStkContributionType("savings");
+    if (!loanEligible && contributionType === "loans_repayment") setContributionType("savings");
+  }, [contributionType, loanEligible, stkContributionType]);
 
   const amountValue = Number(amount || 0);
   const phoneDigits = String(phone || "").replace(/\D/g, "").slice(0, 12);
@@ -180,13 +189,13 @@ export default function SavingsContributionForm({ accessToken, user, onRefresh, 
         {/* Contribution Type selection – different UI depending on payment mode */}
         {paymentMode === "STK" ? (
           <SelectField label="type" value={stkContributionType} onChange={(event) => setStkContributionType(event.target.value)}>
-            {promptOptions.map((option) => (
+            {availablePromptOptions.map((option) => (
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </SelectField>
         ) : (
           <SelectField label="Type" value={contributionType} onChange={(event) => setContributionType(event.target.value)}>
-            {promptOptions.slice(0, 6).map((option) => (
+            {availablePromptOptions.map((option) => (
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </SelectField>

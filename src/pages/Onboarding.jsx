@@ -1,5 +1,6 @@
 // Onboarding.jsx
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Toaster, toast } from 'sonner';
 import { decryptData } from '../lib/storageCrypto';
 import {
@@ -28,6 +29,7 @@ import {
 } from '@/components/ui/alert-dialog';
 
 function Onboarding() {
+  const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [mpesaReference, setMpesaReference] = useState(null);
@@ -163,8 +165,8 @@ function Onboarding() {
 
   const handlePaymentSuccess = (reference) => {
     if (reference) setMpesaReference(reference);
-    setCurrentStep(4);
     setIsLoading(false);
+    navigate('/dashboard', { replace: true });
   };
 
   const handleReset = () => {

@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Bell, ChevronDown, Menu, Moon, Search, Settings, Shield, Sun, UserRound } from "lucide-react";
 import { useTheme } from "next-themes";
 import { AuthContext } from "../../context/AuthContext.jsx";
+import { getDashboardPath } from "../../utils/dashboardRoutes.js";
 
 function getInitials(name = "User") {
   return name
@@ -28,6 +29,7 @@ export default function TopNavbar({
   const [menuOpen, setMenuOpen] = useState(false);
   const [photoFailed, setPhotoFailed] = useState(false);
   const name = user?.name || "AYEDOS Member";
+  const dashboardBase = getDashboardPath(user?.role);
   const profilePhoto = user?.passportPhotoUrl || user?.profilePhotoUrl || user?.avatarUrl;
   useEffect(() => {
     setPhotoFailed(false);
@@ -126,15 +128,15 @@ export default function TopNavbar({
                   <p className="font-semibold text-slate-950 dark:text-white">{name}</p>
                   <p className="truncate text-sm text-slate-500 dark:text-slate-400">{user?.email || "member@ayedos.co.ke"}</p>
                 </div>
-                <Link to="/dashboard/user/settings" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/50 dark:hover:text-white">
+                <Link to={`${dashboardBase}/settings`} className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/50 dark:hover:text-white">
                   <UserRound size={17} />
                   Profile settings
                 </Link>
-                <Link to="/dashboard/user/security" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/50 dark:hover:text-white">
+                <Link to={`${dashboardBase}/security`} className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/50 dark:hover:text-white">
                   <Shield size={17} />
                   Security center
                 </Link>
-                <Link to="/dashboard/user/support" className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/50 dark:hover:text-white">
+                <Link to={`${dashboardBase}/support`} className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/50 dark:hover:text-white">
                   <Settings size={17} />
                   Support
                 </Link>

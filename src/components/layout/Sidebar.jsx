@@ -60,6 +60,9 @@ const adminNavItems = [
   { label: "Notifications", suffix: "notifications", icon: Bell },
   { label: "Audit Logs", suffix: "audit-logs", icon: Shield },
   { label: "System Configuration", suffix: "configuration", icon: Settings },
+  { label: "Security Center", suffix: "security", icon: Shield },
+  { label: "Profile Settings", suffix: "settings", icon: UserRound },
+  { label: "Support", suffix: "support", icon: Headphones },
 ];
 
 const financeNavItems = [
@@ -72,7 +75,8 @@ const financeNavItems = [
   { label: "Reports & Analytics", suffix: "reports", icon: TrendingUp },
   { label: "Notifications", suffix: "notifications", icon: Bell },
   { label: "Profile Settings", suffix: "settings", icon: Settings },
-
+  { label: "Security Center", suffix: "security", icon: Shield },
+  { label: "Support", suffix: "support", icon: Headphones },
 ];
 
 const navItems = {

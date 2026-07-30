@@ -17,6 +17,7 @@ const AUTH_SYNC_INTERVAL_MS = 5 * 60 * 1000
 const OTP_SESSION_TTL_MS = 10 * 60 * 1000
 const OTP_RESEND_COOLDOWN_MS = 60 * 1000
 const LOGIN_IDEMPOTENCY_KEY = 'ayedos_loginIdempotencyKey'
+const isActiveRegistrationFlow = () => ['/register', '/onboarding'].includes(window.location.pathname)
 
 const getPersistableUser = (user) => {
   if (!user) return null
@@ -35,6 +36,7 @@ const getPersistableUser = (user) => {
     nextOfKinPhone: user.nextOfKinPhone,
     nextOfKin: user.nextOfKin,
     consentGiven: user.consentGiven,
+    Member: user.Member || user.member || null,
     role: user.role,
   }
 }
@@ -251,6 +253,7 @@ export function AuthProvider({ children }) {
         method: 'POST',
         body: { email, password },
         idempotencyKey,
+        timeoutMs: 30000,
         retry: false,
         cache: false,
       })
@@ -318,7 +321,10 @@ export function AuthProvider({ children }) {
       })
 
       if (!res.ok) {
-        const msg = res.json?.message || `Register failed (status ${res.status})`
+        const fieldErrors = res.json?.details
+          ? Object.values(res.json.details).flat().filter(Boolean)
+          : []
+        const msg = fieldErrors[0] || res.json?.message || `Register failed (status ${res.status})`
         throw new Error(msg)
       }
 
@@ -407,13 +413,17 @@ export function AuthProvider({ children }) {
           body: { email: resolvedEmail, otp },
           sessionId: resolvedSessionId || undefined,
           signal,
+          timeoutMs: 30000,
           retry: false,
           cache: false,
         })
 
         if (!res.ok) {
           const msg = getApiErrorMessage(res.error) || res.json?.message || `OTP verification failed (status ${res.status})`
-          throw new Error(msg)
+          const error = new Error(msg)
+          error.status = res.status
+          error.code = res.json?.code || res.json?.errorCode || null
+          throw error
         }
 
         const data = unwrapEnvelopeData(res.json)
@@ -572,6 +582,10 @@ export function AuthProvider({ children }) {
     const resetTimer = () => {
       window.clearTimeout(timeoutId)
       timeoutId = window.setTimeout(() => {
+        if (isActiveRegistrationFlow()) {
+          resetTimer()
+          return
+        }
         logout()
       }, INACTIVITY_TIMEOUT_MS)
     }
@@ -591,6 +605,7 @@ export function AuthProvider({ children }) {
 
     let cancelled = false
     const syncAuth = async () => {
+      if (isActiveRegistrationFlow()) return
       try {
         await loadCurrentUser(accessToken)
       } catch (error) {

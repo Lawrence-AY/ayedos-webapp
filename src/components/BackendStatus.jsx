@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { useLocation } from 'react-router-dom'
 import { apiRequest } from '../lib/apiClient.js'
 
 async function checkHealth() {
@@ -14,11 +15,14 @@ async function checkHealth() {
 }
 
 export default function BackendStatus() {
+  const location = useLocation()
+  const isActiveRegistrationFlow = ['/register', '/onboarding'].includes(location.pathname)
   const { isError, isFetching, failureCount } = useQuery({
     queryKey: ['api-health'],
     queryFn: checkHealth,
-    refetchInterval: 60 * 1000,
-    refetchOnWindowFocus: true,
+    enabled: !isActiveRegistrationFlow,
+    refetchInterval: isActiveRegistrationFlow ? false : 60 * 1000,
+    refetchOnWindowFocus: false,
     retry: 1,
     staleTime: 30 * 1000,
   })
