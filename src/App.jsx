@@ -48,7 +48,7 @@ export default function App() {
                 path="/onboarding"
                 element={
                   <ProtectedRoute
-                    allowedRoles={['MEMBER']}
+                    allowedRoles={['PENDING', 'MEMBER']}
                     element={<Onboarding />}
                   />
                 }

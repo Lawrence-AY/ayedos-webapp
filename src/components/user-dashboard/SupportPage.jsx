@@ -41,7 +41,7 @@ const inquiryTypes = [
   "Feedback",
 ];
 
-function buildMailtoUrl({ user, form }) {
+function buildMailtoUrl({ user, form, roleLabel }) {
   const memberName =
     form.name ||
     user?.name ||
@@ -49,11 +49,12 @@ function buildMailtoUrl({ user, form }) {
     "Member";
   const memberEmail = form.email || user?.email || "";
   const memberPhone = form.phone || user?.phone || user?.phoneNumber || "";
-  const subject = `AYEDOS SACCO ${form.type}: ${form.subject}`;
+  const subject = `AYEDOS SACCO ${roleLabel} ${form.type}: ${form.subject}`;
   const body = [
     `Name: ${memberName}`,
     memberEmail ? `Email: ${memberEmail}` : null,
     memberPhone ? `Phone: ${memberPhone}` : null,
+    `Account role: ${roleLabel}`,
     `Inquiry type: ${form.type}`,
     "",
     "Message:",
@@ -65,7 +66,20 @@ function buildMailtoUrl({ user, form }) {
   return `mailto:info@cowrie.io?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
-export default function SupportPage({ user }) {
+export default function SupportPage({ user, role }) {
+  const normalizedRole = String(role || user?.role || "MEMBER").toUpperCase();
+  const roleLabel =
+    normalizedRole === "ADMIN"
+      ? "Administrator"
+      : normalizedRole === "FINANCE"
+        ? "Finance"
+        : "Member";
+  const availableInquiryTypes =
+    normalizedRole === "ADMIN"
+      ? ["General inquiry", "Member management", "Access and permissions", "Audit and compliance", "Technical issue"]
+      : normalizedRole === "FINANCE"
+        ? ["General inquiry", "Transaction processing", "Loan administration", "Reconciliation and reports", "Technical issue"]
+        : inquiryTypes;
   const initialName =
     user?.name || [user?.firstName, user?.lastName].filter(Boolean).join(" ");
   const [form, setForm] = useState({
@@ -102,7 +116,7 @@ export default function SupportPage({ user }) {
       return;
     }
 
-    window.location.href = buildMailtoUrl({ user, form });
+    window.location.href = buildMailtoUrl({ user, form, roleLabel });
     setSubmitted(true);
     toast.success("Your inquiry has been prepared for email.");
   }
@@ -116,7 +130,7 @@ export default function SupportPage({ user }) {
           </div>
           <div>
             <p className="text-sm font-semibold uppercase tracking-normal text-[#8cc63f]">
-              Member support
+              {roleLabel} support
             </p>
             <h1 className="mt-1 text-2xl font-semibold tracking-normal text-slate-950">
               Reach us
@@ -226,7 +240,7 @@ export default function SupportPage({ user }) {
               onChange={(event) => updateField("type", event.target.value)}
               className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3.5 py-3 text-sm font-medium text-slate-900 outline-none transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
             >
-              {inquiryTypes.map((type) => (
+              {availableInquiryTypes.map((type) => (
                 <option key={type} value={type}>
                   {type}
                 </option>

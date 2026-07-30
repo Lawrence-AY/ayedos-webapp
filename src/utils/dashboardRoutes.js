@@ -12,11 +12,17 @@ export function getDashboardPath(role, suffix = "") {
 }
 
 export function isMemberOnboardingComplete(user) {
-  if (!user || String(user.role || "").toUpperCase() !== "MEMBER") return true;
+  if (!user) return false;
+  const role = String(user.role || "").toUpperCase();
+  if (role === "PENDING") return false;
+  if (role !== "MEMBER") return true;
 
   const member = user.Member || user.member || {};
   return Boolean(
-    user.consentGiven &&
+    member.memberNumber &&
+      member.isVerified &&
+      String(member.status || 'ACTIVE').toUpperCase() === 'ACTIVE' &&
+      user.consentGiven &&
       (user.nationalId || member.nationalId) &&
       (user.phone || user.phoneNumber) &&
       (user.address || user.county || user.subCounty)

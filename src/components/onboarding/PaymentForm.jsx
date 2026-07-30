@@ -29,6 +29,7 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
   const progressInterval = useRef(null);
 
   const REGISTRATION_FEE = 1;
+  const PENDING_STK_STORAGE_KEY = 'ayedos_pending_onboarding_stk';
 
   // Helper: format phone to 254XXXXXXXXX
   const formatPhoneForBackend = (phone) => {
@@ -170,16 +171,17 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
           timeoutMs: 8000,
           cache: false,
         });
+        if (!result.ok) {
+          throw result.error || new Error(result.json?.message || 'Unable to confirm payment status');
+        }
         const data = unwrapEnvelopeData(result.json);
+        const status = String(data?.status || '').toLowerCase();
 
-        // Ensure data exists and status is paid
-        if (data && data.status === 'paid') {
-          clearInterval(pollingInterval.current);
-          pollingInterval.current = null;
-
-          // Ensure we actually have a receipt number before calling verify
+        if (status === 'paid' || status === 'success' || status === 'completed') {
           const receipt = data.mpesaReceipt;
           if (!receipt) {
+            // A callback can persist its status just before its receipt. Keep
+            // polling until the complete confirmation record is available.
             return;
           }
 
@@ -197,6 +199,9 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
 
           if (verifyRes.ok) {
             await markOnboardingComplete();
+            sessionStorage.removeItem(PENDING_STK_STORAGE_KEY);
+            clearInterval(pollingInterval.current);
+            pollingInterval.current = null;
             if (progressInterval.current) clearInterval(progressInterval.current);
             setProgress(100);
             setWaitingStatus('success');
@@ -209,7 +214,8 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
           } else {
             throw new Error('Verification failed on server');
           }
-        } else if (data && data.status === 'failed') {
+        } else if (status === 'failed' || status === 'cancelled' || status === 'canceled') {
+          sessionStorage.removeItem(PENDING_STK_STORAGE_KEY);
           clearInterval(pollingInterval.current);
           pollingInterval.current = null;
           if (progressInterval.current) clearInterval(progressInterval.current);
@@ -236,6 +242,34 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
     pollingInterval.current = setInterval(checkPaymentStatus, 1500);
   };
 
+  useEffect(() => {
+    try {
+      const pending = JSON.parse(sessionStorage.getItem(PENDING_STK_STORAGE_KEY) || 'null');
+      const startedAt = Number(pending?.startedAt);
+      const isRecentPayment = Number.isFinite(startedAt)
+        && Date.now() - startedAt < 10 * 60 * 1000;
+
+      if (
+        isRecentPayment
+        && pending?.checkoutId
+        && pending?.appId
+        && pending?.phone
+        && !pollingInterval.current
+      ) {
+        setShowWaitingDialog(true);
+        setWaitingStatus('waiting');
+        setLoading(true);
+        startPolling(pending.checkoutId, pending.appId, pending.phone);
+      } else if (pending) {
+        sessionStorage.removeItem(PENDING_STK_STORAGE_KEY);
+      }
+    } catch {
+      sessionStorage.removeItem(PENDING_STK_STORAGE_KEY);
+    }
+  // Resume once when the payment step mounts; startPolling uses current auth/profile state.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // STK Push flow - NO confirmation dialog, processes immediately
   const handleStkPayment = async () => {
     setError('');
@@ -255,26 +289,27 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
 
     try {
       const phone = formatPhoneForBackend(stkPhone);
-      const controller = new AbortController();
-      const timeoutId = window.setTimeout(() => controller.abort(), 12000);
-      let workerRes;
-      try {
-        workerRes = await fetch('https://kcb-mpesa.simrion.workers.dev/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone, amount: REGISTRATION_FEE.toString() }),
-          signal: controller.signal,
-        });
-      } finally {
-        window.clearTimeout(timeoutId);
-      }
-      const workerData = await workerRes.json();
-      if (!workerRes.ok || !workerData.success) {
-        throw new Error(workerData.error || 'STK push initiation failed');
+      const workerRes = await apiRequest('/api/mpesa/stk', {
+        method: 'POST',
+        body: { phone, amount: REGISTRATION_FEE },
+        accessToken,
+        timeoutMs: 35000,
+        retry: false,
+        cache: false,
+      });
+      const workerData = unwrapEnvelopeData(workerRes.json) || workerRes.json;
+      if (!workerRes.ok || !workerData?.success) {
+        throw workerRes.error || new Error(workerData?.message || workerData?.error || 'STK push initiation failed');
       }
       const checkoutId = workerData.checkoutRequestId;
 
       const appId = await createApplication();
+      sessionStorage.setItem(PENDING_STK_STORAGE_KEY, JSON.stringify({
+        checkoutId,
+        appId,
+        phone: stkPhone,
+        startedAt: Date.now(),
+      }));
       startPolling(checkoutId, appId, stkPhone);
     } catch (err) {
       if (progressInterval.current) clearInterval(progressInterval.current);

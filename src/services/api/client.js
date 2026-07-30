@@ -253,6 +253,10 @@ api.interceptors.request.use((config) => {
     'X-Device-Id': getOrCreateDeviceId(),
     'X-Device-Name': getDeviceName(),
   }
+  const targetUrl = `${config.baseURL || ''}${config.url || ''}`
+  if (/\.ngrok-free\.(?:app|dev)(?:\/|$)/i.test(targetUrl)) {
+    headers['Ngrok-Skip-Browser-Warning'] = 'true'
+  }
   const csrfToken = getCookie('csrfToken')
 
   const accessToken = config.accessToken || (!isPublicAuthPath(normalizedPath) ? storedAuth.accessToken : null)

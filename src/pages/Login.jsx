@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext.jsx";
 import { getPostLoginPath } from "../utils/dashboardRoutes.js";
 import { getApiBaseUrl, getApiErrorMessage, isApiDebugEnabled } from "../lib/apiClient.js";
@@ -17,7 +17,8 @@ import {
 const OTP_COOLDOWN_SECONDS = 60;
 
 export default function Login() {
-  const navigate = useNavigate(); 
+  const navigate = useNavigate();
+  const location = useLocation();
   const {
     login,
     completeLoginOtp,
@@ -28,7 +29,7 @@ export default function Login() {
     isLoading,
   } = useContext(AuthContext);
 
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => location.state?.email || "");
   const [password, setPassword] = useState("");
   const [formError, setFormError] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -90,7 +91,14 @@ export default function Login() {
       navigate(getPostLoginPath(verifiedUser), { replace: true });
     } catch (err) {
       if (err?.name !== "CanceledError" && err?.kind !== "cancelled") {
-        setFormError(err?.message || "OTP verification failed");
+        if (err?.status === 401) {
+          clearOtpSession();
+          setOtpRequired(false);
+          setOtp("");
+          setFormError("That code has expired or was already used. Sign in again to receive a new code.");
+        } else {
+          setFormError(err?.message || "OTP verification failed");
+        }
       }
     } finally {
       otpVerifyInFlightRef.current = false;
@@ -369,6 +377,11 @@ export default function Login() {
             {(formError || authError) && (
               <div role="alert" style={errorStyle}>
                 {formError || authError}
+              </div>
+            )}
+            {location.state?.message && !(formError || authError) && (
+              <div role="status" style={successStyle}>
+                {location.state.message}
               </div>
             )}
 
