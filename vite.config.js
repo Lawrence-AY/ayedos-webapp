@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url"
 import tailwindcss from "@tailwindcss/vite"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const backendTarget = process.env.VITE_BACKEND_URL || 'http://127.0.0.1:3001'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -23,7 +24,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:3000',
+        target: backendTarget,
         changeOrigin: true,
         secure: false,
         configure: (proxy) => {
@@ -33,7 +34,7 @@ export default defineConfig({
             res.writeHead(503, { 'Content-Type': 'application/json' })
             res.end(JSON.stringify({
               success: false,
-              message: 'Backend API is not running on http://127.0.0.1:3000. Start sacco-backend with npm run dev or npm start.',
+              message: `Backend API is not running on ${backendTarget}. Start sacco-backend with npm run dev or npm start.`,
               error: err.code || 'PROXY_ERROR',
               path: req.url,
               timestamp: new Date().toISOString(),

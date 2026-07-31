@@ -67,6 +67,7 @@ import {
   getMonthlySeries,
 } from "../components/dashboard/EnterpriseDashboard.jsx";
 import { findMemberByNumber } from "../features/search/searchService.js";
+import { getDashboardPath } from "../utils/dashboardRoutes.js";
 import StaffSecurityPage from "../components/staff-dashboard/StaffSecurityPage.jsx";
 import SupportPage from "../components/user-dashboard/SupportPage.jsx";
 import MemberFinancialProfile from "../components/staff-dashboard/MemberFinancialProfile.jsx";

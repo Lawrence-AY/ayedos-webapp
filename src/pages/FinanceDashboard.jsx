@@ -26,6 +26,7 @@ import {
   TrendingUp,
   UserRound,
   UsersRound,
+  WalletCards,
   X,
   XCircle,
 } from "lucide-react";
@@ -579,6 +580,7 @@ export default function FinanceDashboard() {
   let activeSection = "home";
   if (path.includes("/transactions")) activeSection = "transactions";
   else if (path.includes("/loans")) activeSection = "loans";
+  else if (path.includes("/liquidity")) activeSection = "liquidity";
   else if (path.includes("/deductions")) activeSection = "deductions";
   else if (path.includes("/members")) activeSection = "members";
   else if (path.includes("/dividends")) activeSection = "dividends";
@@ -599,7 +601,7 @@ export default function FinanceDashboard() {
     reports: {},
   });
 
-  async function loadAllData({ showLoading = true } = {}) {
+  const loadAllData = useCallback(async ({ showLoading = true } = {}) => {
     if (!accessToken) {
       setLoading(false);
       return;
@@ -651,14 +653,14 @@ export default function FinanceDashboard() {
 
   useEffect(() => {
     loadAllData();
-  }, [accessToken]);
+  }, [loadAllData]);
   useEffect(() => {
     const interval = setInterval(
       () => loadAllData({ showLoading: false }),
       5 * 60 * 1000,
     );
     return () => clearInterval(interval);
-  }, [accessToken]);
+  }, [loadAllData]);
 
   const stats = useMemo(() => getFinanceStats(data), [data]);
   function markAllNotificationsRead() {
@@ -746,6 +748,8 @@ export default function FinanceDashboard() {
             globalSearch={globalSearch}
           />
         );
+      case "liquidity":
+        return <WalletLiquidityPage data={data} />;
       case "deductions":
         return (
           <SalaryDeductionPage
@@ -1224,6 +1228,177 @@ function FinanceHome({ data, stats, globalSearch = "", onVerifyTransaction }) {
         onVerifyTransaction={onVerifyTransaction}
         globalSearch={globalSearch}
       />
+    </div>
+  );
+}
+
+function WalletLiquidityPage({ data }) {
+  const members = data.members || [];
+  const loans = data.loans || [];
+  const dividends = data.dividends || [];
+  const deductions = data.deductions || [];
+  const transactions = data.transactions || [];
+  const [topUpAmount, setTopUpAmount] = useState("");
+  const [topUpSource, setTopUpSource] = useState("Institutional Capital");
+  const [plannedTopUps, setPlannedTopUps] = useState([]);
+
+  const activeMembers = members.filter((member) =>
+    ["ACTIVE", "APPROVED", "VERIFIED"].includes(String(member.status || "ACTIVE").toUpperCase()),
+  ).length;
+  const pendingDisbursements = loans
+    .filter((loan) => ["APPROVED", "PENDING_DISBURSEMENT"].includes(String(loan.status || "").toUpperCase()))
+    .reduce((sum, loan) => sum + Number(loan.amount || loan.principal || 0), 0);
+  const pendingDividends = dividends
+    .filter((dividend) => !["PAID", "VERIFIED", "SUCCESS"].includes(String(dividend.status || "").toUpperCase()))
+    .reduce((sum, dividend) => sum + Number(dividend.amount || 0), 0);
+  const monthlyContributionDemand = deductions
+    .filter((deduction) => deduction.isActive !== false)
+    .reduce((sum, deduction) => sum + Number(deduction.amount || deduction.deduction || 0), 0);
+  const recentWithdrawals = transactions
+    .filter((transaction) => String(transaction.type || "").toUpperCase().includes("WITHDRAW"))
+    .slice(0, 30)
+    .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+  const recentDeposits = transactions
+    .filter((transaction) => String(transaction.type || "").toUpperCase().includes("DEPOSIT"))
+    .slice(0, 30)
+    .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+  const activeSavings = members.reduce((sum, member) => sum + Number(member.savings || member.savingsBalance || 0), 0);
+  const plannedCapital = plannedTopUps.reduce((sum, item) => sum + item.amount, 0);
+  const currentLiquidity = Math.max(0, activeSavings + recentDeposits - recentWithdrawals + plannedCapital);
+  const forecastDemand = pendingDisbursements + pendingDividends + monthlyContributionDemand + recentWithdrawals;
+  const requiredBuffer = forecastDemand * 0.2;
+  const requiredCapital = forecastDemand + requiredBuffer;
+  const fundingGap = Math.max(0, requiredCapital - currentLiquidity);
+  const coverageRatio = requiredCapital > 0 ? Math.min(100, Math.round((currentLiquidity / requiredCapital) * 100)) : 100;
+  const dailyBurn = Math.max(1, recentWithdrawals / 30);
+  const runwayDays = Math.floor(currentLiquidity / dailyBurn);
+
+  const demandRows = [
+    { label: "Approved loan payouts", value: pendingDisbursements, tone: "text-sky-700" },
+    { label: "Dividend obligations", value: pendingDividends, tone: "text-emerald-700" },
+    { label: "Monthly contribution liquidity", value: monthlyContributionDemand, tone: "text-indigo-700" },
+    { label: "Recent withdrawal velocity", value: recentWithdrawals, tone: "text-rose-700" },
+    { label: "Required liquidity buffer", value: requiredBuffer, tone: "text-amber-700" },
+  ];
+
+  function handleTopUp(e) {
+    e.preventDefault();
+    const amount = Number(topUpAmount);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    setPlannedTopUps((prev) => [
+      {
+        id: `${Date.now()}`,
+        source: topUpSource,
+        amount,
+        time: new Date().toISOString(),
+      },
+      ...prev,
+    ]);
+    setTopUpAmount("");
+  }
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader
+        eyebrow="Wallet liquidity"
+        title="Master wallet funding control"
+        description="Monitor wallet capacity, forecast money-out demand, and stage institutional liquidity top-ups."
+      />
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <KpiCard label="Active system users" value={activeMembers} icon={UsersRound} trend="Live" tone="blue" />
+        <KpiCard label="Current wallet liquidity" value={formatCurrency(currentLiquidity)} icon={WalletCards} trend={`${coverageRatio}% covered`} tone="emerald" />
+        <KpiCard label="Forecast demand" value={formatCurrency(forecastDemand)} icon={TrendingUp} trend="30-day view" tone="amber" />
+        <KpiCard label="Funding gap" value={formatCurrency(fundingGap)} icon={AlertTriangle} trend={`${runwayDays} days runway`} tone={fundingGap > 0 ? "rose" : "emerald"} />
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-base font-semibold text-slate-950 dark:text-white">Liquidity forecast</h3>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                Estimated capital needed to keep approved wallet obligations fully funded.
+              </p>
+            </div>
+            <StatusBadge status={fundingGap > 0 ? "Action Required" : "Healthy"} />
+          </div>
+          <div className="mt-5 h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+            <div
+              className={`h-full rounded-full ${coverageRatio >= 80 ? "bg-emerald-500" : coverageRatio >= 50 ? "bg-amber-500" : "bg-rose-500"}`}
+              style={{ width: `${coverageRatio}%` }}
+            />
+          </div>
+          <div className="mt-5 space-y-3">
+            {demandRows.map((row) => (
+              <div key={row.label} className="flex items-center justify-between border-b border-slate-100 pb-3 text-sm last:border-0 dark:border-slate-800">
+                <span className="font-medium text-slate-600 dark:text-slate-300">{row.label}</span>
+                <span className={`font-semibold ${row.tone}`}>{formatCurrency(row.value)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-5 rounded-lg bg-slate-50 p-4 dark:bg-slate-900">
+            <p className="text-xs font-semibold uppercase text-slate-500">Automatic forecast</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-950 dark:text-white">{formatCurrency(requiredCapital)}</p>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              Includes demand plus a 20% liquidity buffer for same-day withdrawals and approved disbursements.
+            </p>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
+          <h3 className="text-base font-semibold text-slate-950 dark:text-white">Load wallet funds</h3>
+          <form onSubmit={handleTopUp} className="mt-4 space-y-4">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+              Funding source
+              <select
+                value={topUpSource}
+                onChange={(e) => setTopUpSource(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500 dark:border-slate-800 dark:bg-slate-900"
+              >
+                <option>Institutional Capital</option>
+                <option>Financier Liquidity Facility</option>
+                <option>Board Approved Reallocation</option>
+              </select>
+            </label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+              Top-up amount
+              <input
+                type="number"
+                min="1"
+                step="0.01"
+                value={topUpAmount}
+                onChange={(e) => setTopUpAmount(e.target.value)}
+                placeholder="0.00"
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500 dark:border-slate-800 dark:bg-slate-900"
+              />
+            </label>
+            <button type="submit" className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">
+              <Plus size={16} />
+              Stage top-up
+            </button>
+          </form>
+
+          <div className="mt-5 space-y-3">
+            <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Staged funding queue</h4>
+            {plannedTopUps.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-200 p-4 text-sm text-slate-500 dark:border-slate-800">
+                No wallet top-ups staged.
+              </div>
+            ) : (
+              plannedTopUps.map((item) => (
+                <div key={item.id} className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">{item.source}</span>
+                    <span className="text-sm font-semibold text-emerald-700">{formatCurrency(item.amount)}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">{formatDate(item.time)}</p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
