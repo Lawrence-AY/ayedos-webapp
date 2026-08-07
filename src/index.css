@@ -125,7 +125,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not(.light) {
     --text: #ffffff;
     --text-h: #ffffff;
     --bg: #020617;
@@ -359,6 +359,26 @@ a:focus-visible {
   border-color: rgba(148, 163, 184, 0.32) !important;
 }
 
+/* input-otp uses a transparent native input over visual slots. Keep global
+   form styling from turning that input into a second visible layer. */
+.cn-input-otp input,
+.dark .cn-input-otp input {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 2 !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: transparent !important;
+  caret-color: transparent !important;
+  opacity: 1 !important;
+  box-shadow: none !important;
+}
+
 .dark input::placeholder {
   color: #94a3b8 !important;
 }
@@ -382,6 +402,47 @@ a:focus-visible {
   background:
     radial-gradient(circle at top left, rgba(20, 83, 45, 0.2), transparent 30rem),
     linear-gradient(135deg, #020617, #0f172a);
+}
+
+/* High-contrast dashboard surfaces and semantic notices. These pair each
+   background with a readable foreground instead of relying on OS color mode. */
+.dark .premium-surface {
+  border-color: rgba(148, 163, 184, 0.22);
+  background: rgba(15, 23, 42, 0.9);
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.3);
+}
+
+.dark .bg-emerald-50 { background-color: #052e16 !important; }
+.dark .bg-rose-50 { background-color: #4c0519 !important; }
+.dark .bg-sky-50,
+.dark .bg-blue-50 { background-color: #082f49 !important; }
+.dark .bg-amber-50 { background-color: #451a03 !important; }
+.dark .text-emerald-700,
+.dark .text-emerald-800,
+.dark .text-emerald-900 { color: #a7f3d0 !important; }
+.dark .text-rose-700,
+.dark .text-rose-800,
+.dark .text-rose-900 { color: #fecdd3 !important; }
+.dark .text-sky-700,
+.dark .text-sky-800,
+.dark .text-sky-900,
+.dark .text-blue-700,
+.dark .text-blue-800,
+.dark .text-blue-900 { color: #bae6fd !important; }
+.dark .text-amber-700,
+.dark .text-amber-800,
+.dark .text-amber-900 { color: #fde68a !important; }
+
+@media (max-width: 640px), (max-height: 700px) {
+  .cn-input-otp [data-slot="input-otp-slot"] {
+    font-size: 0.9rem;
+  }
+}
+
+@media (forced-colors: active) {
+  button, input, select, textarea, [data-slot="input-otp-slot"] {
+    forced-color-adjust: auto;
+  }
 }
 
 .premium-surface {

@@ -31,6 +31,14 @@ export async function requestMemberOptOut(data, accessToken) {
   return unwrapEnvelopeData(res.json)
 }
 
+export async function transferShareCapital(data, accessToken) {
+  const res = await apiRequest('/api/member/share-capital/transfers', {
+    method: 'POST', accessToken, body: data, cache: false,
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to transfer share capital')
+  return unwrapEnvelopeData(res.json)
+}
+
 // Loan application (member)
 export async function applyForLoan(data, accessToken) {
   const res = await apiRequest('/api/member/loans', {

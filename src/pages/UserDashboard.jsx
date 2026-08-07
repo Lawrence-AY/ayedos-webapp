@@ -95,7 +95,7 @@ export default function UserDashboard() {
     if (accessToken) {
       intervalId = window.setInterval(() => {
         loadDashboardData({ showLoading: false });
-      }, 120000);
+      }, 15000);
     }
     return () => {
       cancelled = true;
@@ -249,6 +249,7 @@ export default function UserDashboard() {
             updateCurrentUser?.(updatedUser);
             return loadCurrentUser?.(accessToken);
           }}
+          onRefresh={() => loadDashboardData({ showLoading: false })}
         />
       );
     }

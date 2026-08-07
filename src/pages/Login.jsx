@@ -435,9 +435,10 @@ export default function Login() {
             setFormError(null);
             setOtpMessage("");
           }}
-          pattern="\d*"
+          pattern="[0-9]*"
           inputMode="numeric"
           autoComplete="one-time-code"
+          containerClassName="my-1 w-full"
         >
           <InputOTPGroup>
             <InputOTPSlot index={0} />
@@ -462,7 +463,7 @@ export default function Login() {
           </div>
         )}
 
-        <div style={{ display: "flex", gap: 12, marginTop: 18 }}>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" style={{ marginTop: 18 }}>
           <button
             type="button"
             onClick={() => {
@@ -594,7 +595,8 @@ const modalBackdropStyle = {
   zIndex: 10,
   display: "grid",
   placeItems: "center",
-  padding: 20,
+  padding: "clamp(12px, 3vw, 20px)",
+  overflowY: "auto",
   background: "rgba(2, 6, 23, 0.62)",
   backdropFilter: "blur(8px)",
 };
@@ -606,7 +608,7 @@ const modalStyle = {
   background: "var(--auth-card-bg)",
   color: "var(--text)",
   border: "1px solid var(--auth-card-border)",
-  padding: 28,
+  padding: "clamp(18px, 4vw, 28px)",
   boxShadow: "0 30px 80px rgba(2, 6, 23, 0.3)",
 };
 

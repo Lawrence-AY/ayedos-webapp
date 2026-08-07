@@ -85,12 +85,21 @@ export default function TopNavbar({
             {resolvedTheme === "dark" ? <Sun className="text-[#8cc63f]" size={19} /> : <Moon className="text-[#8cc63f]" size={19} />}
           </button>
 
-          <div className="relative">
+          <div
+            className="relative"
+            onMouseEnter={() => setMenuOpen(true)}
+            onMouseLeave={() => setMenuOpen(false)}
+            onFocus={() => setMenuOpen(true)}
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) setMenuOpen(false);
+            }}
+          >
             <button
               type="button"
-              onClick={() => setMenuOpen((current) => !current)}
               className="flex h-11 items-center gap-2 rounded-lg border border-emerald-900/10 bg-white px-2.5 text-left  transition duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-slate-50  dark:border-slate-800 dark:bg-slate-900 dark:hover:border-emerald-800 dark:hover:bg-slate-800"
               aria-label="Open profile menu"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
             >
               <span className="grid h-8 w-8 place-items-center overflow-hidden rounded-lg bg-slate-950 text-xs font-bold text-white dark:bg-slate-700 dark:text-white">
                 {profilePhoto && !photoFailed ? (
@@ -122,21 +131,22 @@ export default function TopNavbar({
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 8, scale: 0.98 }}
                 transition={{ duration: 0.16 }}
-                className="absolute right-0 mt-2 w-64 overflow-hidden rounded-lg border border-slate-200 bg-white  dark:border-slate-800 dark:bg-slate-950"
+                role="menu"
+                className="absolute right-0 top-full w-64 overflow-hidden rounded-lg border border-slate-200 bg-white pt-2 shadow-xl dark:border-slate-800 dark:bg-slate-950"
               >
                 <div className="border-b border-slate-100 p-4 dark:border-slate-800">
                   <p className="font-semibold text-slate-950 dark:text-white">{name}</p>
                   <p className="truncate text-sm text-slate-500 dark:text-slate-400">{user?.email || "member@ayedos.co.ke"}</p>
                 </div>
-                <Link to={`${dashboardBase}/settings`} className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/50 dark:hover:text-white">
+                <Link role="menuitem" onClick={() => setMenuOpen(false)} to={`${dashboardBase}/settings`} className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/50 dark:hover:text-white">
                   <UserRound size={17} />
                   Profile settings
                 </Link>
-                <Link to={`${dashboardBase}/security`} className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/50 dark:hover:text-white">
+                <Link role="menuitem" onClick={() => setMenuOpen(false)} to={`${dashboardBase}/security`} className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/50 dark:hover:text-white">
                   <Shield size={17} />
                   Security center
                 </Link>
-                <Link to={`${dashboardBase}/support`} className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/50 dark:hover:text-white">
+                <Link role="menuitem" onClick={() => setMenuOpen(false)} to={`${dashboardBase}/support`} className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/50 dark:hover:text-white">
                   <Settings size={17} />
                   Support
                 </Link>

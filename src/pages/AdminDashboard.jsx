@@ -108,171 +108,6 @@ function exportCSV(rows, columns, filename, options = {}) {
   exportRichCSV(rows, columns, filename, options);
 }
 
-const MOCK_MEMBERS = [
-  {
-    id: "M001",
-    name: "John Kamau",
-    phone: "+254712345678",
-    company: "Ministry of Education",
-    risk: "Low",
-    status: "Active",
-    savings: 250000,
-    loans: 45000,
-    shares: 35000,
-    joined: "2025-01-15",
-  },
-  {
-    id: "M002",
-    name: "Mary Wanjiku",
-    phone: "+254723456789",
-    company: "County Government of Nairobi",
-    risk: "Medium",
-    status: "Active",
-    savings: 180000,
-    loans: 120000,
-    shares: 28000,
-    joined: "2025-03-22",
-  },
-  {
-    id: "M003",
-    name: "Peter Otieno",
-    phone: "+254734567890",
-    company: "Kenyatta National Hospital",
-    risk: "Low",
-    status: "Active",
-    savings: 420000,
-    loans: 0,
-    shares: 50000,
-    joined: "2025-06-01",
-  },
-  {
-    id: "M004",
-    name: "David Kiprop",
-    phone: "+254756789012",
-    company: null,
-    risk: "High",
-    status: "Overdue",
-    savings: 50000,
-    loans: 35000,
-    shares: 15000,
-    joined: "2024-11-08",
-  },
-  {
-    id: "M005",
-    name: "Alice Wambui",
-    phone: "+254767890123",
-    company: null,
-    risk: "High",
-    status: "Default",
-    savings: 30000,
-    loans: 80000,
-    shares: 10000,
-    joined: "2024-09-15",
-  },
-];
-const MOCK_APPLICATIONS = [
-  {
-    id: "A001",
-    name: "Faith Wangari",
-    phone: "+254712345001",
-    status: "PENDING",
-    submittedDate: "2026-07-01",
-    nationalId: "12345678",
-  },
-  {
-    id: "A002",
-    name: "Samuel Mwangi",
-    phone: "+254723456002",
-    status: "PENDING",
-    submittedDate: "2026-06-28",
-    nationalId: "87654321",
-  },
-  {
-    id: "A003",
-    name: "Grace Achieng",
-    phone: "+254734567003",
-    status: "APPROVED",
-    submittedDate: "2026-06-15",
-    nationalId: "45678901",
-  },
-];
-const MOCK_ARCHIVED = [
-  {
-    id: "X001",
-    name: "James Omondi",
-    email: "james@example.com",
-    optOutDate: "2025-12-10",
-    reason: "Relocated abroad",
-  },
-  {
-    id: "X002",
-    name: "Lucy Wanjohi",
-    email: "lucy@example.com",
-    optOutDate: "2025-08-22",
-    reason: "Financial constraints",
-  },
-];
-const MOCK_AUDIT_LOGS = [
-  {
-    id: 1,
-    timestamp: "2026-07-06 10:15:00",
-    userId: "admin@ayedos.co.ke",
-    actionType: "LOGIN",
-    ipAddress: "192.168.1.1",
-    affectedRecord: "N/A",
-  },
-  {
-    id: 2,
-    timestamp: "2026-07-06 09:45:00",
-    userId: "M001",
-    actionType: "LOAN_APPLICATION",
-    ipAddress: "10.0.0.5",
-    affectedRecord: "L001",
-  },
-  {
-    id: 3,
-    timestamp: "2026-07-06 09:30:00",
-    userId: "M003",
-    actionType: "DEPOSIT",
-    ipAddress: "10.0.0.8",
-    affectedRecord: "TX_DE_001",
-  },
-  {
-    id: 4,
-    timestamp: "2026-07-06 08:00:00",
-    userId: "admin@ayedos.co.ke",
-    actionType: "BROADCAST",
-    ipAddress: "192.168.1.1",
-    affectedRecord: "GLOBAL",
-  },
-];
-const MOCK_ADMIN_NOTIFICATIONS = [
-  {
-    id: 1,
-    title: "New Application",
-    body: "Faith Wangari submitted a membership application",
-    type: "APPLICATION",
-    time: new Date().toISOString(),
-    read: false,
-  },
-  {
-    id: 2,
-    title: "Opt-out Request",
-    body: "James Omondi has requested to leave the SACCO",
-    type: "OPTOUT",
-    time: new Date(Date.now() - 3600000).toISOString(),
-    read: false,
-  },
-  {
-    id: 3,
-    title: "New Application",
-    body: "Samuel Mwangi submitted a membership application",
-    type: "APPLICATION",
-    time: new Date(Date.now() - 7200000).toISOString(),
-    read: true,
-  },
-];
-
 export default function AdminDashboard() {
   const location = useLocation();
   const { user, accessToken } = useContext(AuthContext);
@@ -280,7 +115,7 @@ export default function AdminDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
-  const [notifications, setNotifications] = useState(MOCK_ADMIN_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState([]);
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   const path = location.pathname;
@@ -329,24 +164,25 @@ export default function AdminDashboard() {
       getAllDeductions(accessToken),
       getAuditLogs(accessToken),
       getAdminNotifications(accessToken),
+      getAdminNotifications(accessToken),
     ]);
     setData({
       users:
         r[0].status === "fulfilled" && Array.isArray(r[0].value)
           ? r[0].value
-          : MOCK_MEMBERS,
+          : [],
       applications:
         r[1].status === "fulfilled" && Array.isArray(r[1].value)
           ? r[1].value
-          : MOCK_APPLICATIONS,
+          : [],
       stats:
         r[2].status === "fulfilled"
           ? r[2].value
-          : { totalMembers: 126, activeLoans: 9, totalSavings: 4200000 },
+          : {},
       archived:
         r[3].status === "fulfilled" && Array.isArray(r[3].value)
           ? r[3].value
-          : MOCK_ARCHIVED,
+          : [],
       transactions:
         r[4].status === "fulfilled" && Array.isArray(r[4].value)
           ? r[4].value
@@ -370,7 +206,7 @@ export default function AdminDashboard() {
       auditLogs:
         r[9].status === "fulfilled" && Array.isArray(r[9].value)
           ? r[9].value
-          : MOCK_AUDIT_LOGS,
+          : [],
     });
     if (r[10].status === "fulfilled" && Array.isArray(r[10].value)) {
       setNotifications(r[10].value.map(normalizeAdminNotification));
@@ -1183,7 +1019,7 @@ function AdminMemberDetail({ member, onBack, data }) {
 // MODULE 1B: APPLICATIONS (used within unified member management)
 // ============================================================
 function AdminApplications({ data, accessToken, onRefresh, embedded = false }) {
-  const { applications = MOCK_APPLICATIONS } = data || {};
+  const { applications = [] } = data || {};
   const [search, setSearch] = useState("");
   const filtered = filterRows(applications, search, [
     "id",
@@ -1645,7 +1481,7 @@ function AdminNotificationsPanel({
 // ============================================================
 function AdminAuditLogs({ data }) {
   const [search, setSearch] = useState("");
-  const logs = data || MOCK_AUDIT_LOGS;
+  const logs = data || [];
   const filtered = filterRows(logs, search, [
     "timestamp",
     "userId",

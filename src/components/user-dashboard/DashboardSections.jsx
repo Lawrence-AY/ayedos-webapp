@@ -4,6 +4,7 @@ import {
   ArrowUpRight,
   BadgeCheck,
   Bell,
+  Building2,
   BriefcaseBusiness,
   Calculator,
   Camera,
@@ -67,7 +68,9 @@ import {
   emailMemberReport,
   repayLoan,
   searchQualifiedGuarantors,
+  transferShareCapital,
 } from "../../features/member/memberService.js";
+import { findMemberByNumber } from "../../features/search/searchService.js";
 import {
   changePassword,
   revokeAuthSession,
@@ -1014,18 +1017,20 @@ function DashboardOverview({
                 : "Minimum share capital requirement has been met."}
             </p>
           </div>
-          <div className="min-w-56">
-            <div className="mb-2 flex justify-between text-xs font-semibold text-slate-500">
-              <span>{formatCurrency(stats.shareCapital)}</span>
-              <span>{Math.round(stats.shareCapitalProgress)}%</span>
+          {stats.shareCapitalRemaining > 0 ? (
+            <div className="min-w-56">
+              <div className="mb-2 flex justify-between text-xs font-semibold text-slate-500">
+                <span>{formatCurrency(stats.shareCapital)}</span>
+                <span>{Math.round(stats.shareCapitalProgress)}%</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className="h-full rounded-full bg-emerald-600"
+                  style={{ width: `${stats.shareCapitalProgress}%` }}
+                />
+              </div>
             </div>
-            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-              <div
-                className="h-full rounded-full bg-emerald-600"
-                style={{ width: `${stats.shareCapitalProgress}%` }}
-              />
-            </div>
-          </div>
+          ) : null}
         </div>
       </Surface>
 
@@ -1136,7 +1141,7 @@ function buildProfileForm(profile = {}) {
   };
 }
 
-function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated }) {
+function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRefresh }) {
   const memberNumber =
     user?.memberNumber ||
     user?.Member?.memberNumber ||
@@ -1167,10 +1172,18 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated }) {
   const [alert, setAlert] = useState(null);
   const [preview, setPreview] = useState(user?.passportPhotoUrl || null);
   const [photoFile, setPhotoFile] = useState(null);
+  const [optOutForm, setOptOutForm] = useState({
+    reason: "",
+    buyerMemberNumber: "",
+    acknowledgedTerms: false,
+  });
+  const [submittingOptOut, setSubmittingOptOut] = useState(false);
+  const [nominees, setNominees] = useState(() => user?.nominees || []);
   useEffect(() => {
     setForm(buildProfileForm(user));
     setPreview(user?.passportPhotoUrl || null);
     setPhotoFile(null);
+    setNominees(user?.nominees || []);
   }, [user]);
 
   useEffect(() => {
@@ -1190,6 +1203,7 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated }) {
     ? maskNationalId(form.nationalId)
     : "—";
   const showStaffId = isAyedosMember(user);
+  const shareCapital = Number(stats.shareCapital || 0);
   function update(event) {
     setForm((current) => ({
       ...current,
@@ -1271,6 +1285,8 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated }) {
       nextErrors.nextOfKinRelationship = "Relationship is required.";
     if (form.nextOfKinPhone.replace(/\D/g, "").length < 10)
       nextErrors.nextOfKinPhone = "Enter a valid next of kin phone number.";
+    if (nominees.length && Math.abs(nominees.reduce((sum, nominee) => sum + Number(nominee.allocationPercentage || 0), 0) - 100) > 0.001)
+      nextErrors.nominees = "Nominee allocations must total 100%.";
     return nextErrors;
   }
 
@@ -1322,6 +1338,7 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated }) {
             relationship: form.nextOfKinRelationship,
             phone: form.nextOfKinPhone,
           },
+          nominees,
         },
         accessToken,
       );
@@ -1504,6 +1521,23 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated }) {
           />
         </EditableSection>
 
+        <Surface className="p-5">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div><h5 className="font-semibold text-slate-950">Nominees</h5><p className="text-sm text-slate-500">Add up to 3 nominees. Allocations must total 100%.</p></div>
+            <button type="button" disabled={nominees.length >= 3} onClick={() => setNominees((items) => [...items, { fullName: "", relationship: "", phone: "", nationalId: "", allocationPercentage: "" }])} className="rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-40"><Plus size={15} className="mr-1 inline" />Add nominee</button>
+          </div>
+          <div className="space-y-3">
+            {nominees.map((nominee, index) => (
+              <div key={index} className="grid gap-3 rounded-lg border bg-slate-50 p-4 md:grid-cols-2">
+                {[['fullName','Full name'],['relationship','Relationship'],['phone','Phone'],['nationalId','National ID']].map(([name,label]) => <label key={name} className="text-sm font-semibold text-slate-700">{label}<input required={name !== 'nationalId'} value={nominee[name] || ''} onChange={(e) => setNominees((items) => items.map((item, i) => i === index ? { ...item, [name]: e.target.value } : item))} className="mt-1 w-full rounded-lg border px-3 py-2" /></label>)}
+                <label className="text-sm font-semibold text-slate-700">Allocation (%)<input required type="number" min="0.01" max="100" step="0.01" value={nominee.allocationPercentage} onChange={(e) => setNominees((items) => items.map((item, i) => i === index ? { ...item, allocationPercentage: e.target.value } : item))} className="mt-1 w-full rounded-lg border px-3 py-2" /></label>
+                <button type="button" onClick={() => setNominees((items) => items.filter((_, i) => i !== index))} className="self-end justify-self-start text-sm font-semibold text-rose-600">Remove nominee</button>
+              </div>
+            ))}
+          </div>
+          <p className={`mt-3 text-sm font-semibold ${errors.nominees ? 'text-rose-600' : 'text-slate-600'}`}>Allocated: {nominees.reduce((sum, nominee) => sum + Number(nominee.allocationPercentage || 0), 0)}%</p>
+        </Surface>
+
         {/* Next of kin – editable */}
         <EditableSection
           id="next-of-kin"
@@ -1560,7 +1594,7 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated }) {
         </div>
       </form>
       {/* Opt-Out Section at bottom of profile */}
-      <OptOutSection accessToken={accessToken} />
+      <OptOutSection accessToken={accessToken} user={user} shareCapitalAmount={shareCapital} stats={stats} onRefresh={onRefresh} />
     </div>
   );
 }
@@ -1961,8 +1995,6 @@ function SecuritySection({
         </div>
       </div>
 
-      {/* 4. OPT-OUT SECTION - BOTTOM */}
-      <OptOutSection accessToken={accessToken} user={user} />
     </div>
   );
 }
@@ -2648,6 +2680,22 @@ function DividendProjection({ stats, showValues }) {
 
 
 function PortfolioPage({ stats, transactions, shares, search, user, showValues, onToggleValues }) {
+  return (
+    <div className="space-y-6">
+      <SectionHeader eyebrow="Portfolio" title="SACCO portfolio" />
+      <Surface className="p-8">
+        <EmptyState
+          icon={Landmark}
+          title="Audited portfolio data is not available"
+          description="Portfolio allocations, performance, and dividend projections will appear once they are supplied by the SACCO ledger. No illustrative values are shown."
+        />
+      </Surface>
+    </div>
+  );
+  // Legacy illustrative layout is retained temporarily for a future ledger-backed rewrite.
+  // eslint-disable-next-line no-unreachable
+  {
+  const filteredTransactions = transactions.filter((transaction) => matchesSearch(transaction, search));
   const activeShareRecords = shares.filter((share) => matchesSearch(share, search)).length;
   const pooledFunds = SACCO_UTILIZATION_ALLOCATIONS.reduce((sum, item) => sum + item.amount, 0);
   const allocationChartData = SACCO_UTILIZATION_ALLOCATIONS.map((item) => ({
@@ -2926,6 +2974,7 @@ function PortfolioPage({ stats, transactions, shares, search, user, showValues, 
       </div>
     </div>
   );
+  }
 }
 
 function SearchResultsPage({
@@ -3232,17 +3281,16 @@ function SavingsPage({
   );
 }
 
-function OptOutSection({ accessToken, user }) {
+function OptOutSection({ accessToken, user, shareCapitalAmount = 0, stats = {}, onRefresh }) {
   const [form, setForm] = useState({ reason: "", confirm: "" });
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
   const [step, setStep] = useState("initial"); // initial | confirm | success | shareCapitalModal
   const [optOutResult, setOptOutResult] = useState(null);
+  // The API is the source of truth for loan and guarantor eligibility.
   const canOptOut = true;
-
   async function handleOptOut(e) {
     e.preventDefault();
-    if (!canOptOut) { setMsg({ type: "error", text: "Cannot opt out: you have outstanding loans or active guarantor obligations." }); return; }
     if (form.confirm.trim().toUpperCase() !== "CONFIRM") { setMsg({ type: "error", text: 'Type "CONFIRM" to proceed.' }); return; }
     setSaving(true); setMsg(null);
     try {
@@ -3285,18 +3333,29 @@ function OptOutSection({ accessToken, user }) {
               Request membership cancellation
             </button>
           ) : step === "confirm" ? (
-            <form onSubmit={handleOptOut} className="space-y-4">
-              {msg && <div className={`rounded-lg border px-4 py-3 text-sm font-medium ${msg.type==="success"?"border-emerald-200 bg-emerald-50 text-emerald-800":"border-rose-200 bg-rose-50 text-rose-800"}`}>{msg.text}</div>}
-              <label className="block text-sm font-semibold text-rose-900">Reason for leaving<textarea value={form.reason} onChange={e=>setForm(f=>({...f,reason:e.target.value}))} rows={3} className="mt-1 w-full rounded-lg border border-rose-200 px-3.5 py-3 text-sm" placeholder="Explain why you wish to leave the SACCO..."/></label>
-              <label className="block text-sm font-semibold text-rose-900">Type CONFIRM to proceed<input value={form.confirm} onChange={e=>setForm(f=>({...f,confirm:e.target.value}))} className="mt-1 w-full rounded-lg border border-rose-200 px-3.5 py-3 text-sm" placeholder='Type "CONFIRM" to verify'/></label>
-              <div className="flex items-center gap-3">
-                <button type="submit" disabled={saving} className="inline-flex min-h-12 items-center gap-2 rounded-lg bg-red-600 px-5 py-3 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60">
-                  {saving?<RefreshCw className="animate-spin" size={17}/>:<LogOut size={17}/>}
-                  {saving?"Submitting...":"Confirm opt-out"}
-                </button>
-                <button type="button" onClick={()=>{setStep("initial");setMsg(null);}} className="text-sm text-slate-500 hover:text-slate-700">Cancel</button>
+            <div className="space-y-5">
+              <div className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
+                <h5 className="font-semibold text-slate-950 dark:text-white">Completed opt-out form</h5>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-300">Download, complete and upload the membership exit form.</p>
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 dark:border-slate-600 dark:bg-slate-800 dark:text-white"><Download size={16} />Download form</button>
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 dark:border-slate-600 dark:bg-slate-800 dark:text-white"><FileText size={16} />Upload completed form<input type="file" accept=".pdf,.doc,.docx,image/*" className="sr-only" /></label>
+                </div>
               </div>
-            </form>
+              <ShareCapitalTransfer stats={stats} accessToken={accessToken} onRefresh={onRefresh} />
+              <form onSubmit={handleOptOut} className="space-y-4">
+                {msg && <div className={`rounded-lg border px-4 py-3 text-sm font-medium ${msg.type==="success"?"border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200":"border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-200"}`}>{msg.text}</div>}
+                <label className="block text-sm font-semibold text-rose-900 dark:text-rose-200">Reason for leaving<textarea value={form.reason} onChange={e=>setForm(f=>({...f,reason:e.target.value}))} rows={3} className="mt-1 w-full rounded-lg border border-rose-200 px-3.5 py-3 text-sm dark:border-rose-800" placeholder="Explain why you wish to leave the SACCO..."/></label>
+                <label className="block text-sm font-semibold text-rose-900 dark:text-rose-200">Type CONFIRM to proceed<input value={form.confirm} onChange={e=>setForm(f=>({...f,confirm:e.target.value}))} className="mt-1 w-full rounded-lg border border-rose-200 px-3.5 py-3 text-sm dark:border-rose-800" placeholder='Type "CONFIRM" to verify'/></label>
+                <div className="flex flex-wrap items-center gap-3">
+                  <button type="submit" disabled={saving} className="inline-flex min-h-12 items-center gap-2 rounded-lg bg-red-600 px-5 py-3 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60">
+                    {saving?<RefreshCw className="animate-spin" size={17}/>:<LogOut size={17}/>}
+                    {saving?"Submitting...":"Confirm opt-out"}
+                  </button>
+                  <button type="button" onClick={()=>{setStep("initial");setMsg(null);}} className="text-sm font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">Cancel</button>
+                </div>
+              </form>
+            </div>
           ) : null}
         </div>
       </div>
@@ -3312,7 +3371,7 @@ function OptOutSection({ accessToken, user }) {
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-slate-950">Transfer Share Capital</h3>
-                  <p className="text-sm text-slate-500">List your share capital for other members to bid on.</p>
+                  <p className="text-sm text-slate-500">Transfer 100% of your share capital to an active member.</p>
                 </div>
               </div>
               <button
@@ -3325,12 +3384,12 @@ function OptOutSection({ accessToken, user }) {
 
             <div className="px-6 py-5">
               <p className="mb-4 rounded-lg bg-sky-50 px-4 py-3 text-sm text-sky-800">
-                Your opt-out request has been submitted. Your share capital of <strong>{formatCurrency(optOutResult?.shareCapitalAmount || 0)}</strong> will be listed on the marketplace for other members to bid on.
+                Your opt-out request has been submitted. Select the member who will receive your full share capital of <strong>{formatCurrency(optOutResult?.shareCapitalAmount || 0)}</strong>. A 5% SACCO fee will be deducted.
               </p>
               <TransferShareCapitalForm
                 accessToken={accessToken}
                 shareCapitalAmount={optOutResult?.shareCapitalAmount || 0}
-                memberNumber={user?.memberNumber || user?.Member?.memberNumber || ""}
+                optOut
                 onComplete={() => setStep("success")}
                 onCancel={() => setStep("success")}
               />
@@ -3354,10 +3413,17 @@ function OptOutSection({ accessToken, user }) {
   );
 }
 
-function TransferShareCapitalForm({ accessToken, shareCapitalAmount, memberNumber, onComplete, onCancel }) {
-  const [form, setForm] = useState({ memberId: memberNumber || "", amount: String(shareCapitalAmount || "") });
+function TransferShareCapitalForm({ accessToken, shareCapitalAmount, optOut = false, onComplete, onCancel }) {
+  const [form, setForm] = useState({ memberId: "", amount: String(shareCapitalAmount || "") });
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
+  const [recipient, setRecipient] = useState(null);
+
+  async function searchRecipient() {
+    setMsg(null); setRecipient(null);
+    try { const result = await findMemberByNumber(form.memberId, accessToken); setRecipient(result.member); }
+    catch (err) { setMsg({ type: "error", text: err.message }); }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -3367,12 +3433,12 @@ function TransferShareCapitalForm({ accessToken, shareCapitalAmount, memberNumbe
     if (amount > shareCapitalAmount) { setMsg({ type: "error", text: `Amount cannot exceed your share capital (${formatCurrency(shareCapitalAmount)}).` }); return; }
     setSaving(true); setMsg(null);
     try {
-      // Submit the share capital listing to the marketplace
-      await apiListingCreate({ memberId: form.memberId, amount, accessToken });
-      setMsg({ type: "success", text: "Share capital listing created successfully. Other members can now place bids." });
+      if (!recipient) throw new Error("Search and select a recipient before confirming.");
+      const result = await transferShareCapital({ recipientMemberNumber: recipient.memberNumber, amount, optOut, confirmed: true }, accessToken);
+      setMsg({ type: "success", text: `Transfer complete. ${formatCurrency(result.feeAmount)} was routed to SACCO revenue.` });
       setTimeout(() => onComplete?.(), 2000);
     } catch (err) {
-      setMsg({ type: "error", text: err?.message || "Failed to create listing." });
+      setMsg({ type: "error", text: err?.message || "Failed to transfer share capital." });
     } finally { setSaving(false); }
   }
 
@@ -3380,14 +3446,10 @@ function TransferShareCapitalForm({ accessToken, shareCapitalAmount, memberNumbe
     <form onSubmit={handleSubmit} className="space-y-4">
       {msg && <div className={`rounded-lg border px-4 py-3 text-sm font-medium ${msg.type==="success"?"border-emerald-200 bg-emerald-50 text-emerald-800":"border-rose-200 bg-rose-50 text-rose-800"}`}>{msg.text}</div>}
       <label className="block text-sm font-semibold text-slate-700">
-        Member ID (auto-filled)
-        <input
-          type="text"
-          value={form.memberId}
-          readOnly
-          className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-3 text-sm text-slate-600 cursor-not-allowed"
-        />
+        Recipient membership number
+        <div className="mt-1 flex gap-2"><input type="text" value={form.memberId} onChange={(e) => { setForm((f) => ({ ...f, memberId: e.target.value })); setRecipient(null); }} className="w-full rounded-lg border px-3.5 py-3 text-sm" placeholder="29903-001" /><button type="button" onClick={searchRecipient} className="rounded-lg border px-4 text-sm font-semibold">Search</button></div>
       </label>
+      {recipient ? <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm"><strong>{recipient.name || recipient.User?.name || recipient.memberNumber}</strong><br />{recipient.memberNumber}</div> : null}
       <label className="block text-sm font-semibold text-slate-700">
         Share Capital Amount (KES)
         <span className="text-xs font-normal text-slate-400 ml-1">Max: {formatCurrency(shareCapitalAmount)}</span>
@@ -3407,7 +3469,7 @@ function TransferShareCapitalForm({ accessToken, shareCapitalAmount, memberNumbe
           className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-lg bg-sky-600 px-5 py-3 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60"
         >
           {saving ? <RefreshCw className="animate-spin" size={17} /> : <Send size={17} />}
-          {saving ? "Creating listing..." : "List on marketplace"}
+          {saving ? "Transferring..." : "Confirm transfer"}
         </button>
         <button
           type="button"
@@ -3421,16 +3483,11 @@ function TransferShareCapitalForm({ accessToken, shareCapitalAmount, memberNumbe
   );
 }
 
-// API helper for share capital listing
-async function apiListingCreate({ memberId, amount, accessToken }) {
-  const { apiRequest, unwrapEnvelopeData } = await import("../../lib/apiClient.js");
-  const res = await apiRequest("/api/shares/listings", {
-    method: "POST",
-    accessToken,
-    body: { memberId, amount: Number(amount) },
-  });
-  if (!res.ok) throw new Error(res.json?.message || "Failed to create listing");
-  return unwrapEnvelopeData(res.json);
+function ShareCapitalTransfer({ stats, accessToken, onRefresh }) {
+  return (<Surface className="p-5">
+    <div className="mb-4"><h5 className="text-base font-semibold text-slate-950">Transfer Share Capital</h5><p className="text-sm text-slate-500">A 5% fee applies. Your remaining balance must stay at or above {formatCurrency(MIN_SHARE_CAPITAL)}.</p></div>
+    <TransferShareCapitalForm accessToken={accessToken} shareCapitalAmount={Math.max(Number(stats.shareCapital || 0) - MIN_SHARE_CAPITAL, 0)} onComplete={onRefresh} />
+  </Surface>);
 }
 
 export {

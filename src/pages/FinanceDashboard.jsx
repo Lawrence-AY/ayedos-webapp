@@ -287,7 +287,7 @@ export default function FinanceDashboard() {
   useEffect(() => {
     const interval = setInterval(
       () => loadAllData({ showLoading: false }),
-      5 * 60 * 1000,
+      15 * 1000,
     );
     return () => clearInterval(interval);
   }, [loadAllData]);
@@ -1035,6 +1035,7 @@ function NotificationsPanel({
 // OVERVIEW
 // ============================================================
 function FinanceHome({ data, stats, globalSearch = "", onVerifyTransaction }) {
+  const [showInterestBreakdown, setShowInterestBreakdown] = useState(false);
   const navigate = useNavigate();
   const dashboardBase = getDashboardPath("FINANCE");
   const transactionSeries = getMonthlySeries(data.transactions);
@@ -1045,6 +1046,7 @@ function FinanceHome({ data, stats, globalSearch = "", onVerifyTransaction }) {
         .includes("REPAYMENT"),
     ),
   );
+  const interests = data.reports?.totals?.interests || {};
   const txCards = [
     {
       label: "Daily Transactions",
@@ -1132,6 +1134,10 @@ function FinanceHome({ data, stats, globalSearch = "", onVerifyTransaction }) {
           </div>
         ))}
       </div>
+      <button type="button" onClick={() => setShowInterestBreakdown((value) => !value)} className="w-full rounded-xl border bg-white p-5 text-left shadow-sm">
+        <div className="flex items-center justify-between"><div><p className="text-sm font-semibold text-slate-500">Interests overview</p><p className="mt-1 text-2xl font-bold text-slate-950">{formatCurrency(interests.total || 0)}</p></div><TrendingUp className="text-emerald-600" /></div>
+        {showInterestBreakdown ? <div className="mt-4 grid gap-3 border-t pt-4 sm:grid-cols-2"><div><p className="text-xs uppercase text-slate-500">Loan Repayment Interest</p><p className="font-semibold">{formatCurrency(interests.loanRepaymentInterest || 0)}</p></div><div><p className="text-xs uppercase text-slate-500">Share Capital Transfer Fees (5%)</p><p className="font-semibold">{formatCurrency(interests.shareCapitalTransferFees || 0)}</p></div></div> : <p className="mt-2 text-xs text-slate-500">Click to expand earnings by source</p>}
+      </button>
       <div className="grid gap-5 xl:grid-cols-2">
         <AnalyticsPanel
           title="Transaction volume"
@@ -1379,27 +1385,17 @@ function TransactionsPage({
   );
   const [toDate, setToDate] = useState(initialPeriod === "today" ? today : "");
   const [depositFilter, setDepositFilter] = useState(
-    [
-      "deposit",
-      "withdrawal",
-      "repayment",
-      "share",
-      "savings",
-      "application_fee",
-    ].includes(initialType)
+    ["deposit", "withdrawal", "repayment", "share", "share_transfer", "savings", "application_fee"].includes(
+      initialType,
+    )
       ? initialType
       : "all",
   );
   useEffect(() => {
     setDepositFilter(
-      [
-        "deposit",
-        "withdrawal",
-        "repayment",
-        "share",
-        "savings",
-        "application_fee",
-      ].includes(initialType)
+      ["deposit", "withdrawal", "repayment", "share", "share_transfer", "savings", "application_fee"].includes(
+        initialType,
+      )
         ? initialType
         : "all",
     );
@@ -1420,17 +1416,7 @@ function TransactionsPage({
       "reference",
     ]),
     search,
-    [
-      "id",
-      "type",
-      "description",
-      "category",
-      "destination",
-      "memberNumber",
-      "memberName",
-      "status",
-      "reference",
-    ],
+    ["id", "type", "description", "category", "destination", "memberNumber", "memberName", "status", "reference"],
   );
   if (fromDate)
     filtered = filtered.filter((t) => {
@@ -1449,6 +1435,8 @@ function TransactionsPage({
     filtered = filtered.filter((t) => {
       return t.category === "SHARE_CAPITAL";
     });
+  if (depositFilter === "share_transfer")
+    filtered = filtered.filter((t) => String(t.type || '').toUpperCase() === 'SHARE_CAPITAL_TRANSFER');
   if (depositFilter === "savings")
     filtered = filtered.filter((t) => {
       return t.category === "SAVINGS";
@@ -1482,16 +1470,8 @@ function TransactionsPage({
     },
     { key: "memberNumber", label: "Member Number", render: (v) => v || "—" },
     { key: "memberName", label: "Member", render: (v) => v || "—" },
-    {
-      key: "category",
-      label: "Category",
-      render: (v) => String(v || "UNCLASSIFIED").replaceAll("_", " "),
-    },
-    {
-      key: "destination",
-      label: "Destination",
-      render: (v) => v || "Unclassified",
-    },
+    { key: "category", label: "Category", render: (v) => String(v || "UNCLASSIFIED").replaceAll("_", " ") },
+    { key: "destination", label: "Destination", render: (v) => v || "Unclassified" },
     { key: "type", label: "Type" },
     {
       key: "amount",
@@ -1547,6 +1527,7 @@ function TransactionsPage({
           <option value="withdrawal">Withdrawals</option>
           <option value="repayment">Repayments</option>
           <option value="share">Share Capital</option>
+          <option value="share_transfer">Share Capital Transfers & Fees</option>
           <option value="savings">Savings Only</option>
           <option value="application_fee">Member Application Fees</option>
         </select>
@@ -1559,7 +1540,7 @@ function TransactionsPage({
         </button>
       </div>
       <DataTable
-        title={embedded ? "Recent transactions" : "Transaction processing"}
+        title={embedded ? "Recent transactions" : "Transactions & Audits"}
         description="Verify deposits, withdrawals, fees, disbursements, repayments, and dividend transactions"
         search={search}
         onSearch={setSearch}
@@ -1599,8 +1580,8 @@ function TransactionsPage({
     <div className="space-y-6">
       <SectionHeader
         eyebrow="Transactions"
-        title="Transaction processing"
-        description="Verify, filter by date range, classify deposits, and export data."
+        title="Transactions & Audits"
+        description="Real-time ledger records, share capital transfers, SACCO fees, verification, and exports."
       />
       {content}
     </div>
@@ -2771,31 +2752,13 @@ function FinanceMemberFinancialDetail({ member, accessToken, onBack }) {
     setLoading(true);
     setError("");
     getMemberFinancialProfile(memberId, accessToken)
-      .then((result) => {
-        if (!cancelled) setProfile(result);
-      })
-      .catch((requestError) => {
-        if (!cancelled)
-          setError(
-            requestError?.message || "Failed to load member financial profile.",
-          );
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+      .then((result) => { if (!cancelled) setProfile(result); })
+      .catch((requestError) => { if (!cancelled) setError(requestError?.message || "Failed to load member financial profile."); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [accessToken, memberId]);
 
-  return (
-    <MemberFinancialProfile
-      profile={profile}
-      loading={loading}
-      error={error}
-      onBack={onBack}
-    />
-  );
+  return <MemberFinancialProfile profile={profile} loading={loading} error={error} onBack={onBack} />;
 }
 function MemberProfileDetail({ member, onBack }) {
   return (
@@ -3310,7 +3273,7 @@ function FinancierProfileSettings({ user, stats, accessToken }) {
   );
 
   return (
-    <div className="max-w-6xl space-y-6">
+    <div className="space-y-6 max-w-2xl">
       <SectionHeader eyebrow="Profile Settings" title="Manage your profile" />
       {message && (
         <div
@@ -3355,77 +3318,74 @@ function FinancierProfileSettings({ user, stats, accessToken }) {
         </div>
       </div>
 
-      <div className="grid items-start gap-6 lg:grid-cols-2">
-        {/* Edit Profile Form */}
-        <form
-          onSubmit={handleSaveProfile}
-          className="space-y-4 rounded-lg border bg-white p-6"
+      {/* Edit Profile Form */}
+      <form
+        onSubmit={handleSaveProfile}
+        className="space-y-4 rounded-lg border bg-white p-6"
+      >
+        <h5 className="text-base font-semibold text-slate-950">
+          Personal information
+        </h5>
+        {[
+          { l: "Full Name", n: "name", t: "text" },
+          { l: "Email", n: "email", t: "email" },
+          { l: "Phone", n: "phone", t: "text" },
+        ].map((f) => (
+          <label
+            key={f.n}
+            className="block text-sm font-semibold text-slate-700"
+          >
+            {f.l}
+            <input
+              type={f.t}
+              className="mt-1 w-full rounded-lg border px-3.5 py-3 text-sm"
+              value={form[f.n]}
+              onChange={(e) =>
+                setForm((c) => ({ ...c, [f.n]: e.target.value }))
+              }
+            />
+          </label>
+        ))}
+        <button
+          disabled={saving}
+          className="inline-flex min-h-12 items-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white"
         >
-          <h5 className="text-base font-semibold text-slate-950">
-            Personal information
-          </h5>
-          {[
-            { l: "Full Name", n: "name", t: "text" },
-            { l: "Email", n: "email", t: "email" },
-            { l: "Phone", n: "phone", t: "text" },
-          ].map((f) => (
-            <label
-              key={f.n}
-              className="block text-sm font-semibold text-slate-700"
-            >
-              {f.l}
-              <input
-                type={f.t}
-                className="mt-1 w-full rounded-lg border px-3.5 py-3 text-sm"
-                value={form[f.n]}
-                onChange={(e) =>
-                  setForm((c) => ({ ...c, [f.n]: e.target.value }))
-                }
-              />
-            </label>
-          ))}
-          <button
-            disabled={saving}
-            className="inline-flex min-h-12 items-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white"
-          >
-            {saving ? (
-              <RefreshCw className="animate-spin" size={17} />
-            ) : (
-              <CheckCircle2 size={17} />
-            )}
-            {saving ? "Saving..." : "Save changes"}
-          </button>
-        </form>
-
-        <div className="space-y-4">
-          {/* Change Password Form */}
-          {pwMessage && (
-            <div
-              className={`rounded-lg border px-4 py-3 text-sm font-medium ${pwMessage.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800"}`}
-            >
-              {pwMessage.text}
-            </div>
+          {saving ? (
+            <RefreshCw className="animate-spin" size={17} />
+          ) : (
+            <CheckCircle2 size={17} />
           )}
-          <form
-            onSubmit={handlePasswordSubmit}
-            className="space-y-4 rounded-lg border bg-white p-6"
-          >
-            <h5 className="text-base font-semibold text-slate-950">
-              Change password
-            </h5>
-            {pwField("Current password", "current")}
-            {pwField("New password", "new")}
-            {pwField("Confirm new password", "confirm")}
-            <button
-              disabled={pwSaving}
-              className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white"
-            >
-              <LockKeyhole size={17} />
-              {pwSaving ? "Updating..." : "Update password"}
-            </button>
-          </form>
+          {saving ? "Saving..." : "Save changes"}
+        </button>
+      </form>
+
+      {/* Change Password Form */}
+      {pwMessage && (
+      
+        <div
+          className={`rounded-lg border px-4 py-3 text-sm font-medium ${pwMessage.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800"}`}
+        >
+          {pwMessage.text}
         </div>
-      </div>
+      )}
+      <form
+        onSubmit={handlePasswordSubmit}
+        className="space-y-4 rounded-lg border bg-white p-6"
+      >
+        <h5 className="text-base font-semibold text-slate-950">
+          Change password
+        </h5>
+        {pwField("Current password", "current")}
+        {pwField("New password", "new")}
+        {pwField("Confirm new password", "confirm")}
+        <button
+          disabled={pwSaving}
+          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white"
+        >
+          <LockKeyhole size={17} />
+          {pwSaving ? "Updating..." : "Update password"}
+        </button>
+      </form>
     </div>
   );
 }
