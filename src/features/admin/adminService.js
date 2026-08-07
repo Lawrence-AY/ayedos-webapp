@@ -68,6 +68,38 @@ export async function getAdminNotifications(accessToken) {
   return unwrapEnvelopeData(res.json)
 }
 
+export async function previewMemberCsvImport(csv, accessToken) {
+  const res = await apiRequest('/api/admin/members/import/preview', {
+    method: 'POST',
+    accessToken,
+    body: { csv },
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to preview member import')
+  return unwrapEnvelopeData(res.json)
+}
+
+export async function commitMemberCsvImport(csv, accessToken) {
+  const res = await apiRequest('/api/admin/members/import/commit', {
+    method: 'POST',
+    accessToken,
+    body: { csv },
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to import members')
+  return unwrapEnvelopeData(res.json)
+}
+
+export async function markAdminNotificationRead(id, accessToken) {
+  const res = await apiRequest(`/api/admin/notifications/${id}/read`, { method: 'POST', accessToken, cache: false })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to mark notification as read')
+  return unwrapEnvelopeData(res.json)
+}
+
+export async function markAllAdminNotificationsRead(accessToken) {
+  const res = await apiRequest('/api/admin/notifications/read-all', { method: 'POST', accessToken, cache: false })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to mark notifications as read')
+  return unwrapEnvelopeData(res.json)
+}
+
 export async function sendGlobalBroadcast(data, accessToken) {
   const res = await apiRequest('/api/admin/notifications/broadcast', { method: 'POST', accessToken, body: data })
   if (!res.ok) throw new Error(res.json?.message || 'Failed to send broadcast')

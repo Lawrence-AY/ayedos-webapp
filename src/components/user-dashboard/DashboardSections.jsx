@@ -66,6 +66,7 @@ import {
   applyForLoan,
   emailMemberReport,
   repayLoan,
+  searchQualifiedGuarantors,
 } from "../../features/member/memberService.js";
 import {
   changePassword,
@@ -85,6 +86,7 @@ const emptyProfile = {
   jobTitle: "",
   monthlyIncome: "",
   payrollNumber: "",
+  staffId: "",
   nextOfKinName: "",
   nextOfKinRelationship: "",
   nextOfKinPhone: "",
@@ -93,6 +95,11 @@ const emptyProfile = {
 
 const MIN_SHARE_CAPITAL = 25000;
 const MAX_PROFILE_PHOTO_BYTES = 1.5 * 1024 * 1024;
+
+function isAyedosMember(user = {}) {
+  const company = String(user?.company || user?.employer || "").toLowerCase();
+  return company === "ayedos" || Boolean(user?.isWhitelisted);
+}
 
 const LOAN_PRODUCTS = [
   {
@@ -910,6 +917,7 @@ function DashboardOverview({
   onToggleValues,
 }) {
   const greeting = getGreeting();
+  const showEmployerContribution = isAyedosMember(user);
   const cards = [
     {
       label: "Share Capital",
@@ -932,6 +940,16 @@ function DashboardOverview({
       helper: `${stats.activeLoans} active loan${stats.activeLoans === 1 ? "" : "s"}`,
       tone: "amber",
     },
+    ...(showEmployerContribution
+      ? [
+          {
+            label: "Employer Contribution",
+            value: formatCurrency(stats.employerContribution || user?.employerContribution || 0),
+            icon: Building2,
+            tone: "violet",
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -1109,6 +1127,7 @@ function buildProfileForm(profile = {}) {
     jobTitle: profile?.occupation || profile?.jobTitle || "",
     monthlyIncome: profile?.monthlyIncome || "",
     payrollNumber: profile?.payrollNumber || "",
+    staffId: profile?.staffId || "",
     nextOfKinName: profile?.nextOfKinName || profile?.nextOfKin?.name || "",
     nextOfKinRelationship:
       profile?.nextOfKinRelationship || profile?.nextOfKin?.relationship || "",
@@ -1136,6 +1155,7 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated }) {
     jobTitle: user?.jobTitle || "",
     monthlyIncome: user?.monthlyIncome || "",
     payrollNumber: user?.payrollNumber || "",
+    staffId: user?.staffId || "",
     nextOfKinName: user?.nextOfKinName || user?.nextOfKin?.name || "",
     nextOfKinRelationship:
       user?.nextOfKinRelationship || user?.nextOfKin?.relationship || "",
@@ -1169,6 +1189,7 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated }) {
   const maskedNationalId = form.nationalId
     ? maskNationalId(form.nationalId)
     : "—";
+  const showStaffId = isAyedosMember(user);
   function update(event) {
     setForm((current) => ({
       ...current,
@@ -1414,6 +1435,15 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated }) {
               <label className="text-sm font-medium">National ID</label>
               <p className="mt-1 text-sm text-foreground">{maskedNationalId}</p>
             </div>
+
+            {showStaffId ? (
+              <div>
+                <label className="text-sm font-medium">Staff ID</label>
+                <p className="mt-1 text-sm font-semibold text-foreground">
+                  {form.staffId || user?.staffId || "Not assigned"}
+                </p>
+              </div>
+            ) : null}
 
             {/* Date of Birth */}
             <div>
@@ -1940,11 +1970,13 @@ function SecuritySection({
 function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues }) {
   const isLoanEligible = Number(stats.shareCapital || 0) >= MIN_SHARE_CAPITAL;
   const loanEligibilityMessage = "You are not yet eligible to apply for a loan. Please complete the minimum required share capital purchase before submitting a loan application.";
-  const [loanForm, setLoanForm] = useState({ type: "EMERGENCY", amount: "10000", duration: "12" });
+  const [loanForm, setLoanForm] = useState({ type: "EMERGENCY", amount: "10000", duration: "12", reason: "" });
   const [repayAmount, setRepayAmount] = useState("");
   const [message, setMessage] = useState(null);
   const [selectedGuarantors, setSelectedGuarantors] = useState([]);
-  const [guarantorAcceptance, setGuarantorAcceptance] = useState({});
+  const [guarantorQuery, setGuarantorQuery] = useState("");
+  const [guarantorResults, setGuarantorResults] = useState([]);
+  const [guarantorLoading, setGuarantorLoading] = useState(false);
   const activeLoans = loans.filter((loan) => ["ACTIVE", "APPROVED"].includes(String(loan.status || "").toUpperCase()));
   const [repayLoanId, setRepayLoanId] = useState("");
   const totalBalance = activeLoans.reduce((sum, loan) => sum + Number(loan.balance || loan.principal || 0), 0);
@@ -1956,28 +1988,37 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
   const totalInterest = requestedAmount * (selectedProduct.interestRate / 100) * requestedDuration;
   const monthlyRepayment = requestedDuration ? (requestedAmount + totalInterest) / requestedDuration : 0;
 
-  const MOCK_MEMBERS = [
-    { id: "m1", name: "Jane Muthoni", phone: "+254712345678", shareCapital: 28000 },
-    { id: "m2", name: "Peter Kamau", phone: "+254723456789", shareCapital: 35000 },
-    { id: "m3", name: "Grace Achieng", phone: "+254734567890", shareCapital: 25000 },
-    { id: "m4", name: "David Otieno", phone: "+254745678901", shareCapital: 42000 },
-    { id: "m5", name: "Faith Wanjiku", phone: "+254756789012", shareCapital: 30000 },
-    { id: "m6", name: "John Njoroge", phone: "+254767890123", shareCapital: 22000 },
-    { id: "m7", name: "Alice Wambui", phone: "+254778901234", shareCapital: 38000 },
-    { id: "m8", name: "Michael Kiprop", phone: "+254789012345", shareCapital: 27000 },
-  ];
-
   const requiresGuarantors = selectedProduct.guarantors > 0;
-  const selectedMemberNames = selectedGuarantors.map((id) => MOCK_MEMBERS.find((m) => m.id === id)?.name || id).join(", ");
+  const selectedMemberNames = selectedGuarantors.map((member) => member.name || member.memberNumber).join(", ");
 
-  function toggleGuarantor(id) {
+  useEffect(() => {
+    if (!requiresGuarantors || guarantorQuery.trim().length < 2) {
+      setGuarantorResults([]);
+      return undefined;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setGuarantorLoading(true);
+      try {
+        const results = await searchQualifiedGuarantors(guarantorQuery.trim(), accessToken);
+        if (!cancelled) setGuarantorResults(results || []);
+      } catch (error) {
+        if (!cancelled) setMessage({ type: "error", text: error?.message || "Unable to search guarantors." });
+      } finally {
+        if (!cancelled) setGuarantorLoading(false);
+      }
+    }, 250);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [accessToken, guarantorQuery, requiresGuarantors]);
+
+  function toggleGuarantor(member) {
+    const id = member.memberId;
     setSelectedGuarantors((prev) => {
-      if (prev.includes(id)) { const n = prev.filter((x) => x !== id); setGuarantorAcceptance((a) => { const c = { ...a }; delete c[id]; return c; }); return n; }
+      if (prev.some((item) => item.memberId === id)) return prev.filter((item) => item.memberId !== id);
       if (prev.length >= selectedProduct.guarantors) return prev;
-      return [...prev, id];
+      return [...prev, member];
     });
   }
-  function simulateAccept(id) { setGuarantorAcceptance((prev) => ({ ...prev, [id]: "accepted" })); }
 
   async function requestLoan(event) {
     event.preventDefault();
@@ -1986,11 +2027,12 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
     if (!selectedProduct) { setMessage({ type: "error", text: "Select a valid loan product." }); return; }
     if (selectedProduct.requiresFullShareCapital && stats.shareCapitalRemaining > 0) { setMessage({ type: "error", text: "Minimum share capital must be fully paid." }); return; }
     if (requiresGuarantors && selectedGuarantors.length < selectedProduct.guarantors) { setMessage({ type: "error", text: `This loan requires ${selectedProduct.guarantors} guarantor${selectedProduct.guarantors > 1 ? "s" : ""}.` }); return; }
-    if (requiresGuarantors && selectedGuarantors.some((id) => guarantorAcceptance[id] !== "accepted")) { setMessage({ type: "error", text: "All guarantors must explicitly accept." }); return; }
+    if (!loanForm.reason.trim()) { setMessage({ type: "error", text: "Please add the reason for this loan request." }); return; }
     try {
-      await applyForLoan({ type: loanForm.type, amount: requestedAmount, duration: requestedDuration, interestRate: selectedProduct.interestRate, guarantors: requiresGuarantors ? selectedGuarantors : undefined }, accessToken);
-      setMessage({ type: "success", text: "Loan request submitted." });
-      setSelectedGuarantors([]); setGuarantorAcceptance({}); await onRefresh?.();
+      await applyForLoan({ type: loanForm.type, amount: requestedAmount, duration: requestedDuration, interestRate: selectedProduct.interestRate, reason: loanForm.reason.trim(), guarantors: requiresGuarantors ? selectedGuarantors.map((member) => ({ memberId: member.memberId, amount: requestedAmount })) : undefined }, accessToken);
+      setMessage({ type: "success", text: requiresGuarantors ? "Loan request submitted. Guarantor links expire in 72 hours." : "Loan request submitted." });
+      setLoanForm((current) => ({ ...current, reason: "" }));
+      setSelectedGuarantors([]); setGuarantorQuery(""); setGuarantorResults([]); await onRefresh?.();
     } catch (error) { setMessage({ type: "error", text: error?.message || "Failed to request loan." }); }
   }
 
@@ -2027,19 +2069,27 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
           <form onSubmit={requestLoan} className="mt-4 grid gap-4">
             <fieldset disabled={!isLoanEligible} className="contents">
             <label className="text-sm font-semibold text-slate-700">Loan product
-              <select id="loan-product-select" value={loanForm.type} onChange={(e) => { setLoanForm((c) => ({ ...c, type: e.target.value })); setSelectedGuarantors([]); setGuarantorAcceptance({}); }} className="mt-2 w-full rounded-lg border px-3.5 py-3 text-sm">{LOAN_PRODUCTS.map((p) => (<option key={p.type} value={p.type}>{p.name}</option>))}</select>
+              <select id="loan-product-select" value={loanForm.type} onChange={(e) => { setLoanForm((c) => ({ ...c, type: e.target.value })); setSelectedGuarantors([]); setGuarantorQuery(""); setGuarantorResults([]); }} className="mt-2 w-full rounded-lg border px-3.5 py-3 text-sm">{LOAN_PRODUCTS.map((p) => (<option key={p.type} value={p.type}>{p.name}</option>))}</select>
             </label>
             <Field label="Amount" name="amount" type="number" value={loanForm.amount} onChange={(e) => setLoanForm((c) => ({ ...c, amount: e.target.value }))} />
             <Field label="Duration (months)" name="duration" type="number" value={loanForm.duration} onChange={(e) => setLoanForm((c) => ({ ...c, duration: e.target.value }))} />
+            <label className="text-sm font-semibold text-slate-700">Reason
+              <textarea value={loanForm.reason} onChange={(e) => setLoanForm((c) => ({ ...c, reason: e.target.value }))} className="mt-2 min-h-24 w-full rounded-lg border px-3.5 py-3 text-sm" placeholder="Purpose of the loan" />
+            </label>
             {requiresGuarantors ? (
               <div className="rounded-lg border border-sky-200 bg-sky-50 p-4">
                 <div className="mb-3 flex items-center gap-2"><UsersRound size={16} className="text-sky-700" /><span className="text-sm font-semibold text-sky-900">Guarantor management</span><span className="rounded-full bg-sky-200 px-2 py-0.5 text-xs font-semibold text-sky-700">{selectedGuarantors.length}/{selectedProduct.guarantors} selected</span></div>
-                <p className="mb-3 text-xs text-sky-700">Select {selectedProduct.guarantors} active SACCO member{selectedProduct.guarantors > 1 ? "s" : ""}. Each must explicitly accept.</p>
+                <p className="mb-3 text-xs text-sky-700">Search active qualified SACCO members by name or member number. Each selected guarantor receives a 72-hour secure link.</p>
+                <div className="relative mb-3">
+                  <Search size={16} className="pointer-events-none absolute left-3 top-3.5 text-slate-400" />
+                  <input value={guarantorQuery} onChange={(e) => setGuarantorQuery(e.target.value)} className="w-full rounded-lg border border-sky-200 bg-white py-3 pl-9 pr-3 text-sm" placeholder="Search member name or number" />
+                </div>
                 <div className="max-h-48 space-y-2 overflow-y-auto">
-                  {MOCK_MEMBERS.map((member) => {
-                    const isSelected = selectedGuarantors.includes(member.id);
-                    const acceptance = guarantorAcceptance[member.id];
-                    return (<div key={member.id} className={`flex items-center justify-between rounded-lg border px-3 py-2 transition ${isSelected ? acceptance === "accepted" ? "border-emerald-300 bg-emerald-50" : "border-sky-300 bg-white" : "border-slate-200 bg-white"}`}><div className="flex items-center gap-3"><input type="checkbox" checked={isSelected} onChange={() => toggleGuarantor(member.id)} className="h-4 w-4 rounded border-slate-300 text-sky-600" /><div><p className="text-sm font-semibold text-slate-800">{member.name}</p><p className="text-xs text-slate-500">{member.phone} · Share: {formatCurrency(member.shareCapital)}</p></div></div>{isSelected ? (acceptance === "accepted" ? (<span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700"><CheckCircle2 size={12} /> Accepted</span>) : (<button type="button" onClick={() => simulateAccept(member.id)} className="rounded-full bg-sky-600 px-3 py-1 text-xs font-semibold text-white hover:bg-sky-700">Accept (simulate)</button>)) : null}</div>);
+                  {guarantorLoading ? (<p className="text-xs text-sky-700">Searching qualified members...</p>) : null}
+                  {!guarantorLoading && guarantorQuery.trim().length >= 2 && guarantorResults.length === 0 ? (<p className="text-xs text-slate-500">No qualified members found.</p>) : null}
+                  {guarantorResults.map((member) => {
+                    const isSelected = selectedGuarantors.some((item) => item.memberId === member.memberId);
+                    return (<div key={member.memberId} className={`flex items-center justify-between rounded-lg border px-3 py-2 transition ${isSelected ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white"}`}><div className="flex items-center gap-3"><input type="checkbox" checked={isSelected} onChange={() => toggleGuarantor(member)} className="h-4 w-4 rounded border-slate-300 text-sky-600" /><div><p className="text-sm font-semibold text-slate-800">{member.name}</p><p className="text-xs text-slate-500">{member.memberNumber} | {member.phone || "No phone"} | Share: {formatCurrency(member.shareCapital)}</p></div></div><span className="text-xs font-semibold text-sky-700">{member.status}</span></div>);
                   })}
                 </div>
                 {selectedGuarantors.length > 0 && (<p className="mt-3 text-xs font-medium text-sky-700">Selected: {selectedMemberNames}</p>)}
@@ -2150,6 +2200,25 @@ function EligibilityChecks({ stats }) {
 }
 
 function LoansTable({ loans }) {
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const statusMap = {
+    PENDING_GUARANTORS: "Pending Guarantors",
+    UNDER_REVIEW: "Under Review",
+    APPROVED: "Approved",
+    REJECTED: "Rejected",
+    DISBURSED: "Disbursed",
+    ACTIVE: "Disbursed",
+  };
+  const filteredLoans = loans.filter((loan) => {
+    const status = String(loan.status || "").toUpperCase();
+    const date = loan.createdAt ? new Date(loan.createdAt) : null;
+    const statusMatches = statusFilter === "ALL" || status === statusFilter || (statusFilter === "DISBURSED" && status === "ACTIVE");
+    const fromMatches = !dateFrom || (date && date >= new Date(`${dateFrom}T00:00:00`));
+    const toMatches = !dateTo || (date && date <= new Date(`${dateTo}T23:59:59`));
+    return statusMatches && fromMatches && toMatches;
+  });
   return (
     <Surface className="overflow-hidden">
       <div className="border-b border-slate-200 p-5">
@@ -2159,8 +2228,22 @@ function LoansTable({ loans }) {
         <p className="text-sm text-slate-500">
           Requests, approvals, active balances, and repayments.
         </p>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <label className="text-sm font-semibold text-slate-700">Status
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="mt-2 w-full rounded-lg border px-3 py-2 text-sm">
+              <option value="ALL">All statuses</option>
+              <option value="PENDING_GUARANTORS">Pending Guarantors</option>
+              <option value="UNDER_REVIEW">Under Review</option>
+              <option value="APPROVED">Approved</option>
+              <option value="REJECTED">Rejected</option>
+              <option value="DISBURSED">Disbursed</option>
+            </select>
+          </label>
+          <Field label="From" name="loanDateFrom" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+          <Field label="To" name="loanDateTo" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+        </div>
       </div>
-      {loans.length === 0 ? (
+      {filteredLoans.length === 0 ? (
         <EmptyState
           className="text-[#8cc63f]"
           icon={FileText}
@@ -2190,7 +2273,7 @@ function LoansTable({ loans }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {loans.map((loan) => (
+              {filteredLoans.map((loan) => (
                 <tr key={loan.id}>
                   <td className="px-5 py-4 text-sm font-semibold text-slate-900">
                     {loan.type}
@@ -2202,7 +2285,7 @@ function LoansTable({ loans }) {
                     {formatCurrency(loan.balance)}
                   </td>
                   <td className="px-5 py-4 text-sm">
-                    {normalizeStatus(loan.status)}
+                    {statusMap[String(loan.status || "").toUpperCase()] || normalizeStatus(loan.status)}
                   </td>
                   <td className="px-5 py-4 text-sm">
                     {loan.createdAt
@@ -2535,9 +2618,9 @@ function DividendProjection({ stats, showValues }) {
   const displayValue = (value) => showValues ? value : <span className="inline-block blur-sm">{value}</span>;
   return (
     <Surface className="overflow-hidden border-amber-200 bg-linear-to-br from-amber-50 to-white">
-      <div className="p-5">
+      <div className="p-5" style={{display:'none'}}>
         <div className="flex items-center justify-between gap-4">
-          <div>
+          <div style={{display:'none'}}>
             <div className="flex items-center gap-2">
               <TrendingUp size={18} className="text-amber-600" />
               <h5 className="text-base font-semibold text-slate-950">
@@ -2548,7 +2631,7 @@ function DividendProjection({ stats, showValues }) {
               Based on your current share capital ({displayValue(formatCurrency(shareCapital))}) and savings ({displayValue(formatCurrency(savings))}) at a projected {projectedRate}% rate.
             </p>
           </div>
-          <div className="text-right">
+          <div className="text-right" style={{display:'none'}}>
             <p className="text-xs font-semibold uppercase text-slate-500">Projected dividend</p>
             <p className="mt-1 text-2xl font-semibold text-amber-700">
               {displayValue(formatCurrency(projectedDividend))}
@@ -2562,6 +2645,7 @@ function DividendProjection({ stats, showValues }) {
     </Surface>
   );
 }
+
 
 function PortfolioPage({ stats, transactions, shares, search, user, showValues, onToggleValues }) {
   const activeShareRecords = shares.filter((share) => matchesSearch(share, search)).length;
@@ -3154,9 +3238,7 @@ function OptOutSection({ accessToken, user }) {
   const [msg, setMsg] = useState(null);
   const [step, setStep] = useState("initial"); // initial | confirm | success | shareCapitalModal
   const [optOutResult, setOptOutResult] = useState(null);
-  const MOCK_LOAN_BALANCE = 0;
-  const MOCK_IS_GUARANTOR = false;
-  const canOptOut = MOCK_LOAN_BALANCE === 0 && !MOCK_IS_GUARANTOR;
+  const canOptOut = true;
 
   async function handleOptOut(e) {
     e.preventDefault();
@@ -3369,3 +3451,5 @@ export {
   SavingsPage,
   SimplePage,
 };
+
+

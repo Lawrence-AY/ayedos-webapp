@@ -44,9 +44,7 @@ const memberNavItems = [
   { label: "Portfolio", suffix: "portfolio", icon: PieChart },
   { label: "Reports", suffix: "reports", icon: ReceiptText },
   { label: "Notifications", suffix: "notifications", icon: Bell },
-  { label: "Security", suffix: "security", icon: Shield },
-  { label: "Profile Settings", suffix: "settings", icon: Settings },
-  { label: "Support", suffix: "support", icon: Headphones },
+
 ];
 
 const adminNavItems = [

@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 import { apiRequest, unwrapEnvelopeData, getApiErrorMessage } from '../../lib/apiClient';
 import { AuthContext } from '../../context/AuthContext.jsx';
 
-export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, userData }) => {
+export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, userData, documents = {} }) => {
   const { accessToken, loadCurrentUser, updateCurrentUser } = useContext(AuthContext);
 
   const [paymentMethod, setPaymentMethod] = useState('stk');
@@ -84,11 +84,15 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
     if (userData.idType === 'passport') identityNumber = userData.passportNumber;
     if (userData.idType === 'driverlicense') identityNumber = userData.driverLicenseNumber;
 
-    // Base64 encode identity document if present
-    let idDocumentBase64 = null;
-    if (userData.idDocument instanceof File) {
-      idDocumentBase64 = await fileToBase64(userData.idDocument);
-    }
+    const nationalIdDocument = documents.idFile instanceof File
+      ? await fileToBase64(documents.idFile)
+      : null;
+    const passportPhoto = documents.photoFile instanceof File
+      ? await fileToBase64(documents.photoFile)
+      : null;
+    const identityDocument = userData.idDocument instanceof File
+      ? await fileToBase64(userData.idDocument)
+      : nationalIdDocument;
 
     const application = {
       name: fullName,
@@ -96,7 +100,8 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
       phone: formatPhoneForBackend(userData.phone),
       identityType: userData.idType || 'national',
       identityNumber: identityNumber || userData.nationalId || '',
-      idDocument: idDocumentBase64,
+      idDocument: identityDocument,
+      passportPhoto,
       occupation: userData.occupation || null,
       address: userData.poBox ? `${userData.poBox}, ${userData.county}, ${userData.subCounty}` : null,
       type: membershipType,

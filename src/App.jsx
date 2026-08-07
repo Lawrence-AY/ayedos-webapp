@@ -14,6 +14,7 @@ import Onboarding from './pages/Onboarding.jsx'
 import AdminDashboard from './pages/AdminDashboard.jsx'
 import FinanceDashboard from './pages/FinanceDashboard.jsx'
 import UserDashboard from './pages/UserDashboard.jsx'
+import GuarantorRequest from './pages/GuarantorRequest.jsx'
 import DashboardRedirect from './routes/DashboardRedirect.jsx'
 import ProtectedRoute from './routes/ProtectedRoute.jsx'
 import PublicRoute from './routes/PublicRoute.jsx'
@@ -54,6 +55,7 @@ export default function App() {
                 }
               />
               <Route path="/set-password" element={<PublicRoute element={<SetPassword />} />} />
+              <Route path="/guarantor-request/:token" element={<GuarantorRequest />} />
               <Route
                 path="/dashboard"
                 element={<ProtectedRoute element={<DashboardRedirect />} />}

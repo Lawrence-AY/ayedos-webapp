@@ -1,5 +1,6 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import {
   AlertTriangle,
   Banknote,
@@ -37,6 +38,7 @@ import StaffSecurityPage from "../components/staff-dashboard/StaffSecurityPage.j
 import SupportPage from "../components/user-dashboard/SupportPage.jsx";
 import MemberFinancialProfile from "../components/staff-dashboard/MemberFinancialProfile.jsx";
 import { getDashboardPath } from "../utils/dashboardRoutes.js";
+import { exportRichCSV } from "../utils/csvExport.js";
 import { changePassword } from "../services/authService.js";
 import {
   approveLoan,
@@ -48,8 +50,13 @@ import {
   getAllMembers,
   getAllShares,
   getAllTransactions,
+  getFinanceNotifications,
   getFinancialReports,
   getMemberFinancialProfile,
+  markAllFinanceNotificationsRead,
+  markFinanceNotificationRead,
+  commitFinancialCsvImport,
+  previewFinancialCsvImport,
   rejectLoan,
   sendFinanceNotification,
   verifyTransaction,
@@ -89,362 +96,6 @@ function formatDateSafe(v) {
   }
 }
 
-const MOCK_COMPANIES = [
-  {
-    id: "c1",
-    name: "Ministry of Education",
-    employees: 48,
-    totalDeductions: 480000,
-    status: "Active",
-  },
-  {
-    id: "c2",
-    name: "County Government of Nairobi",
-    employees: 32,
-    totalDeductions: 320000,
-    status: "Active",
-  },
-  {
-    id: "c3",
-    name: "Kenyatta National Hospital",
-    employees: 26,
-    totalDeductions: 260000,
-    status: "Active",
-  },
-  {
-    id: "c4",
-    name: "Safaricom PLC",
-    employees: 15,
-    totalDeductions: 150000,
-    status: "Active",
-  },
-];
-const MOCK_MEMBERS_PROFILE = [
-  {
-    id: "M001",
-    name: "John Kamau",
-    phone: "+254712345678",
-    company: "Ministry of Education",
-    salary: 85000,
-    deduction: 8500,
-    savings: 250000,
-    loans: 45000,
-    shares: 35000,
-    risk: "Low",
-    status: "Active",
-  },
-  {
-    id: "M002",
-    name: "Mary Wanjiku",
-    phone: "+254723456789",
-    company: "County Government of Nairobi",
-    salary: 65000,
-    deduction: 6500,
-    savings: 180000,
-    loans: 120000,
-    shares: 28000,
-    risk: "Medium",
-    status: "Active",
-  },
-  {
-    id: "M003",
-    name: "Peter Otieno",
-    phone: "+254734567890",
-    company: "Kenyatta National Hospital",
-    salary: 92000,
-    deduction: 9200,
-    savings: 420000,
-    loans: 0,
-    shares: 50000,
-    risk: "Low",
-    status: "Active",
-  },
-  {
-    id: "M004",
-    name: "Jane Muthoni",
-    phone: "+254745678901",
-    company: "Safaricom PLC",
-    salary: 110000,
-    deduction: 11000,
-    savings: 600000,
-    loans: 250000,
-    shares: 75000,
-    risk: "Low",
-    status: "Active",
-  },
-  {
-    id: "M005",
-    name: "David Kiprop",
-    phone: "+254756789012",
-    company: null,
-    salary: 0,
-    deduction: 0,
-    savings: 50000,
-    loans: 35000,
-    shares: 15000,
-    risk: "High",
-    status: "Overdue",
-  },
-  {
-    id: "M006",
-    name: "Alice Wambui",
-    phone: "+254767890123",
-    company: null,
-    salary: 0,
-    deduction: 0,
-    savings: 30000,
-    loans: 80000,
-    shares: 10000,
-    risk: "High",
-    status: "Default",
-  },
-];
-const MOCK_LOANS_QUEUE = [
-  {
-    id: "L001",
-    member: "John Kamau",
-    type: "DEVELOPMENT",
-    principal: 250000,
-    balance: 210000,
-    interest: 2,
-    duration: 72,
-    status: "ACTIVE",
-    disbursedDate: "2026-01-15",
-    nextPayment: 6250,
-    paid: 40000,
-    arrears: 0,
-    repayments: 6,
-    expected: 6,
-  },
-  {
-    id: "L002",
-    member: "Mary Wanjiku",
-    type: "WELFARE",
-    principal: 120000,
-    balance: 80000,
-    interest: 1.5,
-    duration: 24,
-    status: "ACTIVE",
-    disbursedDate: "2026-03-10",
-    nextPayment: 5800,
-    paid: 40000,
-    arrears: 11600,
-    repayments: 5,
-    expected: 7,
-  },
-  {
-    id: "L003",
-    member: "Jane Muthoni",
-    type: "DEVELOPMENT",
-    principal: 500000,
-    balance: 450000,
-    interest: 2,
-    duration: 72,
-    status: "ACTIVE",
-    disbursedDate: "2026-02-20",
-    nextPayment: 10200,
-    paid: 50000,
-    arrears: 0,
-    repayments: 5,
-    expected: 5,
-  },
-  {
-    id: "L004",
-    member: "Peter Otieno",
-    type: "EMERGENCY",
-    principal: 30000,
-    balance: 0,
-    interest: 1,
-    duration: 12,
-    status: "DISBURSED",
-    disbursedDate: "2026-05-01",
-    nextPayment: 0,
-    paid: 30000,
-    arrears: 0,
-    repayments: 3,
-    expected: 3,
-  },
-  {
-    id: "L005",
-    member: "Faith Wangari",
-    type: "EDUCATION",
-    principal: 80000,
-    balance: 80000,
-    interest: 1,
-    duration: 24,
-    status: "APPROVED",
-    disbursedDate: null,
-    nextPayment: 0,
-    paid: 0,
-    arrears: 0,
-    repayments: 0,
-    expected: 0,
-  },
-  {
-    id: "L006",
-    member: "Samuel Mwangi",
-    type: "DEVELOPMENT",
-    principal: 150000,
-    balance: 150000,
-    interest: 2,
-    duration: 72,
-    status: "PENDING",
-    disbursedDate: null,
-    nextPayment: 0,
-    paid: 0,
-    arrears: 0,
-    repayments: 0,
-    expected: 0,
-  },
-  {
-    id: "L007",
-    member: "Grace Achieng",
-    type: "WELFARE",
-    principal: 90000,
-    balance: 90000,
-    interest: 1.5,
-    duration: 24,
-    status: "REJECTED",
-    disbursedDate: null,
-    nextPayment: 0,
-    paid: 0,
-    arrears: 0,
-    repayments: 0,
-    expected: 0,
-  },
-  {
-    id: "L008",
-    member: "David Kiprop",
-    type: "EMERGENCY",
-    principal: 35000,
-    balance: 28000,
-    interest: 1,
-    duration: 12,
-    status: "OVERDUE",
-    disbursedDate: "2025-11-01",
-    nextPayment: 3500,
-    paid: 7000,
-    arrears: 14000,
-    repayments: 2,
-    expected: 6,
-  },
-  {
-    id: "L009",
-    member: "Alice Wambui",
-    type: "DEVELOPMENT",
-    principal: 180000,
-    balance: 180000,
-    interest: 2,
-    duration: 72,
-    status: "WRITTEN_OFF",
-    disbursedDate: "2025-06-01",
-    nextPayment: 0,
-    paid: 20000,
-    arrears: 60000,
-    repayments: 4,
-    expected: 18,
-  },
-];
-const MOCK_DIVIDENDS = [
-  {
-    year: 2025,
-    rate: "8.5%",
-    totalDistributed: 425000,
-    membersCount: 126,
-    declaredDate: "2026-01-15",
-    status: "Distributed",
-  },
-  {
-    year: 2024,
-    rate: "7.2%",
-    totalDistributed: 360000,
-    membersCount: 112,
-    declaredDate: "2025-01-20",
-    status: "Distributed",
-  },
-  {
-    year: 2023,
-    rate: "6.8%",
-    totalDistributed: 310000,
-    membersCount: 98,
-    declaredDate: "2024-01-18",
-    status: "Distributed",
-  },
-];
-const MOCK_NOTIFICATIONS = [
-  {
-    id: 1,
-    title: "New Loan Request",
-    body: "Samuel Mwangi submitted a DEVELOPMENT loan of KES 150,000",
-    type: "LOAN",
-    subtype: "application",
-    time: new Date().toISOString(),
-    read: false,
-  },
-  {
-    id: 2,
-    title: "Loan Repayment Received",
-    body: "John Kamau repaid KES 6,250 on DEVELOPMENT loan",
-    type: "LOAN",
-    subtype: "repayment",
-    time: new Date(Date.now() - 3600000).toISOString(),
-    read: false,
-  },
-  {
-    id: 3,
-    title: "Deposit Recorded",
-    body: "Jane Muthoni deposited KES 11,000 via M-Pesa",
-    type: "TRANSACTION",
-    subtype: "deposit",
-    time: new Date(Date.now() - 1800000).toISOString(),
-    read: false,
-  },
-  {
-    id: 4,
-    title: "Withdrawal Processed",
-    body: "Peter Otieno withdrew KES 5,000 from savings",
-    type: "TRANSACTION",
-    subtype: "withdrawal",
-    time: new Date(Date.now() - 5400000).toISOString(),
-    read: false,
-  },
-  {
-    id: 5,
-    title: "Deposit Recorded",
-    body: "Faith Wanjiku deposited KES 8,000 via bank transfer",
-    type: "TRANSACTION",
-    subtype: "deposit",
-    time: new Date(Date.now() - 7200000).toISOString(),
-    read: true,
-  },
-  {
-    id: 6,
-    title: "Overdue Alert",
-    body: "David Kiprop is 2 months behind on EMERGENCY loan",
-    type: "LOAN",
-    subtype: "overdue",
-    time: new Date(Date.now() - 86400000).toISOString(),
-    read: true,
-  },
-  {
-    id: 7,
-    title: "New Loan Request",
-    body: "Grace Achieng submitted an EDUCATION loan of KES 80,000",
-    type: "LOAN",
-    subtype: "application",
-    time: new Date(Date.now() - 100000).toISOString(),
-    read: false,
-  },
-  {
-    id: 8,
-    title: "Withdrawal Flagged",
-    body: "Large withdrawal of KES 25,000 from Alice Wambui — requires review",
-    type: "OVERDUE",
-    subtype: "flag",
-    time: new Date(Date.now() - 1200000).toISOString(),
-    read: false,
-  },
-];
 
 function calculateReducingBalance(principal, annualRate, durationMonths) {
   const monthlyRate = annualRate / 100 / 12;
@@ -532,33 +183,7 @@ function getFinanceStats(data) {
 }
 
 function exportToCSV(rows, columns, filename = "export.csv") {
-  const headers = columns
-    .map((c) => (typeof c === "string" ? c : c.label))
-    .join(",");
-  const body = rows
-    .map((row) =>
-      columns
-        .map((c) => {
-          const val =
-            typeof c === "string"
-              ? row[c]
-              : c.csv
-                ? c.csv(row[c.key], row)
-                : c.render
-                  ? c.render(row[c.key], row)
-                  : row[c.key];
-          return `"${String(val || "").replace(/"/g, '""')}"`;
-        })
-        .join(","),
-    )
-    .join("\n");
-  const blob = new Blob([headers + "\n" + body], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+  exportRichCSV(rows, columns, filename);
 }
 
 // ============================================================
@@ -572,7 +197,8 @@ export default function FinanceDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
-  const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState([]);
+  const [approvingLoanId, setApprovingLoanId] = useState(null);
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   const path = location.pathname;
@@ -616,6 +242,7 @@ export default function FinanceDashboard() {
       getAllMembers(accessToken),
       getAllCompanies(accessToken),
       getFinancialReports(accessToken),
+      getFinanceNotifications(accessToken, { limit: 100 }),
     ]);
     setData({
       transactions:
@@ -625,7 +252,7 @@ export default function FinanceDashboard() {
       loans:
         results[1].status === "fulfilled" && Array.isArray(results[1].value)
           ? results[1].value
-          : MOCK_LOANS_QUEUE,
+          : [],
       shares:
         results[2].status === "fulfilled" && Array.isArray(results[2].value)
           ? results[2].value
@@ -637,17 +264,20 @@ export default function FinanceDashboard() {
       dividends:
         results[4].status === "fulfilled" && Array.isArray(results[4].value)
           ? results[4].value
-          : MOCK_DIVIDENDS,
+          : [],
       members:
         results[5].status === "fulfilled" && Array.isArray(results[5].value)
           ? results[5].value
-          : MOCK_MEMBERS_PROFILE,
+          : [],
       companies:
         results[6].status === "fulfilled" && Array.isArray(results[6].value)
           ? results[6].value
-          : MOCK_COMPANIES,
+          : [],
       reports: results[7].status === "fulfilled" ? results[7].value : {},
     });
+    if (results[8].status === "fulfilled" && Array.isArray(results[8].value)) {
+      setNotifications(results[8].value.map(normalizeNotification));
+    }
     setLoading(false);
   }, [accessToken]);
 
@@ -663,8 +293,22 @@ export default function FinanceDashboard() {
   }, [loadAllData]);
 
   const stats = useMemo(() => getFinanceStats(data), [data]);
-  function markAllNotificationsRead() {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  async function markAllNotificationsRead() {
+    try {
+      await markAllFinanceNotificationsRead(accessToken);
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true, isRead: true })));
+    } catch (error) {
+      alert(error.message);
+    }
+  }
+
+  async function handleNotificationRead(id) {
+    try {
+      await markFinanceNotificationRead(id, accessToken);
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true, isRead: true } : n)));
+    } catch (error) {
+      alert(error.message);
+    }
   }
 
   async function handleVerifyTransaction(id) {
@@ -687,11 +331,22 @@ export default function FinanceDashboard() {
     }
   }
   async function handleApproveLoan(id) {
+    if (!id) return null;
+    setApprovingLoanId(id);
     try {
-      await approveLoan(id, accessToken);
+      const updated = await approveLoan(id, accessToken);
+      setData((current) => ({
+        ...current,
+        loans: current.loans.map((loan) => loan.id === id ? { ...loan, ...updated } : loan),
+      }));
       await loadAllData({ showLoading: false });
+      toast.success("Loan approved and disbursed successfully");
+      return updated;
     } catch (e) {
-      alert(e.message);
+      toast.error(e.message || "Failed to approve loan");
+      return null;
+    } finally {
+      setApprovingLoanId(null);
     }
   }
   async function handleRejectLoan(id) {
@@ -745,6 +400,8 @@ export default function FinanceDashboard() {
             onRejectLoan={handleRejectLoan}
             onDisburseLoan={handleDisburseLoan}
             onWriteOffLoan={handleWriteOffLoan}
+            approvingLoanId={approvingLoanId}
+            accessToken={accessToken}
             globalSearch={globalSearch}
           />
         );
@@ -788,6 +445,11 @@ export default function FinanceDashboard() {
             notifications={notifications}
             members={data.members}
             onMarkAllRead={markAllNotificationsRead}
+            onMarkRead={handleNotificationRead}
+            loans={data.loans}
+            onApproveLoan={handleApproveLoan}
+            onRejectLoan={handleRejectLoan}
+            approvingLoanId={approvingLoanId}
             accessToken={accessToken}
           />
         );
@@ -838,10 +500,19 @@ export default function FinanceDashboard() {
 function NotificationsPanel({
   notifications,
   members = [],
+  loans = [],
   onMarkAllRead,
+  onMarkRead,
+  onApproveLoan,
+  onRejectLoan,
+  approvingLoanId,
   accessToken,
 }) {
   const [notifTab, setNotifTab] = useState("all");
+  const [selectedNotification, setSelectedNotification] = useState(null);
+  const [selectedLoanProfile, setSelectedLoanProfile] = useState(null);
+  const [loanDetailsLoading, setLoanDetailsLoading] = useState(false);
+  const [decisionBusy, setDecisionBusy] = useState(false);
   const [form, setForm] = useState({
     audience: "MEMBER",
     recipientUserId: "",
@@ -895,6 +566,68 @@ function NotificationsPanel({
         n.type === "OVERDUE" || (n.type === "LOAN" && n.subtype === "overdue"),
     ).length,
   };
+  const selectedLoan = selectedNotification
+    ? loans.find((loan) => loan.id === selectedNotification.metadata?.loanId || loan.id === selectedNotification.sourceId)
+    : null;
+  const selectedLoanDetails = selectedLoanProfile || selectedLoan || selectedNotification?.metadata || {};
+  const isLoanRequest = (n) => n?.type === "LOAN" && (n.subtype === "application" || n.metadata?.subtype === "application");
+  const selectedLoanType = String(selectedLoanDetails.loanType || selectedLoanDetails.type || selectedNotification?.metadata?.type || "LOAN").toUpperCase();
+  const isEmergencyLoan = selectedLoanType === "EMERGENCY";
+  const isAutoApproved = Boolean(selectedNotification?.metadata?.automated) || (isEmergencyLoan && String(selectedLoanDetails.status || selectedNotification?.metadata?.status || "").toUpperCase() === "APPROVED");
+  const loanTypeLabel = (type) => `${String(type || "Loan").charAt(0)}${String(type || "Loan").slice(1).toLowerCase()} Loan`;
+  const displayLoanStatus = (status) => {
+    const normalized = String(status || "").toUpperCase();
+    if (["PENDING", "UNDER_REVIEW"].includes(normalized)) return "PENDING_FINANCE";
+    if (["ACTIVE", "DISBURSED"].includes(normalized)) return "DISBURSED";
+    return normalized || "PENDING_FINANCE";
+  };
+  const isActionableStatus = (status) => ["PENDING", "UNDER_REVIEW", "PENDING_FINANCE"].includes(String(status || "").toUpperCase());
+  const interestGenerated = (() => {
+    const amount = Number(selectedLoanDetails.principal || selectedLoanDetails.amount || 0);
+    const rate = Number(selectedLoanDetails.interestRate ?? selectedLoanDetails.interest ?? 0);
+    const duration = Number(selectedLoanDetails.duration || 0);
+    return Number(selectedLoanDetails.interestGenerated ?? (amount * (rate / 100) * duration));
+  })();
+  const loanTypeClass = (type) => {
+    const normalized = String(type || "").toUpperCase();
+    if (normalized === "EMERGENCY") return "bg-rose-100 text-rose-700 border-rose-200";
+    if (normalized === "DEVELOPMENT") return "bg-sky-100 text-sky-700 border-sky-200";
+    if (normalized === "EDUCATION") return "bg-violet-100 text-violet-700 border-violet-200";
+    return "bg-emerald-100 text-emerald-700 border-emerald-200";
+  };
+
+  async function openNotification(n) {
+    setSelectedNotification(n);
+    setSelectedLoanProfile(null);
+    if (!n.read) await onMarkRead?.(n.id);
+    const loanId = n.metadata?.loanId || n.sourceId;
+    if (loanId && isLoanRequest(n)) {
+      setLoanDetailsLoading(true);
+      try {
+        const loan = await getLoanById(loanId, accessToken);
+        setSelectedLoanProfile(loan);
+      } catch (error) {
+        setMessage({ type: "error", text: error?.message || "Failed to fetch loan details." });
+      } finally {
+        setLoanDetailsLoading(false);
+      }
+    }
+  }
+
+  async function decideLoan(decision) {
+    const loanId = selectedLoanDetails.id || selectedLoanDetails.loanId || selectedNotification?.sourceId;
+    if (!loanId) return;
+    setDecisionBusy(true);
+    try {
+      if (decision === "approve") await onApproveLoan?.(loanId);
+      else await onRejectLoan?.(loanId);
+      setSelectedNotification(null);
+      setSelectedLoanProfile(null);
+    } finally {
+      setDecisionBusy(false);
+    }
+  }
+
   async function handleSendNotification(e) {
     e.preventDefault();
     setSending(true);
@@ -1077,9 +810,11 @@ function NotificationsPanel({
       </div>
       <div className="space-y-3">
         {filtered.map((n) => (
-          <div
+          <button
+            type="button"
+            onClick={() => openNotification(n)}
             key={n.id}
-            className={`rounded-lg border p-4 ${n.read ? "bg-white" : "border-rose-200 bg-rose-50"}`}
+            className={`w-full rounded-lg border p-4 text-left transition-colors duration-300 ${n.read ? "bg-white" : "border-emerald-300 bg-emerald-50 shadow-sm"}`}
           >
             <div className="flex items-start justify-between">
               <div>
@@ -1097,14 +832,201 @@ function NotificationsPanel({
                 {typeLabel(n)}
               </span>
               {!n.read && (
-                <span className="text-xs font-semibold text-rose-600">
-                  ● Unread
+                <span className="text-xs font-semibold text-emerald-700">
+                  Unread
+                </span>
+              )}
+              {n.type === "LOAN" && (
+                <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${loanTypeClass(n.metadata?.type)}`}>
+                  {loanTypeLabel(n.metadata?.type)}
+                </span>
+              )}
+              {n.metadata?.automated && (
+                <span className="rounded-full border border-emerald-200 bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                  AUTO-APPROVED
+                </span>
+              )}
+              {!n.read && (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onMarkRead?.(n.id);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onMarkRead?.(n.id);
+                    }
+                  }}
+                  className="ml-auto inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                >
+                  <CheckCircle2 size={13} />
+                  Mark as Read
                 </span>
               )}
             </div>
-          </div>
+          </button>
         ))}
       </div>
+      {selectedNotification ? (
+        <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40">
+          <div className="h-full w-full max-w-xl overflow-y-auto bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase text-slate-500">
+                  {typeLabel(selectedNotification)}
+                </p>
+                {isLoanRequest(selectedNotification) && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${loanTypeClass(selectedLoanType)}`}>
+                      {loanTypeLabel(selectedLoanType)}
+                    </span>
+                    {isAutoApproved && (
+                      <span className="rounded-full border border-emerald-200 bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                        AUTO-APPROVED
+                      </span>
+                    )}
+                  </div>
+                )}
+                <h3 className="mt-1 text-xl font-semibold text-slate-950">
+                  {selectedNotification.title}
+                </h3>
+                <p className="mt-2 text-sm text-slate-600">
+                  {selectedNotification.body}
+                </p>
+                {loanDetailsLoading ? (
+                  <p className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-sky-700">
+                    <RefreshCw className="animate-spin" size={14} />
+                    Fetching full loan profile...
+                  </p>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                onClick={() => { setSelectedNotification(null); setSelectedLoanProfile(null); }}
+                className="rounded-lg border p-2 text-slate-600 hover:bg-slate-50"
+                aria-label="Close notification details"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {isLoanRequest(selectedNotification) ? (
+              <div className="mt-6 space-y-5">
+                <div className="rounded-lg border border-slate-200 p-4">
+                  <h4 className="text-sm font-semibold text-slate-950">Member Details</h4>
+                  <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+                    <div>
+                      <dt className="text-slate-500">Member ID / Registration Number</dt>
+                      <dd className="font-semibold text-slate-900">{selectedLoanDetails.memberNumber || selectedLoanDetails.memberId || "-"}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-500">Full name</dt>
+                      <dd className="font-semibold text-slate-900">{selectedLoanDetails.member || selectedLoanDetails.memberName || selectedLoanDetails.applicantName || "-"}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-500">Submitted by</dt>
+                      <dd className="font-semibold text-slate-900">{selectedLoanDetails.submittedBy || selectedLoanDetails.member || selectedLoanDetails.memberName || selectedLoanDetails.applicantName || "-"}</dd>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <dt className="text-slate-500">Account info</dt>
+                      <dd className="font-semibold text-slate-900">
+                        {[selectedLoanDetails.accountInfo?.email, selectedLoanDetails.accountInfo?.phone, selectedLoanDetails.accountInfo?.memberStatus].filter(Boolean).join(" | ") || "Account details unavailable"}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 p-4">
+                  <h4 className="text-sm font-semibold text-slate-950">Loan Parameters</h4>
+                  <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+                    <div>
+                      <dt className="text-slate-500">Loan type</dt>
+                      <dd className="font-semibold text-slate-900">{loanTypeLabel(selectedLoanType)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-500">Processing mode</dt>
+                      <dd className="font-semibold text-slate-900">{isAutoApproved ? "Automated emergency approval" : "Manual finance review"}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-500">Amount requested</dt>
+                      <dd className="font-semibold text-slate-900">{formatCurrency(selectedLoanDetails.principal || selectedLoanDetails.amount)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-500">Duration</dt>
+                      <dd className="font-semibold text-slate-900">{selectedLoanDetails.duration || "-"} months</dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-500">Interest rate</dt>
+                      <dd className="font-semibold text-slate-900">{selectedLoanDetails.interestRate ?? selectedLoanDetails.interest ?? "-"}%</dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-500">Calculated interest</dt>
+                      <dd className="font-semibold text-slate-900">{formatCurrency(interestGenerated)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-500">Status</dt>
+                      <dd className="mt-1"><StatusBadge status={selectedLoanDetails.financeStatus || displayLoanStatus(selectedLoanDetails.status)} /></dd>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <dt className="text-slate-500">Reason</dt>
+                      <dd className="font-semibold text-slate-900">{selectedLoanDetails.reason || "N/A"}</dd>
+                    </div>
+                  </dl>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 p-4">
+                  <h4 className="text-sm font-semibold text-slate-950">Timestamp Details</h4>
+                  <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+                    <div>
+                      <dt className="text-slate-500">Exact date and time</dt>
+                      <dd className="font-semibold text-slate-900">{formatDateTimeSafe(selectedLoanDetails.createdAt || selectedLoanDetails.requestedAt || selectedNotification.time)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-500">Relative timestamp</dt>
+                      <dd className="font-semibold text-slate-900">{formatRelativeTime(selectedLoanDetails.createdAt || selectedLoanDetails.requestedAt || selectedNotification.time)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-500">Submitted when</dt>
+                      <dd className="font-semibold text-slate-900">{formatDateTimeSafe(selectedLoanDetails.requestedAt || selectedLoanDetails.createdAt || selectedNotification.time)}</dd>
+                    </div>
+                  </dl>
+                </div>
+
+                {isEmergencyLoan ? (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">
+                    Emergency loans are processed automatically after eligibility and risk checks. No manual finance action is required.
+                  </div>
+                ) : (
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      disabled={decisionBusy || approvingLoanId === (selectedLoanDetails.id || selectedLoanDetails.loanId) || !isActionableStatus(selectedLoanDetails.status)}
+                      onClick={() => decideLoan("approve")}
+                      className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      {decisionBusy || approvingLoanId === (selectedLoanDetails.id || selectedLoanDetails.loanId) ? <RefreshCw className="animate-spin" size={16} /> : <CheckCircle2 size={16} />}
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      disabled={decisionBusy || !isActionableStatus(selectedLoanDetails.status)}
+                      onClick={() => decideLoan("reject")}
+                      className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      <XCircle size={16} />
+                      Reject
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1230,6 +1152,39 @@ function FinanceHome({ data, stats, globalSearch = "", onVerifyTransaction }) {
       />
     </div>
   );
+}
+
+function formatDateTimeSafe(v) {
+  try {
+    return v ? new Date(v).toLocaleString() : "-";
+  } catch {
+    return "-";
+  }
+}
+
+function formatRelativeTime(v) {
+  const date = v ? new Date(v) : null;
+  if (!date || Number.isNaN(date.getTime())) return "-";
+  const seconds = Math.max(1, Math.floor((Date.now() - date.getTime()) / 1000));
+  if (seconds < 60) return `Requested ${seconds} second${seconds === 1 ? "" : "s"} ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `Requested ${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `Requested ${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  return `Requested ${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+function normalizeNotification(n) {
+  const category = String(n.category || n.type || "").toLowerCase();
+  const subtype = n.metadata?.subtype || n.subtype;
+  return {
+    ...n,
+    type: category === "loan" ? "LOAN" : category === "transaction" ? "TRANSACTION" : String(n.type || category || "ALERT").toUpperCase(),
+    subtype,
+    time: n.time || n.createdAt,
+    read: Boolean(n.isRead || n.read || n.readAt),
+  };
 }
 
 function WalletLiquidityPage({ data }) {
@@ -1661,6 +1616,8 @@ function UnifiedLoansPage({
   onRejectLoan,
   onDisburseLoan,
   onWriteOffLoan,
+  approvingLoanId,
+  accessToken,
   globalSearch = "",
 }) {
   const { search: routeSearch } = useLocation();
@@ -1668,12 +1625,19 @@ function UnifiedLoansPage({
   const [loanTab, setLoanTab] = useState(initialStatus);
   const [search, setSearch] = useState("");
   const [showAmortization, setShowAmortization] = useState(null);
+  const [selectedLoanRequest, setSelectedLoanRequest] = useState(null);
+  const [loanRequestLoading, setLoanRequestLoading] = useState(false);
   const queueMap = {
     all: { label: "All Loans", filter: () => true, icon: Landmark },
     pending: {
-      label: "Pending",
-      filter: (l) => String(l.status || "").toUpperCase() === "PENDING",
+      label: "Pending Guarantors",
+      filter: (l) => String(l.status || "").toUpperCase() === "PENDING_GUARANTORS",
       icon: Clock3,
+    },
+    review: {
+      label: "Finance Queue",
+      filter: (l) => ["UNDER_REVIEW", "PENDING"].includes(String(l.status || "").toUpperCase()),
+      icon: Landmark,
     },
     approved: {
       label: "Approved",
@@ -1726,6 +1690,20 @@ function UnifiedLoansPage({
     )
     .reduce((s, l) => s + Number(l.principal || 0), 0);
   const totalRepaid = loans.reduce((s, l) => s + Number(l.paid || 0), 0);
+  const displayLoanStatus = (status) => {
+    const normalized = String(status || "").toUpperCase();
+    if (["PENDING", "UNDER_REVIEW"].includes(normalized)) return "PENDING_FINANCE";
+    if (["ACTIVE", "DISBURSED"].includes(normalized)) return "DISBURSED";
+    return normalized || "PENDING_FINANCE";
+  };
+  const isActionableStatus = (status) => ["PENDING", "UNDER_REVIEW", "PENDING_FINANCE"].includes(String(status || "").toUpperCase());
+  const loanTypeLabel = (type) => `${String(type || "Loan").charAt(0)}${String(type || "Loan").slice(1).toLowerCase()} Loan`;
+  const totalInterestForLoan = (loan) => {
+    const amount = Number(loan?.principal || loan?.amount || 0);
+    const rate = Number(loan?.interestRate ?? loan?.interest ?? 0);
+    const duration = Number(loan?.duration || 0);
+    return Number(loan?.interestGenerated ?? (amount * (rate / 100) * duration));
+  };
   const loanColumns = [
     {
       key: "member",
@@ -1765,6 +1743,20 @@ function UnifiedLoansPage({
       csv: (v) => formatDateSafe(v),
     },
   ];
+  async function openLoanRequest(row) {
+    setSelectedLoanRequest(row);
+    if (!row?.id || !accessToken) return;
+    setLoanRequestLoading(true);
+    try {
+      const fullLoan = await getLoanById(row.id, accessToken);
+      setSelectedLoanRequest((current) => ({ ...current, ...fullLoan }));
+    } catch {
+      setSelectedLoanRequest(row);
+    } finally {
+      setLoanRequestLoading(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <SectionHeader
@@ -1844,17 +1836,21 @@ function UnifiedLoansPage({
           {
             key: "id",
             label: "Actions",
+            stopRowClick: true,
             render: (v, r) => {
               const s = String(r.status || "").toUpperCase();
+              const approving = approvingLoanId === v;
               return (
                 <div className="flex flex-wrap gap-1">
-                  {s === "PENDING" && (
+                  {["PENDING", "UNDER_REVIEW"].includes(s) && (
                     <>
                       <button
+                        disabled={approving}
                         onClick={() => onApproveLoan?.(v)}
-                        className="text-xs font-semibold text-emerald-700"
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 disabled:opacity-50"
                       >
-                        Approve
+                        {approving ? <RefreshCw className="animate-spin" size={12} /> : null}
+                        {approving ? "Approving" : "Approve"}
                       </button>
                       <button
                         onClick={() => onRejectLoan?.(v)}
@@ -1895,6 +1891,7 @@ function UnifiedLoansPage({
         ]}
         data={filtered}
         emptyTitle="No loans"
+        onRowClick={openLoanRequest}
       />
       <button
         onClick={() => exportToCSV(filtered, loanColumns, "loans.csv")}
@@ -1908,6 +1905,71 @@ function UnifiedLoansPage({
           loan={showAmortization}
           onClose={() => setShowAmortization(null)}
         />
+      ) : null}
+      {selectedLoanRequest ? (
+        <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40">
+          <div className="h-full w-full max-w-xl overflow-y-auto bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase text-slate-500">Loan request</p>
+                <h3 className="mt-1 text-xl font-semibold text-slate-950">{loanTypeLabel(selectedLoanRequest.loanType || selectedLoanRequest.type)}</h3>
+                <p className="mt-2 text-sm text-slate-600">{selectedLoanRequest.reason || "N/A"}</p>
+                {loanRequestLoading ? (
+                  <p className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-sky-700">
+                    <RefreshCw className="animate-spin" size={14} />
+                    Fetching full loan profile...
+                  </p>
+                ) : null}
+              </div>
+              <button type="button" onClick={() => setSelectedLoanRequest(null)} className="rounded-lg border p-2 text-slate-600 hover:bg-slate-50" aria-label="Close loan details">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="mt-6 space-y-5">
+              <div className="rounded-lg border border-slate-200 p-4">
+                <h4 className="text-sm font-semibold text-slate-950">Member Details</h4>
+                <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+                  <div><dt className="text-slate-500">Full name</dt><dd className="font-semibold text-slate-900">{selectedLoanRequest.memberName || selectedLoanRequest.member || "-"}</dd></div>
+                  <div><dt className="text-slate-500">Member ID / Registration Number</dt><dd className="font-semibold text-slate-900">{selectedLoanRequest.memberNumber || selectedLoanRequest.memberId || "-"}</dd></div>
+                </dl>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-4">
+                <h4 className="text-sm font-semibold text-slate-950">Loan Parameters</h4>
+                <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+                  <div><dt className="text-slate-500">Loan type</dt><dd className="font-semibold text-slate-900">{loanTypeLabel(selectedLoanRequest.loanType || selectedLoanRequest.type)}</dd></div>
+                  <div><dt className="text-slate-500">Requested amount</dt><dd className="font-semibold text-slate-900">{formatCurrency(selectedLoanRequest.principal || selectedLoanRequest.amount)}</dd></div>
+                  <div><dt className="text-slate-500">Repayment duration</dt><dd className="font-semibold text-slate-900">{selectedLoanRequest.duration || "-"} months</dd></div>
+                  <div><dt className="text-slate-500">Calculated interest</dt><dd className="font-semibold text-slate-900">{formatCurrency(totalInterestForLoan(selectedLoanRequest))}</dd></div>
+                  <div className="sm:col-span-2"><dt className="text-slate-500">Purpose / Reason</dt><dd className="font-semibold text-slate-900">{selectedLoanRequest.reason || "N/A"}</dd></div>
+                  <div><dt className="text-slate-500">Current status</dt><dd className="mt-1"><StatusBadge status={selectedLoanRequest.financeStatus || displayLoanStatus(selectedLoanRequest.status)} /></dd></div>
+                </dl>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  disabled={approvingLoanId === selectedLoanRequest.id || !isActionableStatus(selectedLoanRequest.status)}
+                  onClick={async () => {
+                    const updated = await onApproveLoan?.(selectedLoanRequest.id);
+                    if (updated) setSelectedLoanRequest((current) => ({ ...current, ...updated }));
+                  }}
+                  className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  {approvingLoanId === selectedLoanRequest.id ? <RefreshCw className="animate-spin" size={16} /> : <CheckCircle2 size={16} />}
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  disabled={!isActionableStatus(selectedLoanRequest.status)}
+                  onClick={() => onRejectLoan?.(selectedLoanRequest.id)}
+                  className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  <XCircle size={16} />
+                  Reject
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       ) : null}
       <div className="rounded-lg border border-rose-200 bg-rose-50 p-5">
         <div className="flex items-center gap-3">
@@ -2055,7 +2117,7 @@ function AmortizationPanel({ loan, onClose }) {
 // SALARY DEDUCTION PAGE
 // ============================================================
 function SalaryDeductionPage({ data, accessToken, onRefresh }) {
-  const { companies = MOCK_COMPANIES, members = MOCK_MEMBERS_PROFILE } = data;
+  const { companies = [], members = [] } = data;
   const [selectedCompany, setSelectedCompany] = useState("all");
   const [editingDeduction, setEditingDeduction] = useState(null);
   const [showAddCompany, setShowAddCompany] = useState(false);
@@ -2420,7 +2482,7 @@ function MemberProfilesPage({ data, accessToken }) {
   const [selectedMember, setSelectedMember] = useState(null);
   const [searchMessage, setSearchMessage] = useState("");
   const [searching, setSearching] = useState(false);
-  const members = data.members || MOCK_MEMBERS_PROFILE;
+  const members = data.members || [];
   const locallyFiltered = members.filter((m) =>
     search.trim()
       ? String(m.id || "")
@@ -2522,6 +2584,7 @@ function MemberProfilesPage({ data, accessToken }) {
           </button>
         }
       />
+      <FinanceFinancialCsvImport accessToken={accessToken} />
       <div className="relative">
         <Search
           size={18}
@@ -2606,6 +2669,94 @@ function MemberProfilesPage({ data, accessToken }) {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+function FinanceFinancialCsvImport({ accessToken }) {
+  const [csv, setCsv] = useState("");
+  const [preview, setPreview] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  async function handleFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setCsv(await file.text());
+    setPreview(null);
+  }
+
+  async function previewImport() {
+    setBusy(true);
+    try {
+      setPreview(await previewFinancialCsvImport(csv, accessToken));
+    } catch (error) {
+      toast.error(error?.message || "Unable to preview financial CSV");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function commitImport() {
+    setBusy(true);
+    try {
+      const result = await commitFinancialCsvImport(csv, accessToken);
+      toast.success(`Imported ${result.imported?.length || 0} financial record${result.imported?.length === 1 ? "" : "s"}.`);
+      setCsv("");
+      setPreview(null);
+    } catch (error) {
+      toast.error(error?.message || "Unable to import financial CSV");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-lg border bg-white p-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h3 className="text-base font-semibold text-slate-950">Bulk financial records import</h3>
+          <p className="text-sm text-slate-500">CSV columns: memberNumber, email or staffId, shareCapital, savings, loans, loanRepayment, interest, employerContribution.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold">
+            <FileText size={14} />
+            Choose CSV
+            <input type="file" accept=".csv,text/csv" className="sr-only" onChange={handleFile} />
+          </label>
+          <button disabled={!csv || busy} onClick={previewImport} className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Working..." : "Preview"}</button>
+          <button disabled={!preview?.readyCount || busy} onClick={commitImport} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Import ready rows</button>
+        </div>
+      </div>
+      {preview ? (
+        <div className="mt-4 overflow-x-auto rounded-lg border">
+          <div className="border-b bg-slate-50 px-4 py-2 text-sm font-semibold">{preview.readyCount} ready, {preview.errorCount} need fixes</div>
+          <table className="min-w-full">
+            <thead>
+              <tr className="bg-slate-50">
+                {["Row", "Member", "Staff ID", "Savings", "Shares", "Loans", "Repayment", "Interest", "Employer", "Readiness"].map((h) => (
+                  <th key={h} className="px-3 py-2 text-left text-xs uppercase text-slate-500">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {preview.rows.map((row) => (
+                <tr key={row.rowNumber}>
+                  <td className="px-3 py-2 text-sm">{row.rowNumber}</td>
+                  <td className="px-3 py-2 text-sm">{row.data.memberNumber || row.data.email || "-"}</td>
+                  <td className="px-3 py-2 text-sm">{row.data.staffId || "-"}</td>
+                  <td className="px-3 py-2 text-sm">{formatCurrency(row.data.savings || 0)}</td>
+                  <td className="px-3 py-2 text-sm">{formatCurrency(row.data.shareCapital || 0)}</td>
+                  <td className="px-3 py-2 text-sm">{formatCurrency(row.data.loans || 0)}</td>
+                  <td className="px-3 py-2 text-sm">{formatCurrency(row.data.loanRepayment || 0)}</td>
+                  <td className="px-3 py-2 text-sm">{formatCurrency(row.data.interest || 0)}</td>
+                  <td className="px-3 py-2 text-sm">{formatCurrency(row.data.employerContribution || 0)}</td>
+                  <td className="px-3 py-2 text-sm"><StatusBadge status={row.ready ? "Ready" : `Missing ${row.missing.join(", ")}`} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -2706,7 +2857,7 @@ function MemberProfileDetail({ member, onBack }) {
 function FinancialReportsPage({ data }) {
   const [timeFilter, setTimeFilter] = useState("monthly");
   const transactions = useMemo(() => data.transactions || [], [data.transactions]);
-  const loans = data.loans || MOCK_LOANS_QUEUE;
+  const loans = data.loans || [];
 
   const timeSeries = useMemo(() => {
     const series = {};

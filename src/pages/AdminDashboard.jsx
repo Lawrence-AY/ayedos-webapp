@@ -32,6 +32,7 @@ import {
 import { AuthContext } from "../context/AuthContext.jsx";
 import Sidebar from "../components/layout/Sidebar.jsx";
 import TopNavbar from "../components/layout/TopNavbar.jsx";
+import { exportRichCSV } from "../utils/csvExport.js";
 import { changePassword } from "../services/authService.js";
 import {
   getAllUsers,
@@ -42,10 +43,14 @@ import {
   getArchivedMembers,
   getMemberFinancialProfile,
   getAdminNotifications,
+  markAdminNotificationRead,
+  markAllAdminNotificationsRead,
   sendGlobalBroadcast,
   sendDirectNotification,
   getAuditLogs,
   updateAdminProfile,
+  previewMemberCsvImport,
+  commitMemberCsvImport,
 } from "../features/admin/adminService.js";
 import {
   getAllTransactions,
@@ -90,32 +95,17 @@ function formatDateSafe(v) {
     return "-";
   }
 }
-function exportCSV(rows, columns, filename) {
-  const headers = columns
-    .map((c) => (typeof c === "string" ? c : c.label))
-    .join(",");
-  const body = rows
-    .map((row) =>
-      columns
-        .map((c) => {
-          const val =
-            typeof c === "string"
-              ? row[c]
-              : c.render
-                ? c.render(row[c.key], row)
-                : row[c.key];
-          return `"${String(val || "").replace(/"/g, '""')}"`;
-        })
-        .join(","),
-    )
-    .join("\n");
-  const blob = new Blob([headers + "\n" + body], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+function normalizeAdminNotification(n) {
+  const category = String(n.category || n.type || "ALERT").toUpperCase();
+  return {
+    ...n,
+    type: category,
+    time: n.time || n.createdAt,
+    read: Boolean(n.isRead || n.read || n.readAt),
+  };
+}
+function exportCSV(rows, columns, filename, options = {}) {
+  exportRichCSV(rows, columns, filename, options);
 }
 
 const MOCK_MEMBERS = [
@@ -338,6 +328,7 @@ export default function AdminDashboard() {
       getAllDividends(accessToken),
       getAllDeductions(accessToken),
       getAuditLogs(accessToken),
+      getAdminNotifications(accessToken),
     ]);
     setData({
       users:
@@ -381,6 +372,9 @@ export default function AdminDashboard() {
           ? r[9].value
           : MOCK_AUDIT_LOGS,
     });
+    if (r[10].status === "fulfilled" && Array.isArray(r[10].value)) {
+      setNotifications(r[10].value.map(normalizeAdminNotification));
+    }
     setLoading(false);
   }
   useEffect(() => {
@@ -391,8 +385,22 @@ export default function AdminDashboard() {
     return () => clearInterval(iv);
   }, [accessToken]);
 
-  function markAllRead() {
-    setNotifications((p) => p.map((n) => ({ ...n, read: true })));
+  async function markAllRead() {
+    try {
+      await markAllAdminNotificationsRead(accessToken);
+      setNotifications((p) => p.map((n) => ({ ...n, read: true, isRead: true })));
+    } catch (error) {
+      alert(error.message);
+    }
+  }
+
+  async function markOneRead(id) {
+    try {
+      await markAdminNotificationRead(id, accessToken);
+      setNotifications((p) => p.map((n) => (n.id === id ? { ...n, read: true, isRead: true } : n)));
+    } catch (error) {
+      alert(error.message);
+    }
   }
 
   function renderContent() {
@@ -522,6 +530,7 @@ export default function AdminDashboard() {
           <AdminNotificationsPanel
             notifications={notifications}
             onMarkAllRead={markAllRead}
+            onMarkRead={markOneRead}
             accessToken={accessToken}
           />
         );
@@ -711,7 +720,9 @@ function AdminMemberLifecycle({ data, accessToken, onRefresh }) {
                   : [
                       { key: "id", label: "ID" },
                       { key: "name", label: "Name" },
-                      { key: "company", label: "Company" },
+          { key: "phone", label: "Phone Number" },
+          { key: "nationalId", label: "National ID" },
+          { key: "company", label: "Company" },
                       { key: "status", label: "Status" },
                     ],
                 `members-${mainTab}.csv`,
@@ -755,6 +766,7 @@ function AdminMemberLifecycle({ data, accessToken, onRefresh }) {
         />
       ) : (
         <div className="space-y-6">
+          <AdminBulkMemberImport accessToken={accessToken} onImported={onRefresh} />
           <div className="flex items-center gap-3">
             {[
               { k: "active", l: "Active Members" },
@@ -841,6 +853,7 @@ function MemberRegistryTable({ regTab, data, search, onSelectMember }) {
     "memberNumber",
     "name",
     "phone",
+    "nationalId",
     "company",
     "email",
     "reason",
@@ -851,6 +864,8 @@ function MemberRegistryTable({ regTab, data, search, onSelectMember }) {
       ? [
           { key: "id", label: "ID" },
           { key: "name", label: "Name" },
+          { key: "phone", label: "Phone Number" },
+          { key: "nationalId", label: "National ID" },
           { key: "company", label: "Company", render: (v) => v || "—" },
           {
             key: "risk",
@@ -882,6 +897,13 @@ function MemberRegistryTable({ regTab, data, search, onSelectMember }) {
       : [
           { key: "id", label: "ID" },
           { key: "name", label: "Name" },
+          { key: "phone", label: "Phone Number" },
+          { key: "nationalId", label: "National ID" },
+          {
+            key: "status",
+            label: "Status",
+            render: (v) => <StatusBadge status={v || "Archived"} />,
+          },
           { key: "email", label: "Email" },
           { key: "optOutDate", label: "Opt-out Date", render: formatDateSafe },
           { key: "reason", label: "Reason" },
@@ -926,6 +948,93 @@ function MemberRegistryTable({ regTab, data, search, onSelectMember }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function AdminBulkMemberImport({ accessToken, onImported }) {
+  const [csv, setCsv] = useState("");
+  const [preview, setPreview] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState(null);
+
+  async function handleFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    setCsv(text);
+    setPreview(null);
+    setMessage(null);
+  }
+
+  async function previewImport() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      setPreview(await previewMemberCsvImport(csv, accessToken));
+    } catch (error) {
+      setMessage({ type: "error", text: error?.message || "Preview failed." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function commitImport() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await commitMemberCsvImport(csv, accessToken);
+      setMessage({ type: "success", text: `Imported ${result.imported?.length || 0} member${result.imported?.length === 1 ? "" : "s"}.` });
+      setPreview(null);
+      setCsv("");
+      await onImported?.();
+    } catch (error) {
+      setMessage({ type: "error", text: error?.message || "Import failed." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-lg border bg-white p-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h3 className="text-base font-semibold text-slate-950">Bulk Ayedos member onboarding</h3>
+          <p className="text-sm text-slate-500">CSV columns: name, email, phone, nationalId, memberNumber, staffId, status. Imported members are tagged Ayedos and whitelisted.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold">
+            <FileText size={14} />
+            Choose CSV
+            <input type="file" accept=".csv,text/csv" className="sr-only" onChange={handleFile} />
+          </label>
+          <button disabled={!csv || busy} onClick={previewImport} className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Working..." : "Preview"}</button>
+          <button disabled={!preview?.readyCount || busy} onClick={commitImport} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Import ready rows</button>
+        </div>
+      </div>
+      {message ? <p className={`mt-3 text-sm font-semibold ${message.type === "success" ? "text-emerald-700" : "text-rose-700"}`}>{message.text}</p> : null}
+      {preview ? (
+        <div className="mt-4 overflow-x-auto rounded-lg border">
+          <div className="border-b bg-slate-50 px-4 py-2 text-sm font-semibold">{preview.readyCount} ready, {preview.errorCount} need fixes</div>
+          <table className="min-w-full">
+            <thead><tr className="bg-slate-50">{["Row", "Name", "Email", "Phone", "National ID", "Member No.", "Staff ID", "Readiness"].map((h) => <th key={h} className="px-3 py-2 text-left text-xs uppercase text-slate-500">{h}</th>)}</tr></thead>
+            <tbody className="divide-y">
+              {preview.rows.map((row) => (
+                <tr key={row.rowNumber}>
+                  <td className="px-3 py-2 text-sm">{row.rowNumber}</td>
+                  <td className="px-3 py-2 text-sm">{row.data.fullName || "-"}</td>
+                  <td className="px-3 py-2 text-sm">{row.data.email || "-"}</td>
+                  <td className="px-3 py-2 text-sm">{row.data.phone || "-"}</td>
+                  <td className="px-3 py-2 text-sm">{row.data.nationalId || "-"}</td>
+                  <td className="px-3 py-2 text-sm">{row.data.memberNumber || "Auto"}</td>
+                  <td className="px-3 py-2 text-sm">{row.data.staffId || "-"}</td>
+                  <td className="px-3 py-2 text-sm"><StatusBadge status={row.ready ? "Ready" : `Missing ${row.missing.join(", ")}`} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1276,6 +1385,7 @@ function AdminReadOnlyTable({ title, data: rows, columns, fileName }) {
 function AdminNotificationsPanel({
   notifications,
   onMarkAllRead,
+  onMarkRead,
   accessToken,
 }) {
   const [tab, setTab] = useState("inbound");
@@ -1285,6 +1395,10 @@ function AdminNotificationsPanel({
   const [sending, setSending] = useState(false);
 
   const filtered = tab === "inbound" ? notifications : [];
+
+  async function openInboundNotification(notification) {
+    if (!notification.read) await onMarkRead?.(notification.id);
+  }
 
   async function handleBroadcast(e) {
     e.preventDefault();
@@ -1375,9 +1489,11 @@ function AdminNotificationsPanel({
             </button>
           </div>
           {filtered.map((n) => (
-            <div
+            <button
+              type="button"
               key={n.id}
-              className={`rounded-lg border p-4 ${n.read ? "bg-white" : "border-rose-200 bg-rose-50"}`}
+              onClick={() => openInboundNotification(n)}
+              className={`w-full rounded-lg border p-4 text-left transition-colors duration-300 ${n.read ? "bg-white" : "border-emerald-300 bg-emerald-50 shadow-sm"}`}
             >
               <div className="flex items-start justify-between">
                 <div>
@@ -1390,17 +1506,38 @@ function AdminNotificationsPanel({
               </div>
               <div className="mt-2 flex items-center gap-2">
                 <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-semibold ${n.type === "APPLICATION" ? "bg-sky-100 text-sky-700" : "bg-rose-100 text-rose-700"}`}
+                  className={`rounded-full px-2 py-0.5 text-xs font-semibold ${n.type === "APPLICATION" ? "bg-sky-100 text-sky-700" : "bg-emerald-100 text-emerald-700"}`}
                 >
                   {n.type}
                 </span>
+                {!n.read && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onMarkRead?.(n.id);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onMarkRead?.(n.id);
+                      }
+                    }}
+                    className="ml-auto inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                  >
+                    <CheckCircle2 size={13} />
+                    Mark as Read
+                  </span>
+                )}
                 {!n.read && (
                   <span className="text-xs font-semibold text-rose-600">
                     ● Unread
                   </span>
                 )}
               </div>
-            </div>
+            </button>
           ))}
         </div>
       )}
@@ -1588,8 +1725,8 @@ function AdminAuditLogs({ data }) {
 // ============================================================
 function AdminReportsPage({ data }) {
   const [timeFilter, setTimeFilter] = useState("monthly");
+  const transactions = data?.transactions || [];
   const timeSeries = useMemo(() => {
-    const transactions = data.transactions || [];
     const series = {};
     const formatKey = (d) => {
       if (timeFilter === "daily") return d.toISOString().split("T")[0];
@@ -1947,3 +2084,5 @@ function AdminProfileSettings({ user, accessToken }) {
     </div>
   );
 }
+
+

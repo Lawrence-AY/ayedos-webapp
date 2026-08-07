@@ -176,11 +176,12 @@ export default function UserDashboard() {
       shareCapital,
       loanBalance,
       monthlyContributions,
+      employerContribution: Number(user?.employerContribution || user?.Member?.employerContribution || user?.member?.employerContribution || 0),
       activeLoans: data.loans.filter((loan) => ["ACTIVE", "APPROVED"].includes(String(loan.status || "").toUpperCase())).length,
       shareCapitalRemaining: Math.max(MIN_SHARE_CAPITAL - shareCapital, 0),
       shareCapitalProgress: Math.min((shareCapital / MIN_SHARE_CAPITAL) * 100, 100),
     };
-  }, [data]);
+  }, [data, user]);
 
   const path = location.pathname;
   const memberName = user?.firstName || user?.name?.split(" ")?.[0] || "Member";
