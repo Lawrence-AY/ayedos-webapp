@@ -62,8 +62,28 @@ export async function getLoanById(id, accessToken) {
 }
 
 export async function approveLoan(id, accessToken) {
-  const res = await apiRequest(`/api/finance/loans/${id}/approve`, { method: 'POST', accessToken })
+  const res = await apiRequest(`/api/loans/${id}/approve`, { method: 'PATCH', accessToken })
   if (!res.ok) throw new Error(res.json?.message || 'Failed to approve loan')
+  return unwrapEnvelopeData(res.json)
+}
+
+export async function previewFinancialCsvImport(csv, accessToken) {
+  const res = await apiRequest('/api/finance/financial-import/preview', {
+    method: 'POST',
+    accessToken,
+    body: { csv },
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to preview financial import')
+  return unwrapEnvelopeData(res.json)
+}
+
+export async function commitFinancialCsvImport(csv, accessToken) {
+  const res = await apiRequest('/api/finance/financial-import/commit', {
+    method: 'POST',
+    accessToken,
+    body: { csv },
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to import financial records')
   return unwrapEnvelopeData(res.json)
 }
 
@@ -216,7 +236,7 @@ export async function searchMembers(query, accessToken) {
 }
 
 export async function updateMemberEmployment(id, data, accessToken) {
-  const res = await apiRequest(`/api/finance/members/${id}/employment`, { method: 'PUT', accessToken, body: data })
+  const res = await apiRequest(`/api/finance/members/${id}/employment`, { method: 'POST', accessToken, body: data })
   if (!res.ok) throw new Error(res.json?.message || 'Failed to update member employment')
   return unwrapEnvelopeData(res.json)
 }
@@ -280,6 +300,26 @@ export async function getRepaymentPerformance(accessToken, filters = {}) {
   const url = queryParams ? `/api/finance/loans/repayment-performance?${queryParams}` : '/api/finance/loans/repayment-performance'
   const res = await apiRequest(url, { method: 'GET', accessToken })
   if (!res.ok) throw new Error(res.json?.message || 'Failed to fetch repayment performance')
+  return unwrapEnvelopeData(res.json)
+}
+
+export async function getFinanceNotifications(accessToken, filters = {}) {
+  const queryParams = new URLSearchParams(filters).toString()
+  const url = queryParams ? `/api/notifications?${queryParams}` : '/api/notifications'
+  const res = await apiRequest(url, { method: 'GET', accessToken, cache: false })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to fetch notifications')
+  return unwrapEnvelopeData(res.json)
+}
+
+export async function markFinanceNotificationRead(id, accessToken) {
+  const res = await apiRequest(`/api/notifications/${id}/read`, { method: 'POST', accessToken, cache: false })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to mark notification as read')
+  return unwrapEnvelopeData(res.json)
+}
+
+export async function markAllFinanceNotificationsRead(accessToken) {
+  const res = await apiRequest('/api/notifications/read-all', { method: 'POST', accessToken, cache: false })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to mark notifications as read')
   return unwrapEnvelopeData(res.json)
 }
 

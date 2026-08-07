@@ -237,7 +237,7 @@ export function Toolbar({ search, onSearch, placeholder = "Search records...", a
   );
 }
 
-export function DataTable({ title, description, columns, data = [], emptyTitle, emptyDescription, search, onSearch, pageSize = 10, exportFilename, onFilter }) {
+export function DataTable({ title, description, columns, data = [], emptyTitle, emptyDescription, search, onSearch, pageSize = 10, exportFilename, onFilter, onRowClick }) {
   const [page, setPage] = useState(1);
   const totalPages = Math.max(1, Math.ceil(data.length / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -282,9 +282,17 @@ export function DataTable({ title, description, columns, data = [], emptyTitle, 
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {pageRows.map((row, index) => (
-                  <tr key={row.id || row._id || index} className="bg-white transition hover:bg-emerald-50/40">
+                  <tr
+                    key={row.id || row._id || index}
+                    onClick={onRowClick ? () => onRowClick(row) : undefined}
+                    className={`bg-white transition hover:bg-emerald-50/40 ${onRowClick ? "cursor-pointer" : ""}`}
+                  >
                     {columns.map((column, columnIndex) => (
-                      <td key={`${column.key}-${columnIndex}`} className="px-5 py-4 text-sm text-slate-700">
+                      <td
+                        key={`${column.key}-${columnIndex}`}
+                        onClick={column.stopRowClick ? (event) => event.stopPropagation() : undefined}
+                        className="px-5 py-4 text-sm text-slate-700"
+                      >
                         {column.render ? column.render(row[column.key], row) : (row[column.key] ?? "-")}
                       </td>
                     ))}

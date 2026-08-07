@@ -133,6 +133,35 @@ export async function getMyGuarantees(accessToken) {
   return unwrapEnvelopeData(res.json)
 }
 
+export async function searchQualifiedGuarantors(query, accessToken) {
+  const res = await apiRequest(`/api/member/guarantors/search?q=${encodeURIComponent(query)}`, {
+    method: 'GET',
+    accessToken,
+    cache: false,
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to search guarantors')
+  return unwrapEnvelopeData(res.json)
+}
+
+export async function getGuarantorRequest(token) {
+  const res = await apiRequest(`/api/loans/guarantor-requests/${encodeURIComponent(token)}`, {
+    method: 'GET',
+    cache: false,
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to fetch guarantor request')
+  return unwrapEnvelopeData(res.json)
+}
+
+export async function respondToGuarantorRequest(token, decision) {
+  const res = await apiRequest(`/api/loans/guarantor-requests/${encodeURIComponent(token)}/respond`, {
+    method: 'POST',
+    body: { decision },
+    cache: false,
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to submit guarantor response')
+  return unwrapEnvelopeData(res.json)
+}
+
 export async function repayLoan(id, amount, accessToken) {
   const res = await apiRequest(`/api/member/loans/${id}/repay`, {
     method: 'POST',
