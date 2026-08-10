@@ -58,6 +58,7 @@ import {
   getAllShares,
   getAllDividends,
   getAllDeductions,
+  getFinancialReports,
 } from "../features/finance/financeService.js";
 import {
   AnalyticsPanel,
@@ -65,6 +66,7 @@ import {
   DashboardHero,
   KpiCard,
   SectionHeader,
+  ReportBreakdownDialog,
   SkeletonDashboard,
   StatusBadge,
   formatCurrency,
@@ -76,6 +78,8 @@ import { getDashboardPath } from "../utils/dashboardRoutes.js";
 import StaffSecurityPage from "../components/staff-dashboard/StaffSecurityPage.jsx";
 import SupportPage from "../components/user-dashboard/SupportPage.jsx";
 import MemberFinancialProfile from "../components/staff-dashboard/MemberFinancialProfile.jsx";
+import OptOutRequestsPage from "../components/staff-dashboard/OptOutRequestsPage.jsx";
+import SentNotificationsPanel from "../components/staff-dashboard/SentNotificationsPanel.jsx";
 
 function filterRows(rows, search, keys) {
   const term = search.trim().toLowerCase();
@@ -89,11 +93,7 @@ function filterRows(rows, search, keys) {
   );
 }
 function formatDateSafe(v) {
-  try {
-    return v ? new Date(v).toLocaleDateString() : "-";
-  } catch {
-    return "-";
-  }
+  return formatDate(v);
 }
 function normalizeAdminNotification(n) {
   const category = String(n.category || n.type || "ALERT").toUpperCase();
@@ -144,6 +144,7 @@ export default function AdminDashboard() {
     dividends: [],
     deductions: [],
     auditLogs: [],
+    reports: {},
   });
 
   async function loadData({ showLoading = true } = {}) {
@@ -164,7 +165,7 @@ export default function AdminDashboard() {
       getAllDeductions(accessToken),
       getAuditLogs(accessToken),
       getAdminNotifications(accessToken),
-      getAdminNotifications(accessToken),
+      getFinancialReports(accessToken),
     ]);
     setData({
       users:
@@ -207,6 +208,7 @@ export default function AdminDashboard() {
         r[9].status === "fulfilled" && Array.isArray(r[9].value)
           ? r[9].value
           : [],
+      reports: r[11]?.status === "fulfilled" ? r[11].value : {},
     });
     if (r[10].status === "fulfilled" && Array.isArray(r[10].value)) {
       setNotifications(r[10].value.map(normalizeAdminNotification));
@@ -1294,6 +1296,8 @@ function AdminNotificationsPanel({
       <div className="flex gap-2">
         {[
           { k: "inbound", l: "Inbound Alerts" },
+          { k: "opt-outs", l: "Opt-out Approvals" },
+          { k: "sent", l: "Sent Notifications" },
           { k: "broadcast", l: "Global Broadcast" },
           { k: "direct", l: "Direct Message" },
         ].map((t) => (
@@ -1377,6 +1381,11 @@ function AdminNotificationsPanel({
           ))}
         </div>
       )}
+
+      {tab === "opt-outs" && (
+        <OptOutRequestsPage role="ADMIN" accessToken={accessToken} embedded />
+      )}
+      {tab === "sent" && <SentNotificationsPanel accessToken={accessToken} />}
 
       {tab === "broadcast" && (
         <form
@@ -1561,43 +1570,10 @@ function AdminAuditLogs({ data }) {
 // ============================================================
 function AdminReportsPage({ data }) {
   const [timeFilter, setTimeFilter] = useState("monthly");
-  const transactions = data?.transactions || [];
-  const timeSeries = useMemo(() => {
-    const series = {};
-    const formatKey = (d) => {
-      if (timeFilter === "daily") return d.toISOString().split("T")[0];
-      if (timeFilter === "monthly")
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      return `${d.getFullYear()}`;
-    };
-    transactions.forEach((t) => {
-      const d = t.createdAt || t.date;
-      if (!d) return;
-      const key = formatKey(new Date(d));
-      if (!series[key])
-        series[key] = {
-          deposits: 0,
-          withdrawals: 0,
-          repayments: 0,
-          disbursements: 0,
-          count: 0,
-        };
-      const type = String(t.type || "").toUpperCase();
-      if (type.includes("DEPOSIT"))
-        series[key].deposits += Number(t.amount || 0);
-      else if (type.includes("WITHDRAW"))
-        series[key].withdrawals += Number(t.amount || 0);
-      else if (type.includes("REPAYMENT"))
-        series[key].repayments += Number(t.amount || 0);
-      else if (type.includes("DISBURSE"))
-        series[key].disbursements += Number(t.amount || 0);
-      series[key].count++;
-    });
-    return Object.entries(series)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-30)
-      .map(([label, vals]) => ({ label, ...vals }));
-  }, [transactions, timeFilter]);
+  const [breakdown, setBreakdown] = useState(null);
+  const report = data?.reports || {};
+  const totals = report.totals || {};
+  const timeSeries = (data?.reports?.timeSeries?.[timeFilter] || []).slice(-30);
 
   const reportColumns = [
     { key: "label", label: "Period" },
@@ -1646,6 +1622,18 @@ function AdminReportsPage({ data }) {
             className={`rounded-full px-4 py-2 text-sm font-semibold capitalize ${timeFilter === tf ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-700"}`}
           >
             {tf}
+          </button>
+        ))}
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          ["shareCapitalDeposits", "Share capital", totals.shareCapitalDeposits, "text-sky-700"],
+          ["savingsDeposits", "Savings deposits", totals.savingsDeposits, "text-emerald-700"],
+          ["repayments", "Loan repayments", totals.repayments, "text-violet-700"],
+          ["disbursements", "Loan disbursements", totals.disbursements, "text-amber-700"],
+        ].map(([key, label, total, tone]) => (
+          <button type="button" key={key} onClick={() => setBreakdown({ title: label, total: Number(total || 0), rows: report.memberBreakdowns?.[key] || [] })} className="rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p><p className={`mt-2 text-2xl font-bold ${tone}`}>{formatCurrency(total || 0)}</p><p className="mt-2 text-xs font-semibold text-slate-500">View member summary</p>
           </button>
         ))}
       </div>
@@ -1709,6 +1697,7 @@ function AdminReportsPage({ data }) {
           </tbody>
         </table>
       </div>
+      <ReportBreakdownDialog breakdown={breakdown} onClose={() => setBreakdown(null)} />
     </div>
   );
 }

@@ -22,6 +22,7 @@ import {
   ReceiptText,
   RefreshCw,
   Search,
+  Send,
   ShieldAlert,
   TrendingDown,
   TrendingUp,
@@ -37,6 +38,8 @@ import TopNavbar from "../components/layout/TopNavbar.jsx";
 import StaffSecurityPage from "../components/staff-dashboard/StaffSecurityPage.jsx";
 import SupportPage from "../components/user-dashboard/SupportPage.jsx";
 import MemberFinancialProfile from "../components/staff-dashboard/MemberFinancialProfile.jsx";
+import OptOutRequestsPage from "../components/staff-dashboard/OptOutRequestsPage.jsx";
+import SentNotificationsPanel from "../components/staff-dashboard/SentNotificationsPanel.jsx";
 import { getDashboardPath } from "../utils/dashboardRoutes.js";
 import { exportRichCSV } from "../utils/csvExport.js";
 import { changePassword } from "../services/authService.js";
@@ -47,6 +50,7 @@ import {
   getAllDeductions,
   getAllDividends,
   getAllLoans,
+  getLoanById,
   getAllMembers,
   getAllShares,
   getAllTransactions,
@@ -69,6 +73,7 @@ import {
   DashboardHero,
   KpiCard,
   SectionHeader,
+  ReportBreakdownDialog,
   SkeletonDashboard,
   StatusBadge,
   formatCurrency,
@@ -89,11 +94,7 @@ function filterRows(rows, search, keys) {
   );
 }
 function formatDateSafe(v) {
-  try {
-    return v ? new Date(v).toLocaleDateString() : "-";
-  } catch {
-    return "-";
-  }
+  return formatDate(v);
 }
 
 
@@ -129,6 +130,9 @@ function calculateReducingBalance(principal, annualRate, durationMonths) {
 function getFinanceStats(data) {
   const tx = data.transactions || [];
   const loans = data.loans || [];
+  const reportTotals = data.reports?.totals || {};
+  const eatToday = new Date(Date.now() + (3 * 60 * 60 * 1000)).toISOString().slice(0, 10);
+  const todayReport = data.reports?.timeSeries?.daily?.find((row) => row.label === eatToday);
   const now = new Date();
   const isToday = (v) => {
     if (!v) return false;
@@ -151,15 +155,15 @@ function getFinanceStats(data) {
       )
       .reduce((s, t) => s + Number(t.amount || 0), 0);
   return {
-    dailyTransactions: tx.filter((t) => isToday(t.createdAt || t.date)).length,
-    totalDeposits: byType("DEPOSIT"),
-    totalWithdrawals: byType("WITHDRAWAL"),
+    dailyTransactions: todayReport?.count ?? tx.filter((t) => isToday(t.createdAt || t.date)).length,
+    totalDeposits: Number(reportTotals.deposits ?? byType("DEPOSIT")),
+    totalWithdrawals: Number(reportTotals.withdrawals ?? byType("WITHDRAWAL")),
     activeLoans: loans.filter((l) =>
       ["ACTIVE", "DISBURSED", "APPROVED"].includes(
         String(l.status || "").toUpperCase(),
       ),
     ).length,
-    loanRepayments: byType("REPAYMENT"),
+    loanRepayments: Number(reportTotals.repayments ?? byType("REPAYMENT")),
     pendingDisbursements: loans.filter(
       (l) => String(l.status || "").toUpperCase() === "APPROVED",
     ).length,
@@ -789,6 +793,8 @@ function NotificationsPanel({
               count: counts.OVERDUE,
               icon: AlertTriangle,
             },
+            { key: "OPT_OUT", label: "Opt-out & Disbursement", count: null, icon: WalletCards },
+            { key: "SENT", label: "Sent", count: null, icon: Send },
           ].map((tab) => (
             <button
               key={tab.key}
@@ -797,7 +803,7 @@ function NotificationsPanel({
               className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${notifTab === tab.key ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
             >
               <tab.icon size={14} />
-              {tab.label} ({tab.count})
+              {tab.label}{tab.count == null ? "" : ` (${tab.count})`}
             </button>
           ))}
         </div>
@@ -808,7 +814,11 @@ function NotificationsPanel({
           Mark all read
         </button>
       </div>
-      <div className="space-y-3">
+      {notifTab === "OPT_OUT" ? (
+        <OptOutRequestsPage role="FINANCE" accessToken={accessToken} embedded />
+      ) : notifTab === "SENT" ? (
+        <SentNotificationsPanel accessToken={accessToken} />
+      ) : <div className="space-y-3">
         {filtered.map((n) => (
           <button
             type="button"
@@ -870,7 +880,7 @@ function NotificationsPanel({
             </div>
           </button>
         ))}
-      </div>
+      </div>}
       {selectedNotification ? (
         <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/40">
           <div className="h-full w-full max-w-xl overflow-y-auto bg-white p-6 shadow-2xl">
@@ -1038,14 +1048,9 @@ function FinanceHome({ data, stats, globalSearch = "", onVerifyTransaction }) {
   const [showInterestBreakdown, setShowInterestBreakdown] = useState(false);
   const navigate = useNavigate();
   const dashboardBase = getDashboardPath("FINANCE");
-  const transactionSeries = getMonthlySeries(data.transactions);
-  const repaymentSeries = getMonthlySeries(
-    data.transactions.filter((t) =>
-      String(t.type || "")
-        .toUpperCase()
-        .includes("REPAYMENT"),
-    ),
-  );
+  const monthlyReport = data.reports?.timeSeries?.monthly || [];
+  const transactionSeries = monthlyReport.map((row) => ({ label: row.label, value: row.count }));
+  const repaymentSeries = monthlyReport.map((row) => ({ label: row.label, value: row.repayments }));
   const interests = data.reports?.totals?.interests || {};
   const txCards = [
     {
@@ -2819,103 +2824,27 @@ function MemberProfileDetail({ member, onBack }) {
 // ============================================================
 function FinancialReportsPage({ data }) {
   const [timeFilter, setTimeFilter] = useState("monthly");
-  const transactions = useMemo(() => data.transactions || [], [data.transactions]);
-  const loans = data.loans || [];
-
-  const timeSeries = useMemo(() => {
-    const series = {};
-    const formatKey = (d) => {
-      if (timeFilter === "daily") return d.toISOString().split("T")[0];
-      if (timeFilter === "monthly")
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      return `${d.getFullYear()}`;
-    };
-    transactions.forEach((t) => {
-      const d = t.createdAt || t.date;
-      if (!d) return;
-      const key = formatKey(new Date(d));
-      if (!series[key])
-        series[key] = {
-          deposits: 0,
-          withdrawals: 0,
-          repayments: 0,
-          disbursements: 0,
-          count: 0,
-        };
-      const type = String(t.type || "").toUpperCase();
-      if (type.includes("DEPOSIT"))
-        series[key].deposits += Number(t.amount || 0);
-      else if (type.includes("WITHDRAW"))
-        series[key].withdrawals += Number(t.amount || 0);
-      else if (type.includes("REPAYMENT"))
-        series[key].repayments += Number(t.amount || 0);
-      else if (type.includes("DISBURSE"))
-        series[key].disbursements += Number(t.amount || 0);
-      series[key].count++;
-    });
-    return Object.entries(series)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-30)
-      .map(([label, vals]) => ({ label, ...vals }));
-  }, [transactions, timeFilter]);
+  const [breakdown, setBreakdown] = useState(null);
+  const report = data.reports || {};
+  const totals = report.totals || {};
+  const timeSeries = (report.timeSeries?.[timeFilter] || []).slice(-30);
 
   const reportRows = timeSeries;
 
-  const totalDeposits = transactions
-    .filter((t) =>
-      String(t.type || "")
-        .toUpperCase()
-        .includes("DEPOSIT"),
-    )
-    .reduce((s, t) => s + Number(t.amount || 0), 0);
-  const shareCapitalTxs = transactions.filter((t) => {
-    const tp = String(t.type || "").toLowerCase();
-    return (
-      (tp.includes("deposit") || tp.includes("payment")) &&
-      (tp.includes("share") || tp.includes("capital"))
-    );
-  });
-  const savingsTxs = transactions.filter((t) => {
-    const tp = String(t.type || "").toLowerCase();
-    return (
-      (tp.includes("deposit") || tp.includes("payment")) &&
-      tp.includes("savings")
-    );
-  });
-  const shareCapitalDeposits = shareCapitalTxs.reduce(
-    (s, t) => s + Number(t.amount || 0),
-    0,
-  );
-  const savingsDeposits = savingsTxs.reduce(
-    (s, t) => s + Number(t.amount || 0),
-    0,
-  );
+  const totalDeposits = Number(totals.deposits || 0);
+  const shareCapitalDeposits = Number(totals.shareCapitalDeposits || 0);
+  const savingsDeposits = Number(totals.savingsDeposits || 0);
+  const openBreakdown = (key, title, total) => setBreakdown({ key, title, total, rows: report.memberBreakdowns?.[key] || [] });
 
   const loanProducts = ["EMERGENCY", "EDUCATION", "DEVELOPMENT", "WELFARE"];
   const repayByProduct = {};
   const disburseByProduct = {};
   loanProducts.forEach((p) => {
-    repayByProduct[p] = loans
-      .filter((l) => String(l.type || "").toUpperCase() === p)
-      .reduce((s, l) => s + Number(l.paid || 0), 0);
-    disburseByProduct[p] = loans
-      .filter(
-        (l) =>
-          String(l.type || "").toUpperCase() === p &&
-          ["DISBURSED", "ACTIVE", "OVERDUE"].includes(
-            String(l.status || "").toUpperCase(),
-          ),
-      )
-      .reduce((s, l) => s + Number(l.principal || 0), 0);
+    repayByProduct[p] = Number(report.byProduct?.[p]?.repayments || 0);
+    disburseByProduct[p] = Number(report.byProduct?.[p]?.disbursements || 0);
   });
-  const totalRepayments = loans.reduce((s, l) => s + Number(l.paid || 0), 0);
-  const totalDisbursed = loans
-    .filter((l) =>
-      ["DISBURSED", "ACTIVE", "OVERDUE"].includes(
-        String(l.status || "").toUpperCase(),
-      ),
-    )
-    .reduce((s, l) => s + Number(l.principal || 0), 0);
+  const totalRepayments = Number(totals.repayments || 0);
+  const totalDisbursed = Number(totals.disbursements || 0);
 
   return (
     <div className="space-y-6">
@@ -2970,9 +2899,10 @@ function FinancialReportsPage({ data }) {
           <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700">
             {formatCurrency(totalDeposits)}
           </span>
+          <button type="button" onClick={() => openBreakdown("deposits", "Total deposits", totalDeposits)} className="ml-auto text-xs font-semibold text-emerald-700 hover:underline">View members</button>
         </div>
         <div className="grid gap-3 md:grid-cols-2">
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <button type="button" onClick={() => openBreakdown("shareCapitalDeposits", "Share capital deposits", shareCapitalDeposits)} className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-sky-300 hover:bg-sky-50">
             <p className="text-xs font-semibold text-slate-500">
               Share Capital
             </p>
@@ -2982,8 +2912,9 @@ function FinancialReportsPage({ data }) {
             <p className="mt-1 text-xs text-slate-500">
               Deposits allocated to share ownership
             </p>
-          </div>
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <span className="mt-2 block text-xs font-semibold text-sky-700">View member summary</span>
+          </button>
+          <button type="button" onClick={() => openBreakdown("savingsDeposits", "Savings pool deposits", savingsDeposits)} className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-emerald-300 hover:bg-emerald-50">
             <p className="text-xs font-semibold text-slate-500">
               Savings Pools
             </p>
@@ -2993,7 +2924,8 @@ function FinancialReportsPage({ data }) {
             <p className="mt-1 text-xs text-slate-500">
               General savings deposits
             </p>
-          </div>
+            <span className="mt-2 block text-xs font-semibold text-emerald-700">View member summary</span>
+          </button>
         </div>
       </div>
 
@@ -3007,12 +2939,14 @@ function FinancialReportsPage({ data }) {
           <span className="rounded-full bg-sky-50 px-3 py-1 text-sm font-semibold text-sky-700">
             {formatCurrency(totalRepayments)}
           </span>
+          <button type="button" onClick={() => openBreakdown("repayments", "Loan repayments", totalRepayments)} className="ml-auto text-xs font-semibold text-sky-700 hover:underline">View members</button>
         </div>
         <div className="grid gap-3 md:grid-cols-4">
           {loanProducts.map((p) => (
-            <div
+            <button type="button"
               key={p}
-              className="rounded-lg border border-slate-200 bg-slate-50 p-4"
+              onClick={() => openBreakdown(`repayments_${p}`, `${p.charAt(0) + p.slice(1).toLowerCase()} loan repayments`, repayByProduct[p])}
+              className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-sky-300 hover:bg-sky-50"
             >
               <p className="text-xs font-semibold text-slate-500">
                 {p.charAt(0) + p.slice(1).toLowerCase()} Loans
@@ -3020,7 +2954,8 @@ function FinancialReportsPage({ data }) {
               <p className="mt-1 text-lg font-semibold text-sky-700">
                 {formatCurrency(repayByProduct[p])}
               </p>
-            </div>
+              <span className="mt-2 block text-xs font-semibold text-sky-700">View members</span>
+            </button>
           ))}
         </div>
       </div>
@@ -3035,12 +2970,14 @@ function FinancialReportsPage({ data }) {
           <span className="rounded-full bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-700">
             {formatCurrency(totalDisbursed)}
           </span>
+          <button type="button" onClick={() => openBreakdown("disbursements", "Loan disbursements", totalDisbursed)} className="ml-auto text-xs font-semibold text-amber-700 hover:underline">View members</button>
         </div>
         <div className="grid gap-3 md:grid-cols-4">
           {loanProducts.map((p) => (
-            <div
+            <button type="button"
               key={p}
-              className="rounded-lg border border-slate-200 bg-slate-50 p-4"
+              onClick={() => openBreakdown(`disbursements_${p}`, `${p.charAt(0) + p.slice(1).toLowerCase()} loan disbursements`, disburseByProduct[p])}
+              className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-amber-300 hover:bg-amber-50"
             >
               <p className="text-xs font-semibold text-slate-500">
                 {p.charAt(0) + p.slice(1).toLowerCase()} Loans
@@ -3048,7 +2985,8 @@ function FinancialReportsPage({ data }) {
               <p className="mt-1 text-lg font-semibold text-amber-700">
                 {formatCurrency(disburseByProduct[p])}
               </p>
-            </div>
+              <span className="mt-2 block text-xs font-semibold text-amber-700">View members</span>
+            </button>
           ))}
         </div>
       </div>
@@ -3116,6 +3054,7 @@ function FinancialReportsPage({ data }) {
           </tbody>
         </table>
       </div>
+      <ReportBreakdownDialog breakdown={breakdown} onClose={() => setBreakdown(null)} />
     </div>
   );
 }
