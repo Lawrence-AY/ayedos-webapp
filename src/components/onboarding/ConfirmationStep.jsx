@@ -2,20 +2,22 @@ import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, Receipt } from "lucide-react";
+import { getDashboardPath } from "../../utils/dashboardRoutes";
 
 export const ConfirmationStep = ({ mpesaReference }) => {
   const navigate = useNavigate();
+  const dashboardPath = getDashboardPath("MEMBER");
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      navigate("/dashboard");
+      navigate(dashboardPath, { replace: true });
     }, 5000);
 
     return () => clearTimeout(timer);
-  }, [navigate]);
+  }, [dashboardPath, navigate]);
 
   const handleGoToDashboard = () => {
-    navigate("/dashboard");
+    navigate(dashboardPath, { replace: true });
   };
 
   return (
@@ -54,7 +56,6 @@ export const ConfirmationStep = ({ mpesaReference }) => {
         <Button onClick={handleGoToDashboard} className="mt-4">
           Go to Dashboard Now
         </Button>
-        s
       </div>
     </div>
   );

@@ -25,6 +25,7 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
   const [waitingStatus, setWaitingStatus] = useState('waiting');
   const [progress, setProgress] = useState(0);
   const [mpesaReferenceDisplay, setMpesaReferenceDisplay] = useState(null);
+  const [paybillApplicationId, setPaybillApplicationId] = useState(null);
   const pollingInterval = useRef(null);
   const progressInterval = useRef(null);
 
@@ -124,6 +125,13 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
     return app.id;
   };
 
+  const getPaybillApplicationId = async () => {
+    if (paybillApplicationId) return paybillApplicationId;
+    const appId = await createApplication();
+    setPaybillApplicationId(appId);
+    return appId;
+  };
+
   const markOnboardingComplete = async () => {
     const fullName = [userData.firstName, userData.secondName, userData.surname]
       .filter(Boolean)
@@ -155,8 +163,24 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
       throw new Error(res.json?.message || 'Could not finalize onboarding profile');
     }
 
-    updateCurrentUser?.(unwrapEnvelopeData(res.json));
-    await loadCurrentUser?.(accessToken, { force: true });
+    const updatedProfile = unwrapEnvelopeData(res.json);
+    updateCurrentUser?.({
+      ...updatedProfile,
+      role: 'MEMBER',
+      onboardingComplete: true,
+      onboardingCompleted: true,
+      consentGiven: true,
+    });
+    const refreshedUser = await loadCurrentUser?.(accessToken, { force: true });
+    const completedUser = {
+      ...(refreshedUser || updatedProfile || {}),
+      role: 'MEMBER',
+      onboardingComplete: true,
+      onboardingCompleted: true,
+      consentGiven: true,
+    };
+    updateCurrentUser?.(completedUser);
+    return completedUser;
   };
 
   // Poll STK status and verify payment when paid
@@ -203,7 +227,7 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
           });
 
           if (verifyRes.ok) {
-            await markOnboardingComplete();
+            const completedUser = await markOnboardingComplete();
             sessionStorage.removeItem(PENDING_STK_STORAGE_KEY);
             clearInterval(pollingInterval.current);
             pollingInterval.current = null;
@@ -214,7 +238,7 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
             setTimeout(() => {
               setShowWaitingDialog(false);
               setLoading(false);
-              onPaymentSuccess(receipt);
+              onPaymentSuccess({ reference: receipt, user: completedUser });
             }, 1500);
           } else {
             throw new Error('Verification failed on server');
@@ -308,7 +332,7 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
       }
       const checkoutId = workerData.checkoutRequestId;
 
-      const appId = await createApplication();
+      const appId = await getPaybillApplicationId();
       sessionStorage.setItem(PENDING_STK_STORAGE_KEY, JSON.stringify({
         checkoutId,
         appId,
@@ -354,11 +378,11 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
         accessToken,
       });
       if (!verifyRes.ok) throw new Error(verifyRes.json?.message || 'Payment verification failed');
-      await markOnboardingComplete();
+      const completedUser = await markOnboardingComplete();
       clearInterval(interval);
       setProgress(100);
       setMpesaReferenceDisplay(receiptValue);
-      setTimeout(() => onPaymentSuccess(receiptValue), 500);
+      setTimeout(() => onPaymentSuccess({ reference: receiptValue, user: completedUser }), 500);
     } catch (err) {
       clearInterval(interval);
       const message = getApiErrorMessage(err) || (err?.message ?? 'Payment registration failed');
@@ -372,6 +396,14 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
     setError('');
     if (paymentMethod === 'stk' && !stkPhone.trim()) {
       toast.error('Please enter your M-PESA phone number');
+      return;
+    }
+    if (paymentMethod === 'paybill' && !paybillApplicationId) {
+      setLoading(true);
+      getPaybillApplicationId()
+        .then((appId) => toast.success(`Use account number AYEDOSSACCO-${appId} to complete your Paybill payment.`))
+        .catch((err) => setError(getApiErrorMessage(err) || err?.message || 'Could not reserve your application number.'))
+        .finally(() => setLoading(false));
       return;
     }
     if (paymentMethod === 'paybill' && !mpesaReceipt.trim()) {
@@ -478,7 +510,7 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
               <ol className="text-sm text-gray-700 list-decimal list-inside space-y-1 ml-2">
                 <li>Go to your M-PESA menu → Lipa na M-PESA → Paybill</li>
                 <li>Enter <strong className="font-mono">522533</strong> as the Business Number</li>
-                <li>Enter <strong className="font-mono">7929884</strong> as the Account Number</li>
+                <li>Enter <strong className="font-mono">{paybillApplicationId ? `AYEDOSSACCO-${paybillApplicationId}` : 'AYEDOSSACCO-APPLICATION'}</strong> as the Account Number</li>
                 <li>Enter Amount: <strong>KES {REGISTRATION_FEE}</strong></li>
                 <li>Enter your M-PESA PIN and confirm</li>
                 <li>You will receive a confirmation SMS with a receipt number (10 characters)</li>
@@ -499,7 +531,9 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
               className="bg-white border-gray-200 rounded-xl p-3"
             />
             <p className="text-xs text-gray-500">
-              Enter the 10‑character receipt number from your M-PESA confirmation message.
+              {paybillApplicationId
+                ? `Use account number AYEDOSSACCO-${paybillApplicationId}, then enter the 10-character receipt number from your M-PESA confirmation message.`
+                : 'Click Make Payment to reserve your application number, then enter the receipt number from your M-PESA confirmation message.'}
             </p>
           </div>
         </div>

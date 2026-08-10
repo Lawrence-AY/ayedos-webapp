@@ -13,6 +13,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Eye, EyeOff } from "lucide-react";
 
 const OTP_COOLDOWN_SECONDS = 60;
 
@@ -35,6 +36,8 @@ export default function Register() {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formError, setFormError] = useState(null);
 
   async function onSubmit(e) {
@@ -288,26 +291,22 @@ export default function Register() {
             </div>
 
             <div style={{ marginBottom: 16 }}>
-              <input
-                type="password"
+              <PasswordField
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                style={inputStyle}
-                minLength={8}
-                required
+                visible={showPassword}
+                onToggle={() => setShowPassword((visible) => !visible)}
               />
             </div>
 
             <div style={{ marginBottom: 15 }}>
-              <input
-                type="password"
+              <PasswordField
                 placeholder="Confirm password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                style={inputStyle}
-                minLength={8}
-                required
+                visible={showConfirmPassword}
+                onToggle={() => setShowConfirmPassword((visible) => !visible)}
               />
             </div>
 
@@ -397,6 +396,31 @@ export default function Register() {
   );
 }
 
+function PasswordField({ placeholder, value, onChange, visible, onToggle }) {
+  const Icon = visible ? EyeOff : Eye;
+  return (
+    <div style={passwordFieldWrapStyle}>
+      <input
+        type={visible ? "text" : "password"}
+        placeholder={placeholder}
+        value={value}
+        onChange={onChange}
+        style={{ ...inputStyle, paddingRight: 48 }}
+        minLength={8}
+        required
+      />
+      <button
+        type="button"
+        onClick={onToggle}
+        style={passwordToggleStyle}
+        aria-label={visible ? "Hide password" : "Show password"}
+      >
+        <Icon size={18} />
+      </button>
+    </div>
+  );
+}
+
 const inputStyle = {
   width: "100%",
   padding: "14px 16px",
@@ -406,6 +430,26 @@ const inputStyle = {
   background: "var(--auth-input-bg)",
   color: "var(--text)",
   boxSizing: "border-box",
+};
+
+const passwordFieldWrapStyle = {
+  position: "relative",
+};
+
+const passwordToggleStyle = {
+  position: "absolute",
+  right: 10,
+  top: "50%",
+  transform: "translateY(-50%)",
+  width: 36,
+  height: 36,
+  display: "grid",
+  placeItems: "center",
+  border: 0,
+  borderRadius: 8,
+  background: "transparent",
+  color: "var(--auth-muted)",
+  cursor: "pointer",
 };
 
 const buttonStyle = {

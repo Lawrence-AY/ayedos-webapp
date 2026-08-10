@@ -93,8 +93,12 @@ export default function SavingsContributionForm({ accessToken, user, onRefresh, 
         return;
       }
       if (status.status === "FAILED") {
-        setPaymentResult((current) => ({ ...current, ...status, status: "FAILED" }));
-        onMessage?.({ type: "error", text: "MPESA payment failed or was cancelled." });
+        console.info("STK contribution was not completed", {
+          transactionId,
+          status: status.status,
+          reference: status.reference,
+        });
+        setPaymentResult(null);
         await onRefresh?.();
         return;
       }

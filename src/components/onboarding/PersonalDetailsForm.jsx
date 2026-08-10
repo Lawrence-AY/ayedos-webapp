@@ -171,7 +171,6 @@ export const PersonalDetailsForm = ({
                 <SelectLabel>ID Type</SelectLabel>
                 <SelectItem value="national">National ID</SelectItem>
                 <SelectItem value="passport">Passport</SelectItem>
-                <SelectItem value="driverlicense">Driver's License</SelectItem>
               </SelectGroup>
             </SelectContent>
           </Select>
@@ -211,21 +210,7 @@ export const PersonalDetailsForm = ({
               />
             </>
           )}
-          {idType === 'driverlicense' && (
-            <>
-              <Label htmlFor="driverLicenseNumber">
-                Driver's License <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="driverLicenseNumber"
-                value={driverLicenseNumber}
-                onChange={(e) => onChange('driverLicenseNumber', e.target.value.toUpperCase())}
-                placeholder="e.g., L123456789"
-                disabled={isLoading}
-                required
-              />
-            </>
-          )}
+         
         </div>
       </div>
 
@@ -243,7 +228,7 @@ export const PersonalDetailsForm = ({
             disabled={isLoading}
             minLength={11}
             maxLength={11}
-            required
+         
           />
         </div>
         <div className="space-y-2">
@@ -293,7 +278,7 @@ export const PersonalDetailsForm = ({
             onChange={(e) => onChange('poBox', e.target.value)}
             placeholder="e.g., P.O. Box 12345-00100"
             disabled={isLoading}
-            required
+          
           />
         </div>
       </div>
@@ -326,7 +311,7 @@ export const PersonalDetailsForm = ({
             value={subCounty}
             onValueChange={(value) => onChange('subCounty', value)}
             disabled={!county}
-            required
+            
           >
             <SelectTrigger className="w-full">
               <SelectValue placeholder={county ? "Select sub-county" : "Select county first"} />
