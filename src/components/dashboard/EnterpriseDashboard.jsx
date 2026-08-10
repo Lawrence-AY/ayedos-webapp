@@ -36,7 +36,11 @@ export function formatDate(value) {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString();
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Nairobi", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+  }).formatToParts(date).reduce((result, part) => ({ ...result, [part.type]: part.value }), {});
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second} EAT`;
 }
 
 export function normalizeStatus(status) {
@@ -269,12 +273,12 @@ export function DataTable({ title, description, columns, data = [], emptyTitle, 
         <EmptyState title={emptyTitle} description={emptyDescription} />
       ) : (
         <>
-          <div className="overflow-x-auto">
+          <div className="max-h-[65vh] overflow-auto">
             <table className="min-w-[880px]">
-              <thead>
+              <thead className="sticky top-0 z-10">
                 <tr className="bg-slate-50">
                   {columns.map((column, index) => (
-                    <th key={`${column.key}-${index}`} scope="col" className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    <th key={`${column.key}-${index}`} scope="col" className="min-w-36 whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
                       {column.label}
                     </th>
                   ))}
@@ -285,13 +289,14 @@ export function DataTable({ title, description, columns, data = [], emptyTitle, 
                   <tr
                     key={row.id || row._id || index}
                     onClick={onRowClick ? () => onRowClick(row) : undefined}
-                    className={`bg-white transition hover:bg-emerald-50/40 ${onRowClick ? "cursor-pointer" : ""}`}
+                    className={`${index % 2 ? "bg-slate-50/60" : "bg-white"} transition hover:bg-emerald-50/40 ${onRowClick ? "cursor-pointer" : ""}`}
                   >
                     {columns.map((column, columnIndex) => (
                       <td
                         key={`${column.key}-${columnIndex}`}
                         onClick={column.stopRowClick ? (event) => event.stopPropagation() : undefined}
-                        className="px-5 py-4 text-sm text-slate-700"
+                        className="max-w-72 truncate px-4 py-3 text-sm text-slate-700"
+                        title={String(row[column.key] ?? "")}
                       >
                         {column.render ? column.render(row[column.key], row) : (row[column.key] ?? "-")}
                       </td>
@@ -318,6 +323,49 @@ export function DataTable({ title, description, columns, data = [], emptyTitle, 
         </>
       )}
     </Surface>
+  );
+}
+
+export function ReportBreakdownDialog({ breakdown, onClose }) {
+  const [memberSearch, setMemberSearch] = useState("");
+  useEffect(() => {
+    setMemberSearch("");
+    if (!breakdown) return undefined;
+    const closeOnEscape = (event) => { if (event.key === "Escape") onClose?.(); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [breakdown, onClose]);
+  if (!breakdown) return null;
+  const rows = breakdown.rows || [];
+  const total = Number(breakdown.total || 0);
+  const query = memberSearch.trim().toLowerCase();
+  const visibleRows = query ? rows.filter((row) => [row.memberNumber, row.memberName].some((value) => String(value || "").toLowerCase().includes(query))) : rows;
+  return (
+    <div className="fixed inset-0 z-[90] overflow-y-auto bg-slate-50 dark:bg-slate-950">
+      <section role="dialog" aria-modal="true" aria-labelledby="report-breakdown-title" className="min-h-screen">
+        <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
+            <div><p className="text-xs font-bold uppercase tracking-widest text-emerald-600">Reports and analytics</p><h1 id="report-breakdown-title" className="text-xl font-bold text-slate-950 sm:text-2xl dark:text-white">{breakdown.title}</h1></div>
+            <button type="button" onClick={onClose} className="rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-300 dark:bg-emerald-600 dark:hover:bg-emerald-700">Back to reports</button>
+          </div>
+        </header>
+        <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reconciled total</p><p className="mt-2 text-3xl font-bold text-emerald-700 dark:text-emerald-400">{formatCurrency(total)}</p><p className="mt-1 text-sm text-slate-500">Sum of all member entries below</p></div>
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Contributing members</p><p className="mt-2 text-3xl font-bold text-slate-950 dark:text-white">{rows.length}</p><p className="mt-1 text-sm text-slate-500">Members included in this report</p></div>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800"><div><h2 className="font-bold text-slate-950 dark:text-white">Member contribution details</h2><p className="text-sm text-slate-500">Every row contributes directly to the reconciled total.</p></div><label className="relative block w-full sm:w-80"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input value={memberSearch} onChange={(event) => setMemberSearch(event.target.value)} placeholder="Search member or number" className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white"/></label></div>
+            <div className="overflow-x-auto">
+              <table className="min-w-[760px] w-full text-sm"><thead className="bg-slate-100 text-left text-xs uppercase tracking-wide text-slate-600 dark:bg-slate-800 dark:text-slate-200"><tr><th className="whitespace-nowrap px-5 py-4">Member number</th><th className="px-5 py-4">Member</th><th className="whitespace-nowrap px-5 py-4 text-right">Amount</th><th className="whitespace-nowrap px-5 py-4 text-right">Share of total</th></tr></thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">{visibleRows.map((row, index) => <tr key={row.memberId || index} className={index % 2 ? "bg-slate-50/70 dark:bg-slate-800/30" : "dark:bg-slate-900"}><td className="whitespace-nowrap px-5 py-4 font-mono font-semibold text-slate-700 dark:text-slate-200">{row.memberNumber || "—"}</td><td className="px-5 py-4 font-medium text-slate-900 dark:text-white">{row.memberName || "Unknown member"}</td><td className="whitespace-nowrap px-5 py-4 text-right font-bold text-slate-950 dark:text-white">{formatCurrency(row.amount)}</td><td className="whitespace-nowrap px-5 py-4 text-right text-slate-600 dark:text-slate-300">{total > 0 ? `${((Number(row.amount) / total) * 100).toFixed(1)}%` : "0.0%"}</td></tr>)}</tbody></table>
+              {!visibleRows.length ? <p className="p-10 text-center text-slate-500">{rows.length ? "No members match your search." : "No member entries contribute to this total yet."}</p> : null}
+            </div>
+            <footer className="flex flex-col gap-2 border-t border-slate-200 px-5 py-4 text-sm font-bold text-slate-900 sm:flex-row sm:justify-between dark:border-slate-800 dark:text-white"><span>Showing {visibleRows.length} of {rows.length} member{rows.length === 1 ? "" : "s"}</span><span>Reconciled total: {formatCurrency(total)}</span></footer>
+          </div>
+        </main>
+      </section>
+    </div>
   );
 }
 

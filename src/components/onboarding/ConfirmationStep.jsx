@@ -48,13 +48,13 @@ export const ConfirmationStep = ({ mpesaReference }) => {
             You will receive a confirmation email shortly.
           </p>
           <p className="text-sm text-muted-foreground mt-2">
-            Redirecting to dashboard in 5 seconds...
+            Redirecting to sign in in 5 seconds...
           </p>
         </div>
       </div>
       <div className="flex flex-col sm:flex-row gap-3 justify-center">
         <Button onClick={handleGoToDashboard} className="mt-4">
-          Go to Dashboard Now
+          Continue to Sign In
         </Button>
       </div>
     </div>
