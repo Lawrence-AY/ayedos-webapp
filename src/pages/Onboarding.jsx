@@ -15,6 +15,7 @@ import { PersonalDetailsForm } from '../components/onboarding/PersonalDetailsFor
 import { DocumentsForm } from '../components/onboarding/DocumentsForm';
 import { PaymentForm } from '../components/onboarding/PaymentForm';
 import { ConfirmationStep } from '../components/onboarding/ConfirmationStep';
+import { getDashboardPath, getPostLoginPath } from '../utils/dashboardRoutes';
 import { CiUser } from 'react-icons/ci';
 import { CiMail } from 'react-icons/ci';
 import {
@@ -163,10 +164,10 @@ function Onboarding() {
     if (validateStep2()) { setCurrentStep(3); toast.success('Documents uploaded.'); }
   };
 
-  const handlePaymentSuccess = (reference) => {
+  const handlePaymentSuccess = ({ reference, user } = {}) => {
     if (reference) setMpesaReference(reference);
     setIsLoading(false);
-    navigate('/dashboard', { replace: true });
+    navigate(user ? getPostLoginPath(user) : getDashboardPath('MEMBER'), { replace: true });
   };
 
   const handleReset = () => {
