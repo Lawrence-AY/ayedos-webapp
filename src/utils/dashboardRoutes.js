@@ -16,7 +16,14 @@ export function isMemberOnboardingComplete(user) {
   const role = String(user.role || "").toUpperCase();
   if (role === "PENDING") return false;
   if (role !== "MEMBER") return true;
-  if (user.onboardingComplete || user.onboardingCompleted) return true;
+  if (
+    user.onboardingComplete ||
+    user.onboardingCompleted ||
+    user.isCompleted ||
+    user.onboardingStatus === true ||
+    String(user.onboardingStatus || '').toLowerCase() === 'complete' ||
+    String(user.onboardingStatus || '').toLowerCase() === 'completed'
+  ) return true;
 
   const member = user.Member || user.member || {};
   return Boolean(
