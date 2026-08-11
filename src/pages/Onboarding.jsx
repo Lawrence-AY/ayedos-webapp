@@ -1,5 +1,5 @@
 // Onboarding.jsx
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Toaster, toast } from 'sonner';
 import { decryptData } from '../lib/storageCrypto';
@@ -31,7 +31,6 @@ import {
 
 function Onboarding() {
   const navigate = useNavigate();
-  const { logout } = useContext(AuthContext);
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [mpesaReference, setMpesaReference] = useState(null);

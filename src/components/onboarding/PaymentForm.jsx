@@ -17,7 +17,7 @@ import { apiRequest, unwrapEnvelopeData, getApiErrorMessage } from '../../lib/ap
 import { AuthContext } from '../../context/AuthContext.jsx';
 
 export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, userData, documents = {} }) => {
-  const { accessToken, loadCurrentUser, updateCurrentUser } = useContext(AuthContext);
+  const { accessToken, updateCurrentUser } = useContext(AuthContext);
 
   const [paymentMethod, setPaymentMethod] = useState('stk');
   const [stkPhone, setStkPhone] = useState('');
@@ -157,6 +157,8 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
     role: 'MEMBER',
     onboardingComplete: true,
     onboardingCompleted: true,
+    isCompleted: true,
+    onboardingStatus: true,
     consentGiven: true,
   });
 
@@ -201,7 +203,6 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
     const updatedProfile = unwrapEnvelopeData(res.json);
     const completedUser = buildCompletedUser(updatedProfile);
     updateCurrentUser?.(completedUser);
-    loadCurrentUser?.(accessToken, { force: true }).catch(() => null);
     return completedUser;
   };
 
@@ -215,7 +216,6 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
         phone: formatPhoneForBackend(userData.phone || stkPhone),
       });
       updateCurrentUser?.(fallbackUser);
-      loadCurrentUser?.(accessToken, { force: true }).catch(() => null);
       return fallbackUser;
     }
   };

@@ -19,6 +19,33 @@ const OTP_RESEND_COOLDOWN_MS = 60 * 1000
 const LOGIN_IDEMPOTENCY_KEY = 'ayedos_loginIdempotencyKey'
 const isActiveRegistrationFlow = () => ['/register', '/onboarding'].includes(window.location.pathname)
 
+const hasCompletedOnboardingFlag = (user) => Boolean(
+  user?.onboardingComplete ||
+  user?.onboardingCompleted ||
+  user?.isCompleted ||
+  user?.onboardingStatus === true ||
+  String(user?.onboardingStatus || '').toLowerCase() === 'complete' ||
+  String(user?.onboardingStatus || '').toLowerCase() === 'completed'
+)
+
+const mergeUserState = (current, next) => {
+  const merged = {
+    ...(current || {}),
+    ...(next || {}),
+  }
+
+  if (hasCompletedOnboardingFlag(current)) {
+    merged.role = String(merged.role || current?.role || '').toUpperCase() === 'PENDING' ? 'MEMBER' : (merged.role || 'MEMBER')
+    merged.onboardingComplete = true
+    merged.onboardingCompleted = true
+    merged.isCompleted = true
+    merged.onboardingStatus = true
+    merged.consentGiven = merged.consentGiven ?? current?.consentGiven ?? true
+  }
+
+  return merged
+}
+
 const getPersistableUser = (user) => {
   if (!user) return null
   return {
@@ -42,6 +69,8 @@ const getPersistableUser = (user) => {
     employerContribution: user.employerContribution,
     onboardingComplete: user.onboardingComplete,
     onboardingCompleted: user.onboardingCompleted,
+    isCompleted: user.isCompleted,
+    onboardingStatus: user.onboardingStatus,
     consentGiven: user.consentGiven,
     Member: user.Member || user.member || null,
     role: user.role,
@@ -173,10 +202,14 @@ export function AuthProvider({ children }) {
       }
 
       const data = unwrapEnvelopeData(res.json)
-      setUser(data)
-      persistAuth({ user: data })
+      let mergedUser = data
+      setUser((current) => {
+        mergedUser = mergeUserState(current, data)
+        persistAuth({ user: mergedUser })
+        return mergedUser
+      })
       lastUserLoadAtRef.current = Date.now()
-      return data
+      return mergedUser
     })()
 
     try {
@@ -191,10 +224,7 @@ export function AuthProvider({ children }) {
   const updateCurrentUser = useCallback((nextUser) => {
     if (!nextUser) return
     setUser((current) => {
-      const merged = {
-        ...(current || {}),
-        ...nextUser,
-      }
+      const merged = mergeUserState(current, nextUser)
       persistAuth({ user: merged })
       return merged
     })
