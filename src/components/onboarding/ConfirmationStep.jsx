@@ -11,7 +11,7 @@ export const ConfirmationStep = ({ mpesaReference }) => {
   useEffect(() => {
     const timer = setTimeout(() => {
       navigate(dashboardPath, { replace: true });
-    }, 5000);
+    }, 900);
 
     return () => clearTimeout(timer);
   }, [dashboardPath, navigate]);
@@ -23,7 +23,9 @@ export const ConfirmationStep = ({ mpesaReference }) => {
   return (
     <div className="space-y-6 text-center px-2 sm:px-0">
       <div className="flex justify-center">
-        <CheckCircle2 className="w-20 h-20 text-green-500" />
+        <div className="grid h-24 w-24 animate-[success-pop_700ms_ease-out_both] place-items-center rounded-full bg-green-50 ring-8 ring-green-100">
+          <CheckCircle2 className="h-16 w-16 animate-[success-check_700ms_ease-out_120ms_both] text-green-600" />
+        </div>
       </div>
       <div className="space-y-2">
         <h2 className="text-2xl font-bold">Membership Application Complete!</h2>
@@ -48,7 +50,11 @@ export const ConfirmationStep = ({ mpesaReference }) => {
             You will receive a confirmation email shortly.
           </p>
           <p className="text-sm text-muted-foreground mt-2">
+<<<<<<< Updated upstream
             Redirecting to sign in in 5 seconds...
+=======
+            Redirecting to dashboard...
+>>>>>>> Stashed changes
           </p>
         </div>
       </div>
@@ -57,6 +63,17 @@ export const ConfirmationStep = ({ mpesaReference }) => {
           Continue to Sign In
         </Button>
       </div>
+      <style>{`
+        @keyframes success-pop {
+          0% { transform: scale(0.82); opacity: 0; }
+          60% { transform: scale(1.06); opacity: 1; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes success-check {
+          0% { transform: scale(0.75) rotate(-8deg); opacity: 0; }
+          100% { transform: scale(1) rotate(0); opacity: 1; }
+        }
+      `}</style>
     </div>
   );
 };

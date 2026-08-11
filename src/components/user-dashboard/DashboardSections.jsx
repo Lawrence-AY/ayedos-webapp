@@ -24,6 +24,7 @@ import {
   MapPin,
   MonitorSmartphone,
   PiggyBank,
+  Pencil,
   Plus,
   ReceiptText,
   RefreshCw,
@@ -75,24 +76,25 @@ import {
   changePassword,
   revokeAuthSession,
 } from "../../services/authService.js";
-import { uploadProfilePhoto } from "../../lib/supabaseStorage.js";
+import { uploadKycDocuments, uploadProfilePhoto } from "../../lib/supabaseStorage.js";
 
 const emptyProfile = {
   fullName: "",
   email: "",
   phone: "",
   nationalId: "",
+  kraPin: "",
   dateOfBirth: "",
   gender: "",
   address: "",
+  poBox: "",
+  county: "",
+  subCounty: "",
   employer: "",
   jobTitle: "",
   monthlyIncome: "",
   payrollNumber: "",
   staffId: "",
-  nextOfKinName: "",
-  nextOfKinRelationship: "",
-  nextOfKinPhone: "",
   passportPhotoUrl: "",
 };
 
@@ -122,7 +124,7 @@ const LOAN_PRODUCTS = [
     interestRate: 1,
     duration: 24,
     defaultRepaymentMonths: 18,
-    guarantors: 2,
+    guarantors: 1,
     requiresFullShareCapital: true,
   },
   {
@@ -132,7 +134,7 @@ const LOAN_PRODUCTS = [
     interestRate: 1,
     duration: 24,
     defaultRepaymentMonths: 18,
-    guarantors: 2,
+    guarantors: 1,
     requiresFullShareCapital: true,
   },
   {
@@ -142,7 +144,7 @@ const LOAN_PRODUCTS = [
     interestRate: 1.5,
     duration: 72,
     defaultRepaymentMonths: 48,
-    guarantors: 3,
+    guarantors: 1,
     requiresFullShareCapital: true,
   },
 ];
@@ -395,18 +397,26 @@ function QuickActions() {
 }
 
 function ProfileCompletion({ user }) {
-  const nextOfKinPath = `${getDashboardPath("MEMBER", "settings")}#next-of-kin`;
-  const hasNextOfKin = Boolean(
-    (user?.nextOfKinName || user?.nextOfKin?.name) &&
-    (user?.nextOfKinRelationship || user?.nextOfKin?.relationship) &&
-    (user?.nextOfKinPhone || user?.nextOfKin?.phone),
-  );
+  const profilePath = getDashboardPath("MEMBER", "settings");
+  const member = user?.Member || user?.member || {};
+  const identityType = String(member.identityType || user?.identityType || "").toLowerCase();
+  const hasKycDocuments = identityType === "passport"
+    ? Boolean(member.passportUrl)
+    : Boolean(
+      (member.nationalIdUrl || user?.idDocumentUrl) &&
+      (member.nationalIdBackUrl || member.passportPhotoUrl),
+    );
   const checks = [
     {
       label: "Identity details",
       complete: Boolean(user?.nationalId || user?.Member?.nationalId),
       icon: BadgeCheck,
     },
+    { label: "KRA PIN", complete: Boolean(user?.kraPin), icon: Fingerprint },
+    { label: "Address", complete: Boolean(user?.address || user?.poBox), icon: MapPin },
+    { label: "County", complete: Boolean(user?.county), icon: MapPin },
+    { label: "Sub-County", complete: Boolean(user?.subCounty), icon: MapPin },
+    { label: "KYC documents", complete: hasKycDocuments, icon: FileText },
     {
       label: "Verify phone number",
       complete: Boolean(
@@ -414,7 +424,6 @@ function ProfileCompletion({ user }) {
       ),
       icon: Smartphone,
     },
-    { label: "Add next of kin", complete: hasNextOfKin, icon: UsersRound },
   ];
   const completed = checks.filter((item) => item.complete).length;
   const completion = Math.round((completed / checks.length) * 100);
@@ -430,10 +439,10 @@ function ProfileCompletion({ user }) {
             Profile completion
           </h5>
           <Link
-            to={nextOfKinPath}
+            to={profilePath}
             className="text-sm font-medium text-slate-500 transition hover:text-emerald-700"
           >
-            Finish verification to unlock faster approvals.
+            Complete your personal and KYC details for faster approvals.
           </Link>
         </div>
         <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700 ring-1 ring-emerald-200">
@@ -1125,18 +1134,18 @@ function buildProfileForm(profile = {}) {
     email: profile?.email || "",
     phone: profile?.phone || "",
     nationalId: profile?.nationalId || profile?.Member?.nationalId || "",
+    kraPin: profile?.kraPin || "",
     dateOfBirth: profile?.dateOfBirth || "",
     gender: profile?.gender || "",
     address: profile?.address || "",
+    poBox: profile?.poBox || "",
+    county: profile?.county || "",
+    subCounty: profile?.subCounty || "",
     employer: profile?.employer || "",
     jobTitle: profile?.occupation || profile?.jobTitle || "",
     monthlyIncome: profile?.monthlyIncome || "",
     payrollNumber: profile?.payrollNumber || "",
     staffId: profile?.staffId || "",
-    nextOfKinName: profile?.nextOfKinName || profile?.nextOfKin?.name || "",
-    nextOfKinRelationship:
-      profile?.nextOfKinRelationship || profile?.nextOfKin?.relationship || "",
-    nextOfKinPhone: profile?.nextOfKinPhone || profile?.nextOfKin?.phone || "",
     passportPhotoUrl: profile?.passportPhotoUrl || "",
   };
 }
@@ -1153,18 +1162,18 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
     email: user?.email || "",
     phone: user?.phone || "",
     nationalId: user?.nationalId || "",
+    kraPin: user?.kraPin || "",
     dateOfBirth: user?.dateOfBirth || "",
     gender: user?.gender || "",
     address: user?.address || "",
+    poBox: user?.poBox || "",
+    county: user?.county || "",
+    subCounty: user?.subCounty || "",
     employer: user?.employer || "",
     jobTitle: user?.jobTitle || "",
     monthlyIncome: user?.monthlyIncome || "",
     payrollNumber: user?.payrollNumber || "",
     staffId: user?.staffId || "",
-    nextOfKinName: user?.nextOfKinName || user?.nextOfKin?.name || "",
-    nextOfKinRelationship:
-      user?.nextOfKinRelationship || user?.nextOfKin?.relationship || "",
-    nextOfKinPhone: user?.nextOfKinPhone || user?.nextOfKin?.phone || "",
     passportPhotoUrl: user?.passportPhotoUrl || "",
   }));
   const [errors, setErrors] = useState({});
@@ -1172,6 +1181,8 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
   const [alert, setAlert] = useState(null);
   const [preview, setPreview] = useState(user?.passportPhotoUrl || null);
   const [photoFile, setPhotoFile] = useState(null);
+  const [editingPersonal, setEditingPersonal] = useState(false);
+  const [kycFiles, setKycFiles] = useState({ front: null, back: null });
   const [optOutForm, setOptOutForm] = useState({
     reason: "",
     buyerMemberNumber: "",
@@ -1183,19 +1194,9 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
     setForm(buildProfileForm(user));
     setPreview(user?.passportPhotoUrl || null);
     setPhotoFile(null);
+    setKycFiles({ front: null, back: null });
     setNominees(user?.nominees || []);
   }, [user]);
-
-  useEffect(() => {
-    if (window.location.hash !== "#next-of-kin") return;
-
-    window.requestAnimationFrame(() => {
-      document.getElementById("next-of-kin")?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    });
-  }, []);
 
   const maskedEmail = form.email ? maskEmail(form.email) : "—";
   const maskedPhone = form.phone ? maskPhone(form.phone) : "—";
@@ -1279,12 +1280,6 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
       nextErrors.phone = "Enter a valid phone number.";
     if (!form.nationalId.trim())
       nextErrors.nationalId = "National ID is required.";
-    if (!form.nextOfKinName.trim())
-      nextErrors.nextOfKinName = "Next of kin name is required.";
-    if (!form.nextOfKinRelationship.trim())
-      nextErrors.nextOfKinRelationship = "Relationship is required.";
-    if (form.nextOfKinPhone.replace(/\D/g, "").length < 10)
-      nextErrors.nextOfKinPhone = "Enter a valid next of kin phone number.";
     if (nominees.length && Math.abs(nominees.reduce((sum, nominee) => sum + Number(nominee.allocationPercentage || 0), 0) - 100) > 0.001)
       nextErrors.nominees = "Nominee allocations must total 100%.";
     return nextErrors;
@@ -1322,22 +1317,18 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
           email: form.email,
           phone: form.phone,
           nationalId: form.nationalId,
+          kraPin: form.kraPin,
           address: form.address,
+          poBox: form.poBox,
+          county: form.county,
+          subCounty: form.subCounty,
           occupation: form.jobTitle,
           monthlyIncome: form.monthlyIncome,
           payrollNumber: form.payrollNumber,
           ...(passportPhotoUrl ? { passportPhotoUrl } : {}),
-          nextOfKinName: form.nextOfKinName,
-          nextOfKinRelationship: form.nextOfKinRelationship,
-          nextOfKinPhone: form.nextOfKinPhone,
           gender: form.gender,
           dateOfBirth: form.dateOfBirth,
           employer: form.employer,
-          nextOfKin: {
-            name: form.nextOfKinName,
-            relationship: form.nextOfKinRelationship,
-            phone: form.nextOfKinPhone,
-          },
           nominees,
         },
         accessToken,
@@ -1353,11 +1344,36 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
         type: "success",
         message: "Profile changes saved successfully.",
       });
+      setEditingPersonal(false);
     } catch (error) {
       setAlert({
         type: "error",
         message: error?.message || "Failed to save profile changes.",
       });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleKycUpload() {
+    const identityType = user?.identityType || user?.Member?.identityType || "national";
+    const isPassport = identityType === "passport";
+    if (!kycFiles.front || (!isPassport && !kycFiles.back)) {
+      setAlert({ type: "error", message: isPassport ? "Upload your passport document." : "Upload both document front and document back." });
+      return;
+    }
+    setSaving(true);
+    try {
+      const updatedProfile = await uploadKycDocuments({
+        identityType,
+        frontFile: kycFiles.front,
+        backFile: kycFiles.back,
+      }, accessToken);
+      setKycFiles({ front: null, back: null });
+      await onProfileUpdated?.(updatedProfile);
+      setAlert({ type: "success", message: "KYC documents uploaded successfully." });
+    } catch (error) {
+      setAlert({ type: "error", message: error?.message || "Failed to upload KYC documents." });
     } finally {
       setSaving(false);
     }
@@ -1412,11 +1428,21 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
           </div>
         </Surface>
 
-        {/* Personal information – read‑only */}
+        {/* Personal information */}
         <div className="rounded-lg border p-6 space-y-4">
-          <div className="flex items-center gap-2">
-            <UserRound className="text-[#8cc63f] h-5 w-5" />
-            <h3 className="text-lg font-semibold">Personal information</h3>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <UserRound className="text-[#8cc63f] h-5 w-5" />
+              <h3 className="text-lg font-semibold">Personal information</h3>
+            </div>
+            <button
+              type="button"
+              onClick={() => setEditingPersonal((current) => !current)}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#8cc63f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#7ab534]"
+            >
+              <Pencil size={16} />
+              {editingPersonal ? "Close editor" : "Edit Profile"}
+            </button>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -1453,6 +1479,11 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
               <p className="mt-1 text-sm text-foreground">{maskedNationalId}</p>
             </div>
 
+            <div>
+              <label className="text-sm font-medium">KRA PIN</label>
+              <p className="mt-1 text-sm text-foreground">{form.kraPin || "—"}</p>
+            </div>
+
             {showStaffId ? (
               <div>
                 <label className="text-sm font-medium">Staff ID</label>
@@ -1478,6 +1509,19 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
               </p>
             </div>
 
+            <div>
+              <label className="text-sm font-medium">P.O. Box</label>
+              <p className="mt-1 text-sm text-foreground">{form.poBox || "—"}</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium">County</label>
+              <p className="mt-1 text-sm text-foreground">{form.county || "—"}</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Sub-County</label>
+              <p className="mt-1 text-sm text-foreground">{form.subCounty || "—"}</p>
+            </div>
+
             {/* Address (full width) */}
             <div className="md:col-span-2">
               <label className="text-sm font-medium">Address</label>
@@ -1489,6 +1533,67 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
         </div>
 
         {/* Employment information – editable */}
+        {editingPersonal ? (
+          <EditableSection title="Edit profile" icon={UserRound}>
+            <Field label="Full Name" name="fullName" value={form.fullName} onChange={update} error={errors.fullName} />
+            <Field label="Phone Number" name="phone" value={form.phone} onChange={update} error={errors.phone} />
+            <Field label="National ID" name="nationalId" value={form.nationalId} onChange={update} error={errors.nationalId} />
+            <Field label="KRA PIN" name="kraPin" value={form.kraPin} onChange={update} placeholder="e.g., A123456789B" />
+            <Field label="Physical Address / P.O. Box" name="poBox" value={form.poBox} onChange={update} placeholder="e.g., P.O. Box 12345-00100" />
+            <Field label="County" name="county" value={form.county} onChange={update} />
+            <Field label="Sub-County" name="subCounty" value={form.subCounty} onChange={update} />
+            <Field label="Address Notes" name="address" value={form.address} onChange={update} as="textarea" />
+            <Field label="Date of Birth" name="dateOfBirth" value={form.dateOfBirth} onChange={update} type="date" />
+            <Field
+              label="Gender"
+              name="gender"
+              as="select"
+              value={form.gender}
+              onChange={update}
+              options={[
+                { label: "Select gender", value: "" },
+                { label: "Female", value: "Female" },
+                { label: "Male", value: "Male" },
+                { label: "Prefer not to say", value: "Prefer not to say" },
+              ]}
+            />
+            <div className="md:col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <h6 className="text-sm font-semibold text-slate-900">KYC documents</h6>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <label className="text-sm font-semibold text-slate-700">
+                  {(user?.identityType || user?.Member?.identityType) === "passport" ? "Passport Document" : "Document Front"}
+                  <input
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.pdf"
+                    onChange={(event) => setKycFiles((current) => ({ ...current, front: event.target.files?.[0] || null }))}
+                    className="mt-2 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                  />
+                </label>
+                {(user?.identityType || user?.Member?.identityType) !== "passport" ? (
+                  <label className="text-sm font-semibold text-slate-700">
+                    Document Back
+                    <input
+                      type="file"
+                      accept=".jpg,.jpeg,.png,.pdf"
+                      onChange={(event) => setKycFiles((current) => ({ ...current, back: event.target.files?.[0] || null }))}
+                      className="mt-2 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                    />
+                  </label>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={handleKycUpload}
+                className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-100 disabled:opacity-60"
+              >
+                <FileText size={16} className="text-[#8cc63f]" />
+                Upload KYC documents
+              </button>
+            </div>
+          </EditableSection>
+        ) : null}
+
         <EditableSection
           title="Employment information"
           icon={BriefcaseBusiness}
@@ -1537,48 +1642,7 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
           </div>
           <p className={`mt-3 text-sm font-semibold ${errors.nominees ? 'text-rose-600' : 'text-slate-600'}`}>Allocated: {nominees.reduce((sum, nominee) => sum + Number(nominee.allocationPercentage || 0), 0)}%</p>
         </Surface>
-
-        {/* Next of kin – editable */}
-        <EditableSection
-          id="next-of-kin"
-          title="Next of kin"
-          icon={UsersRound}
-          className="text-[#8cc63f]"
-        >
-          <Field
-            label="Name"
-            name="nextOfKinName"
-            value={form.nextOfKinName}
-            onChange={update}
-            error={errors.nextOfKinName}
-          />
-          <Field
-            label="Relationship"
-            name="nextOfKinRelationship"
-            as="select"
-            value={form.nextOfKinRelationship}
-            onChange={update}
-            error={errors.nextOfKinRelationship}
-            options={[
-              { label: "Select relationship", value: "" },
-              { label: "Spouse", value: "Spouse" },
-              { label: "Parent", value: "Parent" },
-              { label: "Sibling", value: "Sibling" },
-              { label: "Child", value: "Child" },
-              { label: "Friend", value: "Friend" },
-              { label: "Other", value: "Other" },
-            ]}
-          />
-          <Field
-            label="Phone Number"
-            name="nextOfKinPhone"
-            value={form.nextOfKinPhone}
-            onChange={update}
-            error={errors.nextOfKinPhone}
-          />
-        </EditableSection>
-
-        <div className="flex justify-end">
+<div className="flex justify-end">
           <button
             type="submit"
             disabled={saving}
@@ -2021,7 +2085,7 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
   const monthlyRepayment = requestedDuration ? (requestedAmount + totalInterest) / requestedDuration : 0;
 
   const savingsBalance = Number(stats.savings || stats.savingsBalance || 0);
-  const requiresGuarantors = selectedProduct.guarantors > 0 && !loanForm.selfGuarantee;
+  const requiresGuarantors = loanForm.type !== "EMERGENCY" && !loanForm.selfGuarantee;
   const selectedMemberNames = selectedGuarantors.map((member) => member.name || member.memberNumber).join(", ");
 
   useEffect(() => {
@@ -2048,7 +2112,7 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
     const id = member.memberId;
     setSelectedGuarantors((prev) => {
       if (prev.some((item) => item.memberId === id)) return prev.filter((item) => item.memberId !== id);
-      if (prev.length >= selectedProduct.guarantors) return prev;
+      if (prev.length >= 5) return prev;
       return [...prev, member];
     });
   }
@@ -2060,7 +2124,7 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
     if (!selectedProduct) { setMessage({ type: "error", text: "Select a valid loan product." }); return; }
     if (selectedProduct.requiresFullShareCapital && stats.shareCapitalRemaining > 0) { setMessage({ type: "error", text: "Minimum share capital must be fully paid." }); return; }
     if (loanForm.selfGuarantee && requestedAmount > savingsBalance) { setMessage({ type: "error", text: `Self-guarantee limit exceeded. Available savings: ${formatCurrency(savingsBalance)}.` }); return; }
-    if (requiresGuarantors && selectedGuarantors.length < selectedProduct.guarantors) { setMessage({ type: "error", text: `This loan requires ${selectedProduct.guarantors} guarantor${selectedProduct.guarantors > 1 ? "s" : ""}.` }); return; }
+    if (requiresGuarantors && selectedGuarantors.length < 1) { setMessage({ type: "error", text: "Select at least one guarantor, or use self-guarantee if your savings cover the loan." }); return; }
     if (!loanForm.reason.trim()) { setMessage({ type: "error", text: "Please add the reason for this loan request." }); return; }
     try {
       await applyForLoan({ type: loanForm.type, amount: requestedAmount, duration: requestedDuration, interestRate: selectedProduct.interestRate, reason: loanForm.reason.trim(), selfGuarantee: loanForm.selfGuarantee, selfGuaranteedAmount: loanForm.selfGuarantee ? requestedAmount : undefined, guarantors: requiresGuarantors ? selectedGuarantors.map((member) => ({ memberId: member.memberId, amount: requestedAmount })) : undefined }, accessToken);
@@ -2134,8 +2198,8 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
             ) : null}
             {requiresGuarantors ? (
               <div className="rounded-lg border border-sky-200 bg-sky-50 p-4">
-                <div className="mb-3 flex items-center gap-2"><UsersRound size={16} className="text-sky-700" /><span className="text-sm font-semibold text-sky-900">Guarantor management</span><span className="rounded-full bg-sky-200 px-2 py-0.5 text-xs font-semibold text-sky-700">{selectedGuarantors.length}/{selectedProduct.guarantors} selected</span></div>
-                <p className="mb-3 text-xs text-sky-700">Search active qualified SACCO members by name or member number. Each selected guarantor receives a 72-hour secure link.</p>
+                <div className="mb-3 flex items-center gap-2"><UsersRound size={16} className="text-sky-700" /><span className="text-sm font-semibold text-sky-900">Guarantor management</span><span className="rounded-full bg-sky-200 px-2 py-0.5 text-xs font-semibold text-sky-700">{selectedGuarantors.length} selected</span></div>
+                <p className="mb-3 text-xs text-sky-700">Search active qualified SACCO members by name or member number. Each selected guarantor receives a 72-hour secure link and chooses the amount they accept.</p>
                 <div className="relative mb-3">
                   <Search size={16} className="pointer-events-none absolute left-3 top-3.5 text-slate-400" />
                   <input value={guarantorQuery} onChange={(e) => setGuarantorQuery(e.target.value)} className="w-full rounded-lg border border-sky-200 bg-white py-3 pl-9 pr-3 text-sm" placeholder="Search member name or number" />
@@ -2145,7 +2209,7 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
                   {!guarantorLoading && guarantorQuery.trim().length >= 2 && guarantorResults.length === 0 ? (<p className="text-xs text-slate-500">No qualified members found.</p>) : null}
                   {guarantorResults.map((member) => {
                     const isSelected = selectedGuarantors.some((item) => item.memberId === member.memberId);
-                    return (<div key={member.memberId} className={`flex items-center justify-between rounded-lg border px-3 py-2 transition ${isSelected ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white"}`}><div className="flex items-center gap-3"><input type="checkbox" checked={isSelected} onChange={() => toggleGuarantor(member)} className="h-4 w-4 rounded border-slate-300 text-sky-600" /><div><p className="text-sm font-semibold text-slate-800">{member.name}</p><p className="text-xs text-slate-500">{member.memberNumber} | {member.phone || "No phone"} | Share: {formatCurrency(member.shareCapital)}</p></div></div><span className="text-xs font-semibold text-sky-700">{member.status}</span></div>);
+                    return (<div key={member.memberId} className={`flex items-center justify-between rounded-lg border px-3 py-2 transition ${isSelected ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white"}`}><div className="flex items-center gap-3"><input type="checkbox" checked={isSelected} onChange={() => toggleGuarantor(member)} className="h-4 w-4 rounded border-slate-300 text-sky-600" /><div><p className="text-sm font-semibold text-slate-800">{member.name}</p><p className="text-xs text-slate-500">{member.memberNumber}</p></div></div><span className="text-xs font-semibold text-sky-700">{member.status}</span></div>);
                   })}
                 </div>
                 {selectedGuarantors.length > 0 && (<p className="mt-3 text-xs font-medium text-sky-700">Selected: {selectedMemberNames}</p>)}

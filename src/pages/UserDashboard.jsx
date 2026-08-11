@@ -6,6 +6,7 @@ import TopNavbar from "../components/layout/TopNavbar.jsx";
 import { getDashboardPath } from "../utils/dashboardRoutes.js";
 import {
   getMyLoans,
+  getMyGuarantees,
   getMyNotifications,
   getMyShares,
   getMyTransactions,
@@ -44,6 +45,7 @@ export default function UserDashboard() {
     loans: [],
     shares: [],
     notifications: [],
+    guarantees: [],
     activeSessions: [],
     loginHistory: [],
   });
@@ -61,6 +63,7 @@ export default function UserDashboard() {
         getMyShares(accessToken),
         getAuthSessions(accessToken),
         getMyNotifications(accessToken, { limit: 100 }),
+        getMyGuarantees(accessToken),
       ]);
       const sessions = results[3].status === "fulfilled" && Array.isArray(results[3].value) ? results[3].value : [];
 
@@ -69,6 +72,7 @@ export default function UserDashboard() {
         loans: results[1].status === "fulfilled" && Array.isArray(results[1].value) ? results[1].value : [],
         shares: results[2].status === "fulfilled" && Array.isArray(results[2].value) ? results[2].value : [],
         notifications: results[4].status === "fulfilled" && Array.isArray(results[4].value) ? results[4].value : [],
+        guarantees: results[5].status === "fulfilled" && Array.isArray(results[5].value) ? results[5].value : [],
         activeSessions: sessions.filter((session) => String(session.status || "").toUpperCase() === "ACTIVE"),
         loginHistory: sessions.map((session) => ({
           date: session.date ? new Date(session.date).toLocaleString() : "-",
@@ -210,6 +214,7 @@ export default function UserDashboard() {
           accessToken={accessToken}
           onToggleValues={() => setShowValues((current) => !current)}
         />
+        <GuaranteedLoans guarantees={data.guarantees} />
         </div>
       );
     }
@@ -321,5 +326,30 @@ export default function UserDashboard() {
         </div>
       </main>
     </div>
+  );
+}
+
+function GuaranteedLoans({ guarantees = [] }) {
+  const active = guarantees.filter((item) => ['ACCEPTED', 'PENDING'].includes(String(item.status || '').toUpperCase()));
+  if (!active.length) return null;
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h3 className="text-base font-semibold text-slate-950">Guaranteed Loans</h3>
+      <div className="mt-4 overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead><tr className="bg-slate-50 text-left text-xs uppercase text-slate-500"><th className="px-3 py-2">Loan</th><th className="px-3 py-2">Amount</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Date</th></tr></thead>
+          <tbody className="divide-y">
+            {active.map((item) => (
+              <tr key={item.id}>
+                <td className="px-3 py-2 font-medium">{item.loan?.type || 'Loan'}</td>
+                <td className="px-3 py-2">KES {Number(item.amount || 0).toLocaleString()}</td>
+                <td className="px-3 py-2">{item.status}</td>
+                <td className="px-3 py-2">{item.createdAt ? new Date(item.createdAt).toLocaleDateString() : '-'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }

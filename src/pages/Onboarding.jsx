@@ -15,7 +15,7 @@ import { PersonalDetailsForm } from '../components/onboarding/PersonalDetailsFor
 import { DocumentsForm } from '../components/onboarding/DocumentsForm';
 import { PaymentForm } from '../components/onboarding/PaymentForm';
 import { ConfirmationStep } from '../components/onboarding/ConfirmationStep';
-import { getDashboardPath, getPostLoginPath } from '../utils/dashboardRoutes';
+import { getDashboardPath } from '../utils/dashboardRoutes';
 import { CiUser } from 'react-icons/ci';
 import { CiMail } from 'react-icons/ci';
 import {
@@ -135,22 +135,31 @@ function Onboarding() {
     const identityNumber = getIdentityNumber();
     if (!identityNumber) { setErrors({ step1: 'ID number is required' }); toast.error('ID number is required'); return false; }
     if (!formData.phone) { setErrors({ step1: 'Phone number is required' }); toast.error('Phone number is required'); return false; }
-    if (!formData.poBox) { setErrors({ step1: 'Physical address (PO Box) is required' }); toast.error('Physical address (PO Box) is required'); return false; }
-    if (!formData.county) { setErrors({ step1: 'County is required' }); toast.error('County is required'); return false; }
-    if (!formData.subCounty) { setErrors({ step1: 'Sub-county is required' }); toast.error('Sub-county is required'); return false; }
     if (!formData.termsAccepted) { setErrors({ step1: 'You must accept the terms and conditions' }); toast.error('You must accept the terms and conditions'); return false; }
     setErrors({});
     return true;
   };
 
   const validateStep2 = () => {
-    if (!documents.idFile) { setErrors({ step2: 'Please upload the front side of your ID' }); toast.error('ID front is required'); return false; }
-    if (!documents.photoFile) { setErrors({ step2: 'Please upload the back side of your ID' }); toast.error('ID back is required'); return false; }
-    if ((formData.idType === 'passport' || formData.idType === 'driverlicense') && !formData.idDocument) {
-      setErrors({ step2: `Please upload your ${formData.idType === 'passport' ? 'passport' : "driver's license"} document` });
+    const maxKycFileBytes = 5 * 1024 * 1024;
+    const filesToCheck = [documents.idFile, documents.photoFile, formData.idDocument].filter(Boolean);
+    const oversized = filesToCheck.find((file) => file?.size > maxKycFileBytes);
+    if (oversized) {
+      setErrors({ step2: `${oversized.name} is too large. Upload files under 5 MB each.` });
+      toast.error('KYC documents must be under 5 MB each');
+      return false;
+    }
+    if (formData.idType === 'driverlicense' && !formData.idDocument) {
+      setErrors({ step2: "Please upload your driver's license document" });
       toast.error('Identity document is required');
       return false;
     }
+    if (formData.idType === 'driverlicense') {
+      setErrors({});
+      return true;
+    }
+    if (!documents.idFile) { setErrors({ step2: formData.idType === 'passport' ? 'Please upload your passport document' : 'Please upload the front side of your ID' }); toast.error(formData.idType === 'passport' ? 'Passport document is required' : 'ID front is required'); return false; }
+    if (formData.idType !== 'passport' && !documents.photoFile) { setErrors({ step2: 'Please upload the back side of your ID' }); toast.error('ID back is required'); return false; }
     setErrors({});
     return true;
   };
@@ -168,7 +177,7 @@ function Onboarding() {
   const handlePaymentSuccess = ({ reference, user } = {}) => {
     if (reference) setMpesaReference(reference);
     setIsLoading(false);
-    navigate(user ? getPostLoginPath(user) : getDashboardPath('MEMBER'), { replace: true });
+    navigate(getDashboardPath(user?.role || 'MEMBER'), { replace: true });
   };
 
   const handleReset = () => {
@@ -204,7 +213,13 @@ function Onboarding() {
               <div className="lg:col-span-2 min-w-0">
                 <StepIndicator currentStep={currentStep} totalSteps={4} />
                 {currentStep === 1 && (
-                  <PersonalDetailsForm formData={formData} onChange={updateFormData} errors={errors} isLoading={isLoading} onSubmit={handleStep1Submit} />
+                  <PersonalDetailsForm
+                    formData={formData}
+                    onChange={updateFormData}
+                    errors={errors}
+                    isLoading={isLoading}
+                    onSubmit={handleStep1Submit}
+                  />
                 )}
                 {currentStep === 2 && (
                   <DocumentsForm
