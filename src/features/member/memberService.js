@@ -160,10 +160,10 @@ export async function getGuarantorRequest(token) {
   return unwrapEnvelopeData(res.json)
 }
 
-export async function respondToGuarantorRequest(token, decision) {
+export async function respondToGuarantorRequest(token, decision, amount) {
   const res = await apiRequest(`/api/loans/guarantor-requests/${encodeURIComponent(token)}/respond`, {
     method: 'POST',
-    body: { decision },
+    body: { decision, ...(amount ? { amount: Number(amount) } : {}) },
     cache: false,
   })
   if (!res.ok) throw new Error(res.json?.message || 'Failed to submit guarantor response')

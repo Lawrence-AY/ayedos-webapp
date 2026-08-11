@@ -11,6 +11,7 @@ export default function GuarantorRequest() {
   const [message, setMessage] = useState(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [guaranteeAmount, setGuaranteeAmount] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -22,10 +23,14 @@ export default function GuarantorRequest() {
   }, [token])
 
   async function submit(decision) {
+    if (decision === 'ACCEPTED' && Number(guaranteeAmount || 0) <= 0) {
+      setMessage({ type: 'error', text: 'Enter the amount you agree to guarantee.' })
+      return
+    }
     setSubmitting(true)
     setMessage(null)
     try {
-      await respondToGuarantorRequest(token, decision)
+      await respondToGuarantorRequest(token, decision, guaranteeAmount)
       setRequest((current) => ({ ...current, status: decision }))
       setMessage({ type: 'success', text: `Your ${decision.toLowerCase()} response has been recorded.` })
     } catch (error) {
@@ -53,10 +58,23 @@ export default function GuarantorRequest() {
               <div className="flex justify-between gap-3"><dt className="text-slate-500">Applicant</dt><dd className="font-semibold">{request.loan?.applicant}</dd></div>
               <div className="flex justify-between gap-3"><dt className="text-slate-500">Loan type</dt><dd className="font-semibold">{request.loan?.type}</dd></div>
               <div className="flex justify-between gap-3"><dt className="text-slate-500">Loan amount</dt><dd className="font-semibold">{formatCurrency(request.loan?.amount)}</dd></div>
-              <div className="flex justify-between gap-3"><dt className="text-slate-500">Guaranteed amount</dt><dd className="font-semibold">{formatCurrency(request.amount)}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-slate-500">Requested guarantee</dt><dd className="font-semibold">{formatCurrency(request.amount)}</dd></div>
               <div className="flex justify-between gap-3"><dt className="text-slate-500">Expires</dt><dd className="font-semibold">{request.expiresAt ? new Date(request.expiresAt).toLocaleString() : '-'}</dd></div>
             </dl>
             {request.loan?.reason ? <p className="rounded-lg bg-slate-100 p-3 text-sm text-slate-700">{request.loan.reason}</p> : null}
+            <label className="block text-sm font-semibold text-slate-700">
+              Amount I agree to guarantee
+              <input
+                type="number"
+                min="1"
+                max={request.loan?.amount || undefined}
+                value={guaranteeAmount}
+                onChange={(event) => setGuaranteeAmount(event.target.value.replace(/\D/g, ''))}
+                className="mt-2 min-h-12 w-full rounded-lg border border-slate-200 px-3.5 text-sm"
+                placeholder="Enter amount"
+                disabled={disabled}
+              />
+            </label>
             <div className="flex flex-col gap-3 sm:flex-row">
               <button disabled={disabled} onClick={() => submit('ACCEPTED')} className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"><CheckCircle2 size={17} />Accept</button>
               <button disabled={disabled} onClick={() => submit('REJECTED')} className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-lg bg-rose-700 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"><XCircle size={17} />Reject</button>

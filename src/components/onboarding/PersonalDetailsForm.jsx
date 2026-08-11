@@ -218,7 +218,7 @@ export const PersonalDetailsForm = ({
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         <div className="space-y-2">
           <Label htmlFor="kraPin">
-            KRA PIN <span className="text-destructive">*</span>
+            KRA PIN 
           </Label>
           <Input
             id="kraPin"
@@ -270,7 +270,7 @@ export const PersonalDetailsForm = ({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="poBox">
-            Physical Address (PO Box) <span className="text-destructive">*</span>
+            Physical Address (PO Box) 
           </Label>
           <Input
             id="poBox"
@@ -287,9 +287,9 @@ export const PersonalDetailsForm = ({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="county">
-            County <span className="text-destructive">*</span>
+            County 
           </Label>
-          <Select value={county} onValueChange={(value) => onChange('county', value)} required>
+          <Select value={county} onValueChange={(value) => onChange('county', value)}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Select your county" />
             </SelectTrigger>
@@ -305,7 +305,7 @@ export const PersonalDetailsForm = ({
         </div>
         <div className="space-y-2">
           <Label htmlFor="subCounty">
-            Sub-County <span className="text-destructive">*</span>
+            Sub-County 
           </Label>
           <Select
             value={subCounty}

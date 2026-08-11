@@ -20,6 +20,7 @@ export const DocumentsForm = ({
   const [idPreview, setIdPreview] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
   const [docPreview, setDocPreview] = useState(null);
+  const isPreviewable = (file) => file?.type?.startsWith('image/');
 
   useEffect(() => {
     if (idFile && idFile instanceof File) {
@@ -51,36 +52,33 @@ export const DocumentsForm = ({
     }
   }, [idDocument]);
 
-  // Determine what to show based on ID type
   const isPassport = idType === 'passport';
   const isDriverLicense = idType === 'driverlicense';
   const isNationalId = idType === 'national' || !idType; // default to national ID behavior
 
   return (
     <form onSubmit={onSubmit} className="space-y-5">
-      {/* Passport upload - only show passport image, no ID front/back */}
+      {/* Passport upload - single document file */}
       {isPassport && (
         <div className="space-y-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <Label htmlFor="idDocument">
-            Upload Passport <span className="text-destructive">*</span>
-          </Label>
-          <FileUpload
-            label="Upload Passport (.jpg, .jpeg, .png)"
-            accept=".jpg,.jpeg,.png"
-            onFileChange={(file) => onIdDocumentChange?.('idDocument', file)}
-            required
-            file={idDocument}
-          />
-          {docPreview && (
-            <div className="mt-2">
-              <p className="text-sm text-gray-600 mb-1">Preview:</p>
-              <img
-                src={docPreview}
-                alt="Passport Preview"
-                className="w-full max-h-40 rounded-lg border shadow-sm object-contain bg-white"
+          <Label>Passport document upload</Label>
+          <div className="grid gap-4">
+            <div>
+              <FileUpload
+                label="Passport Document (.jpg, .jpeg, .png, .pdf)"
+                accept=".jpg,.jpeg,.png,.pdf"
+                onFileChange={(file) => onFileChange('idFile', file)}
+                required
+                file={idFile}
               />
+              {idPreview && isPreviewable(idFile) && (
+                <div className="mt-2">
+                  <p className="text-sm text-gray-600 mb-1">Preview:</p>
+                  <img src={idPreview} alt="Passport front preview" className="w-full max-h-40 rounded-lg border shadow-sm object-contain bg-white" />
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       )}
 

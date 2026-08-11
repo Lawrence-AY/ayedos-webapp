@@ -23,3 +23,22 @@ export async function uploadProfilePhoto(file, accessToken) {
 
   return unwrapEnvelopeData(res.json);
 }
+
+export async function uploadKycDocuments({ identityType = 'national', frontFile, backFile }, accessToken) {
+  const isPassport = identityType === 'passport';
+  const [front, back] = await Promise.all([
+    readFileAsDataUrl(frontFile),
+    isPassport ? Promise.resolve(null) : readFileAsDataUrl(backFile),
+  ]);
+  const res = await apiRequest('/api/member/profile/kyc-documents', {
+    method: 'POST',
+    accessToken,
+    body: { identityType, front, ...(back ? { back } : {}) },
+  });
+
+  if (!res.ok) {
+    throw new Error(res.json?.message || 'Failed to upload KYC documents.');
+  }
+
+  return unwrapEnvelopeData(res.json);
+}
