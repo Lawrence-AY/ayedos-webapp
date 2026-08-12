@@ -1,11 +1,11 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import * as XLSX from "xlsx";
 import {
   AlertTriangle,
   Banknote,
   Bell,
-  BriefcaseBusiness,
   Building2,
   Camera,
   CheckCircle2,
@@ -13,11 +13,8 @@ import {
   CreditCard,
   Download,
   FileText,
-  Filter,
-  KeyRound,
   Landmark,
   LockKeyhole,
-  PieChart,
   Plus,
   ReceiptText,
   RefreshCw,
@@ -41,7 +38,6 @@ import MemberFinancialProfile from "../components/staff-dashboard/MemberFinancia
 import OptOutRequestsPage from "../components/staff-dashboard/OptOutRequestsPage.jsx";
 import SentNotificationsPanel from "../components/staff-dashboard/SentNotificationsPanel.jsx";
 import { getDashboardPath } from "../utils/dashboardRoutes.js";
-import { exportRichCSV } from "../utils/csvExport.js";
 import { changePassword } from "../services/authService.js";
 import {
   approveLoan,
@@ -78,9 +74,9 @@ import {
   StatusBadge,
   formatCurrency,
   formatDate,
-  getMonthlySeries,
 } from "../components/dashboard/EnterpriseDashboard.jsx";
 import { findMemberByNumber } from "../features/search/searchService.js";
+import { applyLoanPaymentEvent, useDashboardEvents } from "../features/realtime/dashboardEvents.js";
 
 function filterRows(rows, search, keys) {
   const term = search.trim().toLowerCase();
@@ -186,8 +182,120 @@ function getFinanceStats(data) {
   };
 }
 
-function exportToCSV(rows, columns, filename = "export.csv") {
-  exportRichCSV(rows, columns, filename);
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function getExporterName(user) {
+  return user?.name || user?.fullName || user?.email || "Unknown User";
+}
+
+function exportToCSV(rows, columns, filename = "export.csv", options = {}) {
+  const exportRows = Array.isArray(rows) ? rows : [];
+  const exportColumns = columns.map((column) =>
+    typeof column === "string" ? { key: column, label: column } : column,
+  );
+  const exportedBy = options.exportedBy || "Unknown User";
+  const title = options.title || filename.replace(/\.(csv|xls|xlsx)$/i, "").replace(/[-_]+/g, " ");
+  const generatedAt = new Date();
+  const generatedLabel = generatedAt.toLocaleString();
+  const cell = (value) => `<td>${escapeHtml(value)}</td>`;
+  const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body { font-family: Arial, sans-serif; }
+    table { border-collapse: collapse; width: 100%; }
+    td, th { border: 1px solid #d9ead3; padding: 8px; mso-number-format:"\\@"; }
+    th { background-color: #8cc63f; color: #12320f; font-weight: 700; }
+    .meta td { border: 0; padding: 4px 0; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <table class="meta">
+    <tr><td>Ayedos SACCO Management System</td></tr>
+    <tr><td>Export Title: ${escapeHtml(title)}</td></tr>
+    <tr><td>Generated: ${escapeHtml(generatedLabel)}</td></tr>
+    <tr><td>Exported By: ${escapeHtml(exportedBy)}</td></tr>
+  </table>
+  <br />
+  <table>
+    <thead><tr>${exportColumns.map((column) => `<th bgcolor="#8cc63f" style="background-color:#8cc63f;color:#12320f;font-weight:700;">${escapeHtml(column.label || column.key)}</th>`).join("")}</tr></thead>
+    <tbody>
+      ${exportRows.map((row) => `<tr>${exportColumns.map((column) => {
+        const rawValue = row?.[column.key];
+        const value = column.csv ? column.csv(rawValue, row) : rawValue;
+        return cell(value ?? "");
+      }).join("")}</tr>`).join("")}
+    </tbody>
+  </table>
+</body>
+</html>`;
+  const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename.replace(/\.csv$/i, ".xls");
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function xmlEscape(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function worksheetXml(name, rows) {
+  const exportRows = Array.isArray(rows) ? rows : [];
+  const headers = [...exportRows.reduce((set, row) => {
+    Object.keys(row || {}).forEach((key) => set.add(key));
+    return set;
+  }, new Set())];
+  const safeHeaders = headers.length ? headers : ["Record"];
+  const rowXml = exportRows.length
+    ? exportRows.map((row) => `<Row>${safeHeaders.map((header) => `<Cell><Data ss:Type="String">${xmlEscape(row?.[header])}</Data></Cell>`).join("")}</Row>`).join("")
+    : `<Row><Cell ss:MergeAcross="${Math.max(safeHeaders.length - 1, 0)}"><Data ss:Type="String">No records found.</Data></Cell></Row>`;
+  return `<Worksheet ss:Name="${xmlEscape(name).slice(0, 31)}"><Table><Row>${safeHeaders.map((header) => `<Cell ss:StyleID="Header"><Data ss:Type="String">${xmlEscape(header)}</Data></Cell>`).join("")}</Row>${rowXml}</Table></Worksheet>`;
+}
+
+function exportMasterWorkbook(data, currentUser) {
+  const sheets = [
+    ["Export Details", [
+      { Field: "Organization", Value: "Ayedos SACCO Management System" },
+      { Field: "Export Title", Value: "Master Data" },
+      { Field: "Generated", Value: new Date().toLocaleString() },
+      { Field: "Exported By", Value: getExporterName(currentUser) },
+    ]],
+    ["Members", data.members || []],
+    ["Transactions", data.transactions || []],
+    ["Loans", data.loans || []],
+    ["Shares", data.shares || []],
+    ["Deductions", data.deductions || []],
+    ["Dividends", data.dividends || []],
+  ];
+  const xml = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+  <Styles>
+    <Style ss:ID="Header"><Interior ss:Color="#8CC63F" ss:Pattern="Solid"/><Font ss:Bold="1" ss:Color="#12320F"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>
+  </Styles>
+  ${sheets.map(([sheetName, rows]) => worksheetXml(sheetName, rows)).join("")}
+</Workbook>`;
+  const blob = new Blob([xml], { type: "application/vnd.ms-excel;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `ayedos-master-data-${new Date().toISOString().slice(0, 10)}.xls`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ============================================================
@@ -296,6 +404,15 @@ export default function FinanceDashboard() {
     return () => clearInterval(interval);
   }, [loadAllData]);
 
+  const realtimeHandlers = useMemo(() => ({
+    onLoanPaymentProcessed: (payload) => {
+      setData((current) => applyLoanPaymentEvent(current, payload));
+      window.setTimeout(() => loadAllData({ showLoading: false }), 250);
+    },
+    onRecoveryNeeded: () => loadAllData({ showLoading: false }),
+  }), [loadAllData]);
+  useDashboardEvents(accessToken, realtimeHandlers);
+
   const stats = useMemo(() => getFinanceStats(data), [data]);
   async function markAllNotificationsRead() {
     const readAt = new Date().toISOString();
@@ -398,6 +515,7 @@ export default function FinanceDashboard() {
             onVerifyTransaction={handleVerifyTransaction}
             onVoidTransaction={handleVoidTransaction}
             globalSearch={globalSearch}
+            currentUser={user}
           />
         );
       case "loans":
@@ -411,6 +529,7 @@ export default function FinanceDashboard() {
             approvingLoanId={approvingLoanId}
             accessToken={accessToken}
             globalSearch={globalSearch}
+            currentUser={user}
           />
         );
       case "liquidity":
@@ -421,6 +540,7 @@ export default function FinanceDashboard() {
             data={data}
             accessToken={accessToken}
             onRefresh={() => loadAllData({ showLoading: false })}
+            currentUser={user}
           />
         );
       case "members":
@@ -429,12 +549,13 @@ export default function FinanceDashboard() {
             data={data}
             accessToken={accessToken}
             onRefresh={() => loadAllData({ showLoading: false })}
+            currentUser={user}
           />
         );
       case "dividends":
         return <DividendsPage dividends={data.dividends} />;
       case "reports":
-        return <FinancialReportsPage data={data} />;
+        return <FinancialReportsPage data={data} currentUser={user} />;
       case "settings":
         return (
           <FinancierProfileSettings
@@ -1394,6 +1515,7 @@ function TransactionsPage({
   onVerifyTransaction,
   onVoidTransaction,
   globalSearch = "",
+  currentUser,
 }) {
   const { search: routeSearch } = useLocation();
   const routeParams = new URLSearchParams(routeSearch);
@@ -1553,7 +1675,7 @@ function TransactionsPage({
           <option value="application_fee">Member Application Fees</option>
         </select>
         <button
-          onClick={() => exportToCSV(filtered, columns, "transactions.csv")}
+          onClick={() => exportToCSV(filtered, columns, "transactions.csv", { exportedBy: getExporterName(currentUser), title: "Transactions" })}
           className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold hover:bg-slate-50"
         >
           <Download size={14} />
@@ -1621,6 +1743,7 @@ function UnifiedLoansPage({
   approvingLoanId,
   accessToken,
   globalSearch = "",
+  currentUser,
 }) {
   const { search: routeSearch } = useLocation();
   const initialStatus = new URLSearchParams(routeSearch).get("status") || "all";
@@ -1896,7 +2019,7 @@ function UnifiedLoansPage({
         onRowClick={openLoanRequest}
       />
       <button
-        onClick={() => exportToCSV(filtered, loanColumns, "loans.csv")}
+        onClick={() => exportToCSV(filtered, loanColumns, "loans.csv", { exportedBy: getExporterName(currentUser), title: "Loans" })}
         className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold hover:bg-slate-50"
       >
         <Download size={14} />
@@ -2118,7 +2241,7 @@ function AmortizationPanel({ loan, onClose }) {
 // ============================================================
 // SALARY DEDUCTION PAGE
 // ============================================================
-function SalaryDeductionPage({ data, accessToken, onRefresh }) {
+function SalaryDeductionPage({ data, accessToken, onRefresh, currentUser }) {
   const { companies = [], members = [] } = data;
   const [selectedCompany, setSelectedCompany] = useState("all");
   const [editingDeduction, setEditingDeduction] = useState(null);
@@ -2175,6 +2298,7 @@ function SalaryDeductionPage({ data, accessToken, onRefresh }) {
                   displayedMembers,
                   deductionColumns,
                   "deductions.csv",
+                  { exportedBy: getExporterName(currentUser), title: "Salary Deductions" },
                 )
               }
               className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold"
@@ -2479,7 +2603,7 @@ function AddMemberModal({ companies, onClose, onSubmit }) {
 // ============================================================
 // MEMBER PROFILES
 // ============================================================
-function MemberProfilesPage({ data, accessToken }) {
+function MemberProfilesPage({ data, accessToken, onRefresh, currentUser }) {
   const [search, setSearch] = useState("");
   const [selectedMember, setSelectedMember] = useState(null);
   const [searchMessage, setSearchMessage] = useState("");
@@ -2562,31 +2686,41 @@ function MemberProfilesPage({ data, accessToken }) {
         title="Member profiles"
         description="Search by ID, view risk flags, aggregated balances, and ledgers."
         action={
-          <button
-            onClick={() =>
-              exportToCSV(
-                members,
-                [
-                  { key: "id" },
-                  { key: "memberNumber" },
-                  { key: "name" },
-                  { key: "company" },
-                  { key: "risk" },
-                  { key: "savings" },
-                  { key: "loans" },
-                  { key: "shares" },
-                ],
-                "members.csv",
-              )
-            }
-            className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold"
-          >
-            <Download size={14} />
-            Export
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() =>
+                exportToCSV(
+                  members,
+                  [
+                    { key: "id" },
+                    { key: "memberNumber" },
+                    { key: "name" },
+                    { key: "company" },
+                    { key: "risk" },
+                    { key: "savings" },
+                    { key: "loans" },
+                    { key: "shares" },
+                  ],
+                  "members.csv",
+                  { exportedBy: getExporterName(currentUser), title: "Members" },
+                )
+              }
+              className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold"
+            >
+              <Download size={14} />
+              Export CSV
+            </button>
+            <button
+              onClick={() => exportMasterWorkbook(data, currentUser)}
+              className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800"
+            >
+              <Download size={14} />
+              Master CSV
+            </button>
+          </div>
         }
       />
-      <FinanceFinancialCsvImport accessToken={accessToken} />
+      <FinanceFinancialCsvImport accessToken={accessToken} onImported={onRefresh} />
       <div className="relative">
         <Search
           size={18}
@@ -2675,16 +2809,52 @@ function MemberProfilesPage({ data, accessToken }) {
   );
 }
 
-function FinanceFinancialCsvImport({ accessToken }) {
+const csvEscape = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+
+function workbookRowsToCsv(workbook) {
+  const rows = [];
+  workbook.SheetNames.forEach((sheetName) => {
+    const sheet = workbook.Sheets[sheetName];
+    const records = XLSX.utils.sheet_to_json(sheet, { defval: "", raw: false });
+    records.forEach((record) => rows.push({ Sheet: sheetName, ...record }));
+  });
+  if (!rows.length) return "";
+  const headers = [...rows.reduce((set, row) => {
+    Object.keys(row).forEach((key) => set.add(key));
+    return set;
+  }, new Set(["Sheet"]))];
+  return [
+    headers.map(csvEscape).join(","),
+    ...rows.map((row) => headers.map((header) => csvEscape(row[header])).join(",")),
+  ].join("\n");
+}
+
+function FinanceFinancialCsvImport({ accessToken, onImported }) {
   const [csv, setCsv] = useState("");
+  const [fileName, setFileName] = useState("");
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
 
   async function handleFile(event) {
     const file = event.target.files?.[0];
     if (!file) return;
-    setCsv(await file.text());
-    setPreview(null);
+    try {
+      const extension = file.name.split(".").pop()?.toLowerCase();
+      const nextCsv = extension === "xls" || extension === "xlsx"
+        ? workbookRowsToCsv(XLSX.read(await file.arrayBuffer(), { type: "array" }))
+        : await file.text();
+      if (!nextCsv.trim()) throw new Error("The selected file is empty or has no tabular rows.");
+      setCsv(nextCsv);
+      setFileName(file.name);
+      setPreview(null);
+    } catch (error) {
+      toast.error(error?.message || "Unable to read import file");
+      setCsv("");
+      setFileName("");
+      setPreview(null);
+    } finally {
+      event.target.value = "";
+    }
   }
 
   async function previewImport() {
@@ -2704,7 +2874,9 @@ function FinanceFinancialCsvImport({ accessToken }) {
       const result = await commitFinancialCsvImport(csv, accessToken);
       toast.success(`Imported ${result.imported?.length || 0} financial record${result.imported?.length === 1 ? "" : "s"}.`);
       setCsv("");
+      setFileName("");
       setPreview(null);
+      onImported?.();
     } catch (error) {
       toast.error(error?.message || "Unable to import financial CSV");
     } finally {
@@ -2717,13 +2889,14 @@ function FinanceFinancialCsvImport({ accessToken }) {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h3 className="text-base font-semibold text-slate-950">Bulk financial records import</h3>
-          <p className="text-sm text-slate-500">CSV columns: memberNumber, email or staffId, shareCapital, savings, loans, loanRepayment, interest, employerContribution.</p>
+          <p className="text-sm text-slate-500">Supports CSV, XLS, and XLSX files. Multi-sheet workbooks are imported sheet by sheet and mapped by memberNumber, email, or staffId.</p>
+          {fileName ? <p className="mt-1 text-xs font-semibold text-emerald-700">{fileName}</p> : null}
         </div>
         <div className="flex flex-wrap gap-2">
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold">
             <FileText size={14} />
-            Choose CSV
-            <input type="file" accept=".csv,text/csv" className="sr-only" onChange={handleFile} />
+            Choose file
+            <input type="file" accept=".csv,text/csv,.xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="sr-only" onChange={handleFile} />
           </label>
           <button disabled={!csv || busy} onClick={previewImport} className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Working..." : "Preview"}</button>
           <button disabled={!preview?.readyCount || busy} onClick={commitImport} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Import ready rows</button>
@@ -2735,7 +2908,7 @@ function FinanceFinancialCsvImport({ accessToken }) {
           <table className="min-w-full">
             <thead>
               <tr className="bg-slate-50">
-                {["Row", "Member", "Staff ID", "Savings", "Shares", "Loans", "Repayment", "Interest", "Employer", "Readiness"].map((h) => (
+                {["Row", "Sheet", "Member", "Staff ID", "Savings", "Shares", "Loans", "Repayment", "Interest", "Employer", "Readiness"].map((h) => (
                   <th key={h} className="px-3 py-2 text-left text-xs uppercase text-slate-500">{h}</th>
                 ))}
               </tr>
@@ -2744,6 +2917,7 @@ function FinanceFinancialCsvImport({ accessToken }) {
               {preview.rows.map((row) => (
                 <tr key={row.rowNumber}>
                   <td className="px-3 py-2 text-sm">{row.rowNumber}</td>
+                  <td className="px-3 py-2 text-sm">{row.data.sheetName || "-"}</td>
                   <td className="px-3 py-2 text-sm">{row.data.memberNumber || row.data.email || "-"}</td>
                   <td className="px-3 py-2 text-sm">{row.data.staffId || "-"}</td>
                   <td className="px-3 py-2 text-sm">{formatCurrency(row.data.savings || 0)}</td>
@@ -2781,64 +2955,10 @@ function FinanceMemberFinancialDetail({ member, accessToken, onBack }) {
 
   return <MemberFinancialProfile profile={profile} loading={loading} error={error} onBack={onBack} />;
 }
-function MemberProfileDetail({ member, onBack }) {
-  return (
-    <div className="space-y-6">
-      <button onClick={onBack} className="text-sm font-semibold text-sky-700">
-        &larr; Back
-      </button>
-      <div className="rounded-lg border bg-white p-6">
-        <div className="flex items-start justify-between">
-          <div>
-            <h3 className="text-xl font-semibold">{member.name}</h3>
-            <p className="text-sm text-slate-500">
-              {member.id} · {member.phone} · {member.company || "Independent"}
-            </p>
-          </div>
-          <span
-            className={`rounded-full px-3 py-1 text-sm font-semibold ${member.risk === "Low" ? "bg-emerald-100 text-emerald-700" : member.risk === "Medium" ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700"}`}
-          >
-            Risk: {member.risk}
-          </span>
-        </div>
-        <div className="mt-6 grid gap-4 md:grid-cols-4">
-          {["Savings", "Loans", "Shares", "Salary"].map((label) => {
-            const key = label.toLowerCase();
-            const val = key === "salary" ? member.salary : member[key];
-            return (
-              <div key={label} className="rounded-lg border bg-slate-50 p-4">
-                <p className="text-xs text-slate-500">{label}</p>
-                <p className="mt-1 text-xl font-semibold">
-                  {val ? formatCurrency(val) : "—"}
-                </p>
-              </div>
-            );
-          })}
-        </div>
-        <div className="mt-6 rounded-lg border p-4">
-          <h5 className="font-semibold">Recent Ledger</h5>
-          <div className="mt-3 space-y-2 text-sm">
-            {[
-              "Deposit — KES 5,000 — 2026-07-01",
-              "Loan Repayment — KES 3,500 — 2026-06-28",
-              "Deduction — KES 8,500 — 2026-06-25",
-            ].map((t, i) => (
-              <div key={i} className="flex justify-between border-b py-1">
-                <span>{t}</span>
-                <StatusBadge status="Completed" />
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ============================================================
 // REPORTS
 // ============================================================
-function FinancialReportsPage({ data }) {
+function FinancialReportsPage({ data, currentUser }) {
   const [timeFilter, setTimeFilter] = useState("monthly");
   const [breakdown, setBreakdown] = useState(null);
   const report = data.reports || {};
@@ -2882,6 +3002,7 @@ function FinancialReportsPage({ data }) {
                   { key: "count" },
                 ],
                 "financial-reports.csv",
+                { exportedBy: getExporterName(currentUser), title: "Financial Reports" },
               )
             }
             className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold"
@@ -3141,7 +3262,6 @@ function FinancierProfileSettings({ user, stats, accessToken }) {
   const [profileImage, setProfileImage] = useState(
     user?.passportPhotoUrl || null,
   );
-  const [imageFile, setImageFile] = useState(null);
 
   function handleImageSelect(e) {
     const file = e.target.files?.[0];
@@ -3155,7 +3275,6 @@ function FinancierProfileSettings({ user, stats, accessToken }) {
       if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
       return preview;
     });
-    setImageFile(file);
   }
 
   async function handleSaveProfile(e) {
@@ -3344,3 +3463,4 @@ function FinancierProfileSettings({ user, stats, accessToken }) {
     </div>
   );
 }
+

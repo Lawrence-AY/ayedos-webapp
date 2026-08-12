@@ -30,6 +30,15 @@ import SupportPage from "../components/user-dashboard/SupportPage.jsx";
 import TransactionsTable from "../components/user-dashboard/TransactionsTable.jsx";
 import { formatDate } from "../components/dashboard/EnterpriseDashboard.jsx";
 import { MIN_SHARE_CAPITAL, matchesSearch, normalizeStatus } from "../components/user-dashboard/dashboardUtils.js";
+import { applyLoanPaymentEvent, useDashboardEvents } from "../features/realtime/dashboardEvents.js";
+
+const loanOutstandingBalance = (loan) => {
+  const explicit = Number(loan?.outstandingBalance ?? loan?.balance);
+  if (Number.isFinite(explicit)) return explicit;
+  const principal = Number(loan?.principalBalance ?? loan?.principal ?? loan?.amount ?? 0);
+  const interest = Number(loan?.accruedInterest || 0);
+  return principal + interest;
+};
 
 export default function UserDashboard() {
   const location = useLocation();
@@ -164,6 +173,16 @@ export default function UserDashboard() {
     };
   }, [accessToken, search]);
 
+  const realtimeHandlers = useMemo(() => ({
+    onLoanPaymentProcessed: (payload) => {
+      setData((current) => applyLoanPaymentEvent(current, payload));
+      window.setTimeout(() => loadDashboardData({ showLoading: false }), 250);
+    },
+    onRecoveryNeeded: () => loadDashboardData({ showLoading: false }),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [accessToken]);
+  useDashboardEvents(accessToken, realtimeHandlers);
+
   const stats = useMemo(() => {
     const successfulTransactions = data.transactions.filter((transaction) => {
       const status = String(transaction.status || "").toUpperCase();
@@ -188,7 +207,9 @@ export default function UserDashboard() {
     const shareAccountCapital = data.shares.reduce((sum, share) => sum + Number(share.totalInvested || 0), 0);
     const shareCapital = Math.max(paidShareCapital, shareAccountCapital);
     const balance = successfulTransactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
-    const loanBalance = data.loans.reduce((sum, loan) => sum + Number(loan.balance || loan.principal || 0), 0);
+    const loanBalance = data.loans
+      .filter((loan) => ["ACTIVE", "APPROVED", "DISBURSED"].includes(String(loan.status || "").toUpperCase()))
+      .reduce((sum, loan) => sum + loanOutstandingBalance(loan), 0);
     const now = new Date();
     const monthlyContributions = successfulTransactions.reduce((sum, transaction) => {
       const date = transaction.createdAt || transaction.date;

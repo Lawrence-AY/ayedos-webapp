@@ -80,6 +80,7 @@ import SupportPage from "../components/user-dashboard/SupportPage.jsx";
 import MemberFinancialProfile from "../components/staff-dashboard/MemberFinancialProfile.jsx";
 import OptOutRequestsPage from "../components/staff-dashboard/OptOutRequestsPage.jsx";
 import SentNotificationsPanel from "../components/staff-dashboard/SentNotificationsPanel.jsx";
+import { applyLoanPaymentEvent, useDashboardEvents } from "../features/realtime/dashboardEvents.js";
 
 function filterRows(rows, search, keys) {
   const term = search.trim().toLowerCase();
@@ -222,6 +223,16 @@ export default function AdminDashboard() {
     const iv = setInterval(() => loadData({ showLoading: false }), 30000);
     return () => clearInterval(iv);
   }, [accessToken]);
+
+  const realtimeHandlers = useMemo(() => ({
+    onLoanPaymentProcessed: (payload) => {
+      setData((current) => applyLoanPaymentEvent(current, payload));
+      window.setTimeout(() => loadData({ showLoading: false }), 250);
+    },
+    onRecoveryNeeded: () => loadData({ showLoading: false }),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [accessToken]);
+  useDashboardEvents(accessToken, realtimeHandlers);
 
   async function markAllRead() {
     const readAt = new Date().toISOString();
