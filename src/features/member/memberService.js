@@ -171,18 +171,18 @@ export async function respondToGuarantorRequest(token, decision, amount) {
 }
 
 export async function repayLoan(id, amount, accessToken) {
-  const res = await apiRequest(`/api/member/loans/${id}/repay`, {
+  const res = await apiRequest('/api/v1/payments', {
     method: 'POST',
     accessToken,
-    body: { amount },
+    body: { loanId: id, amount },
   })
-  if (!res.ok) throw new Error(res.json?.message || 'Failed to record loan repayment')
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to process loan repayment')
   return unwrapEnvelopeData(res.json)
 }
 
 export async function initiateLoanRepaymentStk(id, amount, phone, accessToken) {
   const res = await apiRequest(`/api/member/loans/${id}/repay/stk`, {
-    method: 'POST', accessToken, body: { amount: Number(amount), phone }, cache: false,
+    method: 'POST', accessToken, body: { amount: Number(amount), phone }, cache: false, timeoutMs: 60000,
   })
   if (!res.ok) throw new Error(res.json?.message || 'Failed to send M-Pesa PIN prompt')
   return unwrapEnvelopeData(res.json)
@@ -190,7 +190,7 @@ export async function initiateLoanRepaymentStk(id, amount, phone, accessToken) {
 
 export async function getLoanPaymentStatus(checkoutRequestId, accessToken) {
   const res = await apiRequest(`/api/payments/status/${encodeURIComponent(checkoutRequestId)}`, {
-    method: 'GET', accessToken, cache: false,
+    method: 'GET', accessToken, cache: false, timeoutMs: 20000,
   })
   if (!res.ok) throw new Error(res.json?.message || 'Failed to verify M-Pesa payment')
   return unwrapEnvelopeData(res.json)

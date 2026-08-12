@@ -113,7 +113,7 @@ export function exportRichCSV(rows, columns = [], filename = "export.csv", optio
   const metadata = [
     [ORGANIZATION_NAME],
     [`Export Title: ${title}`],
-    [`Generated: ${generatedAt.toISOString()} (${generatedAt.toLocaleString()})`, `Exported By: ${exportedBy}`],
+    [`Generated: ${generatedAt.toLocaleString()}`, `Exported By: ${exportedBy}`],
     [],
   ];
   const header = exportColumns.map((column) => column.label);
