@@ -655,8 +655,8 @@ function NotificationsPanel({
   return (
     <div className="space-y-6">
       <SectionHeader
-        eyebrow="Notifications"
-        title="Alert center"
+        //eyebrow="Notifications"
+        title="Notifications"
         description="Categorized real-time alerts for loan applications, repayments, deposits, withdrawals, and overdue accounts."
       />
       <form
@@ -1046,12 +1046,17 @@ function NotificationsPanel({
 // ============================================================
 function FinanceHome({ data, stats, globalSearch = "", onVerifyTransaction }) {
   const [showInterestBreakdown, setShowInterestBreakdown] = useState(false);
+  const [interestDetail, setInterestDetail] = useState(null);
   const navigate = useNavigate();
   const dashboardBase = getDashboardPath("FINANCE");
   const monthlyReport = data.reports?.timeSeries?.monthly || [];
   const transactionSeries = monthlyReport.map((row) => ({ label: row.label, value: row.count }));
   const repaymentSeries = monthlyReport.map((row) => ({ label: row.label, value: row.repayments }));
   const interests = data.reports?.totals?.interests || {};
+  const interestBreakdowns = data.reports?.interestBreakdowns || {};
+  const openInterestDetail = (key, title, total) => setInterestDetail({
+    key, title, total, transactionRows: true, rows: interestBreakdowns[key] || [],
+  });
   const txCards = [
     {
       label: "Daily Transactions",
@@ -1115,8 +1120,8 @@ function FinanceHome({ data, stats, globalSearch = "", onVerifyTransaction }) {
   return (
     <div className="space-y-6">
       <DashboardHero
-        eyebrow="Finance operations"
-        title="Financial control desk"
+        //eyebrow="Finance operations"
+        title="Finance Operations"
         description="Verify payments, manage loans, track deductions, and generate reports."
       />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -1139,10 +1144,10 @@ function FinanceHome({ data, stats, globalSearch = "", onVerifyTransaction }) {
           </div>
         ))}
       </div>
-      <button type="button" onClick={() => setShowInterestBreakdown((value) => !value)} className="w-full rounded-xl border bg-white p-5 text-left shadow-sm">
-        <div className="flex items-center justify-between"><div><p className="text-sm font-semibold text-slate-500">Interests overview</p><p className="mt-1 text-2xl font-bold text-slate-950">{formatCurrency(interests.total || 0)}</p></div><TrendingUp className="text-emerald-600" /></div>
-        {showInterestBreakdown ? <div className="mt-4 grid gap-3 border-t pt-4 sm:grid-cols-2"><div><p className="text-xs uppercase text-slate-500">Loan Repayment Interest</p><p className="font-semibold">{formatCurrency(interests.loanRepaymentInterest || 0)}</p></div><div><p className="text-xs uppercase text-slate-500">Share Capital Transfer Fees (5%)</p><p className="font-semibold">{formatCurrency(interests.shareCapitalTransferFees || 0)}</p></div></div> : <p className="mt-2 text-xs text-slate-500">Click to expand earnings by source</p>}
-      </button>
+      <div className="w-full rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <button type="button" onClick={() => setShowInterestBreakdown((value) => !value)} className="flex w-full items-center justify-between text-left"><div><p className="text-sm font-semibold text-slate-500">Interests overview</p><p className="mt-1 text-2xl font-bold text-slate-950 dark:text-white">{formatCurrency(interests.total || 0)}</p></div><TrendingUp className="text-emerald-600" /></button>
+        {showInterestBreakdown ? <div className="mt-4 grid gap-3 border-t border-slate-200 pt-4 sm:grid-cols-2 dark:border-slate-700"><button type="button" onClick={() => openInterestDetail("loanRepaymentInterest", "Loan repayment interest details", interests.loanRepaymentInterest)} className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-emerald-400 dark:border-slate-700 dark:bg-slate-800"><p className="text-xs uppercase text-slate-500">Loan Repayment Interest</p><p className="font-semibold text-slate-950 dark:text-white">{formatCurrency(interests.loanRepaymentInterest || 0)}</p><span className="mt-2 block text-xs font-semibold text-emerald-700 dark:text-emerald-400">View member transactions</span></button><button type="button" onClick={() => openInterestDetail("shareCapitalTransferFees", "Share capital fee details", interests.shareCapitalTransferFees)} className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-emerald-400 dark:border-slate-700 dark:bg-slate-800"><p className="text-xs uppercase text-slate-500">Share Capital Transfer Fees (5%)</p><p className="font-semibold text-slate-950 dark:text-white">{formatCurrency(interests.shareCapitalTransferFees || 0)}</p><span className="mt-2 block text-xs font-semibold text-emerald-700 dark:text-emerald-400">View member transactions</span></button></div> : <p className="mt-2 text-xs text-slate-500">Click to expand earnings by source</p>}
+      </div>
       <div className="grid gap-5 xl:grid-cols-2">
         <AnalyticsPanel
           title="Transaction volume"
@@ -1161,16 +1166,23 @@ function FinanceHome({ data, stats, globalSearch = "", onVerifyTransaction }) {
         onVerifyTransaction={onVerifyTransaction}
         globalSearch={globalSearch}
       />
+      <InterestDetailDialog breakdown={interestDetail} onClose={() => setInterestDetail(null)} />
     </div>
   );
 }
 
+function InterestDetailDialog({ breakdown, onClose }) {
+  const [query, setQuery] = useState("");
+  useEffect(() => { setQuery(""); }, [breakdown]);
+  if (!breakdown) return null;
+  const rows = breakdown.rows || [];
+  const search = query.trim().toLowerCase();
+  const visible = search ? rows.filter((row) => [row.memberNumber, row.memberName, row.reference].some((value) => String(value || "").toLowerCase().includes(search))) : rows;
+  return <div className="fixed inset-0 z-[90] overflow-y-auto bg-slate-50 dark:bg-slate-950"><section role="dialog" aria-modal="true" className="min-h-screen"><header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95"><div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6"><div><p className="text-xs font-bold uppercase tracking-widest text-emerald-600">Interest overview</p><h1 className="text-xl font-bold text-slate-950 dark:text-white">{breakdown.title}</h1></div><button type="button" onClick={onClose} className="rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white dark:bg-emerald-700">Back</button></div></header><main className="mx-auto max-w-7xl space-y-5 px-4 py-6 sm:px-6"><div className="grid gap-4 sm:grid-cols-2"><div className="rounded-xl border bg-white p-5 dark:border-slate-800 dark:bg-slate-900"><p className="text-xs font-semibold uppercase text-slate-500">Total interest / fees</p><p className="mt-2 text-3xl font-bold text-emerald-700 dark:text-emerald-400">{formatCurrency(breakdown.total)}</p></div><div className="rounded-xl border bg-white p-5 dark:border-slate-800 dark:bg-slate-900"><p className="text-xs font-semibold uppercase text-slate-500">Transactions</p><p className="mt-2 text-3xl font-bold text-slate-950 dark:text-white">{rows.length}</p></div></div><div className="rounded-xl border bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"><div className="flex flex-col gap-3 border-b p-5 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800"><div><h2 className="font-bold dark:text-white">Member transaction breakdown</h2><p className="text-sm text-slate-500">Source amounts and the interest or fee generated by each transaction.</p></div><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search member, number or reference" className="w-full rounded-lg border bg-slate-50 px-3 py-2.5 text-sm sm:w-80 dark:border-slate-700 dark:bg-slate-800 dark:text-white" /></div><div className="overflow-x-auto"><table className="min-w-[1050px] w-full text-sm"><thead className="bg-slate-100 text-left text-xs uppercase text-slate-600 dark:bg-slate-800 dark:text-slate-200"><tr><th className="px-5 py-4">Member number</th><th className="px-5 py-4">Member</th><th className="px-5 py-4">Reference</th><th className="px-5 py-4 text-right">Source amount</th><th className="px-5 py-4 text-right">Interest / fee</th><th className="px-5 py-4">Transaction date &amp; time</th></tr></thead><tbody className="divide-y dark:divide-slate-800">{visible.map((row, index) => <tr key={row.id || index} className="dark:text-slate-200"><td className="whitespace-nowrap px-5 py-4 font-mono font-semibold">{row.memberNumber || "—"}</td><td className="px-5 py-4 font-medium">{row.memberName || "Unknown member"}</td><td className="whitespace-nowrap px-5 py-4 font-mono text-xs">{row.reference || "—"}</td><td className="whitespace-nowrap px-5 py-4 text-right font-semibold">{formatCurrency(row.sourceAmount)}</td><td className="whitespace-nowrap px-5 py-4 text-right font-bold text-emerald-700 dark:text-emerald-400">{formatCurrency(row.interestAmount)}</td><td className="whitespace-nowrap px-5 py-4">{row.occurredAtEAT || formatDate(row.occurredAt)}</td></tr>)}</tbody></table>{!visible.length ? <p className="p-10 text-center text-slate-500">No matching interest transactions.</p> : null}</div></div></main></section></div>;
+}
+
 function formatDateTimeSafe(v) {
-  try {
-    return v ? new Date(v).toLocaleString() : "-";
-  } catch {
-    return "-";
-  }
+  return formatDate(v);
 }
 
 function formatRelativeTime(v) {
@@ -1266,8 +1278,8 @@ function WalletLiquidityPage({ data }) {
   return (
     <div className="space-y-6">
       <SectionHeader
-        eyebrow="Wallet liquidity"
-        title="Master wallet funding control"
+        //eyebrow="Wallet liquidity"
+        title="Wallet Liquidity"
         description="Monitor wallet capacity, forecast money-out demand, and stage institutional liquidity top-ups."
       />
 
@@ -1584,7 +1596,7 @@ function TransactionsPage({
   return (
     <div className="space-y-6">
       <SectionHeader
-        eyebrow="Transactions"
+        //eyebrow="Transactions"
         title="Transactions & Audits"
         description="Real-time ledger records, share capital transfers, SACCO fees, verification, and exports."
       />
@@ -1746,8 +1758,8 @@ function UnifiedLoansPage({
   return (
     <div className="space-y-6">
       <SectionHeader
-        eyebrow="Loan Management"
-        title="Unified loan control center"
+        //eyebrow="Loan Management"
+        title="Loan Management"
         description="Full lifecycle management with amortization, arrears, and product revenue."
       />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
@@ -2134,8 +2146,8 @@ function SalaryDeductionPage({ data, accessToken, onRefresh }) {
   return (
     <div className="space-y-6">
       <SectionHeader
-        eyebrow="Salary deductions"
-        title="Deduction & Company Linkage"
+        //eyebrow="Salary deductions"
+        title="Salary deductions"
         description="Filter by company, manage deductions, add companies, and add members."
         action={
           <div className="flex gap-2">
@@ -2542,8 +2554,8 @@ function MemberProfilesPage({ data, accessToken }) {
   return (
     <div className="space-y-6">
       <SectionHeader
-        eyebrow="Member profiles"
-        title="Financial profiles"
+        //eyebrow="Member profiles"
+        title="Member profiles"
         description="Search by ID, view risk flags, aggregated balances, and ledgers."
         action={
           <button
@@ -2849,9 +2861,9 @@ function FinancialReportsPage({ data }) {
   return (
     <div className="space-y-6">
       <SectionHeader
-        eyebrow="Reports"
+        //eyebrow="Reports"
         title="Reports & analytics"
-        description="Live KPI aggregates with daily, monthly, and yearly filtering."
+        description="Live daily, monthly, and yearly transactions."
         action={
           <button
             onClick={() =>
@@ -3066,7 +3078,7 @@ function DividendsPage({ dividends }) {
   return (
     <div className="space-y-6">
       <SectionHeader
-        eyebrow="Dividends"
+        //eyebrow="Dividends"
         title="Historical distributions"
         description="Yearly dividend tracking."
       />
