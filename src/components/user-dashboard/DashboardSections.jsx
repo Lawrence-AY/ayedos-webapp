@@ -87,12 +87,7 @@ import {
   changePassword,
   revokeAuthSession,
 } from "../../services/authService.js";
-<<<<<<< Updated upstream
-import { uploadKycDocuments, uploadProfilePhoto } from "../../lib/supabaseStorage.js";
-import { toast } from "sonner";
-=======
 import { uploadProfilePhoto } from "../../lib/supabaseStorage.js";
->>>>>>> Stashed changes
 
 const emptyProfile = {
   fullName: "",
@@ -2162,12 +2157,7 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
     if (selectedProduct.requiresFullShareCapital && stats.shareCapitalRemaining > 0) { setMessage({ type: "error", text: "Minimum share capital must be fully paid." }); return; }
     if (loanForm.selfGuarantee && requestedAmount > savingsBalance) { setMessage({ type: "error", text: `Self-guarantee limit exceeded. Available savings: ${formatCurrency(savingsBalance)}.` }); return; }
     if (requiresGuarantors && selectedGuarantors.length < 1) { setMessage({ type: "error", text: "Select at least one guarantor, or use self-guarantee if your savings cover the loan." }); return; }
-<<<<<<< Updated upstream
-    if (!loanForm.reason.trim()) { setMessage({ type: "error", text: "Please add the reason for this loan request." }); return; }
-    if (!confirmed) { setConfirmation({ type: "BORROW", amount: requestedAmount, charges: totalInterest }); return; }
-=======
     if (loanForm.type !== "EMERGENCY" && !loanForm.reason.trim()) { setMessage({ type: "error", text: "Please add the reason for this loan request." }); return; }
->>>>>>> Stashed changes
     try {
       setBusyAction("borrow"); setConfirmation(null);
       const result = await applyForLoan({ type: loanForm.type, amount: requestedAmount, duration: requestedDuration, interestRate: selectedProduct.interestRate, reason: loanForm.reason.trim(), selfGuarantee: loanForm.selfGuarantee, selfGuaranteedAmount: loanForm.selfGuarantee ? requestedAmount : undefined, guarantors: requiresGuarantors ? selectedGuarantors.map((member) => ({ memberId: member.memberId, amount: requestedAmount })) : undefined }, accessToken);
@@ -3408,21 +3398,10 @@ function ReportsPage({ accessToken, data = {} }) {
   });
 
   const reportData = {
-<<<<<<< Updated upstream
-    transactions: { title: "Transaction Statement", headers: ["Date & Time (EAT)","Type","Reference","Amount","Status"], rows: ft.map(t=>({"Date & Time (EAT)":t.createdAtEAT||formatTransactionTimestamp(t.createdAt||t.date),Type:getTransactionPromptLabel(t),Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{Total:formatCurrency(ft.reduce((s,t)=>s+Number(t.amount||0),0)),Count:ft.length} },
-    loans: { title: "Loan Statement", headers: ["Type","Principal","Balance","Status","Date"], rows: fl.map(l=>({Type:l.type||"Loan",Principal:formatCurrency(Number(l.principal||0)),Balance:formatCurrency(Number(l.balance||0)),Status:normalizeStatus(l.status),Date:l.createdAt?new Date(l.createdAt).toLocaleDateString():"-"})),summary:{"Active Balance":formatCurrency(fl.reduce((s,l)=>s+Number(l.balance||l.principal||0),0)),Count:fl.length} },
-    savings: { title: "Savings & Share Capital Report", headers: ["Record","Amount","Status","Date"], rows: fs.map(s=>({Record:s.type||"Share",Amount:formatCurrency(Number(s.totalInvested||s.amount||0)),Status:normalizeStatus(s.status||"Active"),Date:s.createdAt?new Date(s.createdAt).toLocaleDateString():"-"})),summary:{"Share Capital":formatCurrency(reportStats?.shareCapital||fs.reduce((s,sh)=>s+Number(sh.totalInvested||0),0)),Count:fs.length} },
-    withdrawals: { title: "Withdrawal Report", headers: ["Date & Time (EAT)","Reference","Amount","Status"], rows: fw.map(t=>({"Date & Time (EAT)":t.createdAtEAT||formatTransactionTimestamp(t.createdAt||t.date),Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Withdrawn":formatCurrency(fw.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fw.length} },
-    "loan-repayment": { title: "Loan Repayment Report", headers: ["Date & Time (EAT)","Reference","Amount","Status"], rows: fr.map(t=>({"Date & Time (EAT)":t.createdAtEAT||formatTransactionTimestamp(t.createdAt||t.date),Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Repaid":formatCurrency(fr.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fr.length} },
-    dividend: { title: "Dividend Report", headers: ["Date & Time (EAT)","Reference","Amount","Status"], rows: fd.map(t=>({"Date & Time (EAT)":t.createdAtEAT||formatTransactionTimestamp(t.createdAt||t.date),Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Dividends":formatCurrency(fd.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fd.length} },
-    guarantor: { title: "Guarantor Report", headers: ["Date & Time (EAT)","Reference","Amount","Status"], rows: fr.map(t=>({"Date & Time (EAT)":t.createdAtEAT||formatTransactionTimestamp(t.createdAt||t.date),Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Guaranteed Amount":formatCurrency(fr.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fr.length} },
-    "payroll-deduction": { title: "Payroll Deduction Report", headers: ["Date & Time (EAT)","Reference","Amount","Status"], rows: fpd.map(t=>({"Date & Time (EAT)":t.createdAtEAT||formatTransactionTimestamp(t.createdAt||t.date),Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Deducted":formatCurrency(fpd.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fpd.length} },
-=======
     transactions: { title: "Transaction Statement", headers: ["Date","Phone Number","Details","Type","Reference","Amount"], rows: ft.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-","Phone Number":transactionPhone(t),Details:transactionDetails(t),Type:transactionCategory(t),Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0))})),summary:{"Share capital":formatCurrency(ft.filter(t=>transactionCategory(t)==="Share capital").reduce((s,t)=>s+Number(t.amount||0),0)),"Savings":formatCurrency(ft.filter(t=>transactionCategory(t)==="Savings").reduce((s,t)=>s+Number(t.amount||0),0))} },
     savings: { title: "Share Capital Report", headers: ["Date","Record","Amount","Status"], rows: fs.map(s=>({Date:s.createdAt?new Date(s.createdAt).toLocaleDateString():"-",Record:s.type||"Share",Amount:formatCurrency(Number(s.totalInvested||s.amount||0)),Status:normalizeStatus(s.status||"Active")})),summary:{"Share Capital":formatCurrency(reportStats?.shareCapital||fs.reduce((s,sh)=>s+Number(sh.totalInvested||0),0)),Count:fs.length} },
     dividend: { title: "Dividend Report", headers: ["Date","Reference","Amount","Status"], rows: fd.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-",Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Dividends":formatCurrency(fd.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fd.length} },
     "payroll-deduction": { title: "Payroll Deduction Report", headers: ["Date","Reference","Amount","Status"], rows: fpd.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-",Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Deducted":formatCurrency(fpd.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fpd.length} },
->>>>>>> Stashed changes
   };
   const loanReportData = {
     loans: { title: "Loans", headers: ["Date & Time","Type","Amount","Guarantor","Status","Loan Duration","Interest to be Paid","Reason"], rows: fl.map(l=>({"Date & Time":dateTime(l.createdAt||l.date),Type:l.type||l.loanType||"Loan",Amount:formatCurrency(loanAmount(l)),Guarantor:loanGuarantorLabel(l),Status:normalizeStatus(l.status||"Pending"),"Loan Duration":l.duration||l.loanDuration||l.term?`${l.duration||l.loanDuration||l.term} month${Number(l.duration||l.loanDuration||l.term)===1?"":"s"}`:"-","Interest to be Paid":formatCurrency(loanInterest(l)),Reason:l.reason||"-"})),summary:{"Active Balance":formatCurrency(fl.reduce((s,l)=>s+Number(l.balance||l.outstandingBalance||l.principal||l.amount||0),0)),Count:fl.length} },
