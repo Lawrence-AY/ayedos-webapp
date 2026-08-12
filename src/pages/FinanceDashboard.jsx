@@ -203,7 +203,7 @@ export default function FinanceDashboard() {
   const [globalSearch, setGlobalSearch] = useState("");
   const [notifications, setNotifications] = useState([]);
   const [approvingLoanId, setApprovingLoanId] = useState(null);
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const unreadCount = notifications.filter((n) => !n.read && !n.isRead && !n.readAt).length;
 
   const path = location.pathname;
   const dashboardBase = getDashboardPath("FINANCE");
@@ -251,7 +251,7 @@ export default function FinanceDashboard() {
     setData({
       transactions:
         results[0].status === "fulfilled" && Array.isArray(results[0].value)
-          ? results[0].value
+          ? results[0].value.filter((transaction) => ["SUCCESS", "PAID", "COMPLETED"].includes(String(transaction.status || "").toUpperCase()))
           : [],
       loans:
         results[1].status === "fulfilled" && Array.isArray(results[1].value)
@@ -298,19 +298,23 @@ export default function FinanceDashboard() {
 
   const stats = useMemo(() => getFinanceStats(data), [data]);
   async function markAllNotificationsRead() {
+    const readAt = new Date().toISOString();
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true, isRead: true, readAt: n.readAt || readAt })));
     try {
       await markAllFinanceNotificationsRead(accessToken);
-      setNotifications((prev) => prev.map((n) => ({ ...n, read: true, isRead: true })));
     } catch (error) {
+      loadAllData({ showLoading: false });
       alert(error.message);
     }
   }
 
   async function handleNotificationRead(id) {
+    const readAt = new Date().toISOString();
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true, isRead: true, readAt: n.readAt || readAt } : n)));
     try {
       await markFinanceNotificationRead(id, accessToken);
-      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true, isRead: true } : n)));
     } catch (error) {
+      loadAllData({ showLoading: false });
       alert(error.message);
     }
   }

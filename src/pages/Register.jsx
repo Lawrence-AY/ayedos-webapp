@@ -14,6 +14,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Eye, EyeOff } from "lucide-react";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
 
 const OTP_COOLDOWN_SECONDS = 60;
 
@@ -329,57 +334,78 @@ export default function Register() {
             </button>
           </form>
           <AlertDialog open={otpDialogOpen} onOpenChange={setOtpDialogOpen}>
-            <AlertDialogContent className="bg-white text-slate-950 dark:bg-slate-900 dark:text-slate-50">
+            <AlertDialogContent className="bg-white text-slate-950 dark:bg-slate-900 dark:text-slate-50" style={modalStyle}>
               <AlertDialogHeader>
-                <AlertDialogTitle>Verify your email</AlertDialogTitle>
+                <AlertDialogTitle style={modalTitleStyle}>Verify your email</AlertDialogTitle>
               </AlertDialogHeader>
               <div className="space-y-4">
-                <p style={{ margin: 0, color: "#475569" }}>
+                <p style={modalTextStyle}>
                   Enter the code sent to <strong>{pendingEmail}</strong> to
                   continue.
                 </p>
                 <p style={timerTextStyle}>
-                  You can resend a code in {otpCountdown}s.
+                  {otpCountdown > 0 ? `You can resend a code in ${otpCountdown}s.` : "You can request another code now."}
                 </p>
-                <input
-                  type="text"
+                <InputOTP
+                  maxLength={8}
+                  value={otp}
+                  onChange={(value) => {
+                    setOtp(value.replace(/\D/g, ""));
+                    setOtpError(null);
+                    setOtpMessage("");
+                  }}
+                  pattern="[0-9]*"
                   inputMode="numeric"
                   autoComplete="one-time-code"
-                  placeholder="Enter verification code"
-                  value={otp}
-                  onChange={(event) => {
-                    setOtp(event.target.value.replace(/\D/g, "").slice(0, 8));
-                    setOtpError(null);
-                  }}
-                  style={inputStyle}
-                />
+                  containerClassName="my-1 w-full"
+                >
+                  <InputOTPGroup>
+                    <InputOTPSlot index={0} />
+                    <InputOTPSlot index={1} />
+                    <InputOTPSlot index={2} />
+                    <InputOTPSlot index={3} />
+                    <InputOTPSlot index={4} />
+                    <InputOTPSlot index={5} />
+                    <InputOTPSlot index={6} />
+                    <InputOTPSlot index={7} />
+                  </InputOTPGroup>
+                </InputOTP>
                 {otpMessage && (
-                  <div role="status" style={successStyle}>
+                  <div role="status" style={{ ...successStyle, marginTop: 14, marginBottom: 0 }}>
                     {otpMessage}
                   </div>
                 )}
                 {(otpError || authError) && (
-                  <div role="alert" style={errorStyle}>
+                  <div role="alert" style={{ ...errorStyle, marginTop: 14, marginBottom: 0 }}>
                     {otpError || authError}
                   </div>
                 )}
               </div>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogFooter className="grid grid-cols-1 gap-3 sm:grid-cols-3" style={{ marginTop: 18 }}>
+                <AlertDialogCancel style={secondaryButtonStyle}>Cancel</AlertDialogCancel>
                 <Button
                   type="button"
-                  variant="secondary"
                   onClick={handleResendOtp}
                   disabled={isResendingOtp || isVerifyingOtp || otpCountdown > 0}
+                  style={{
+                    ...secondaryButtonStyle,
+                    cursor: isResendingOtp || isVerifyingOtp || otpCountdown > 0 ? "not-allowed" : "pointer",
+                    opacity: isResendingOtp || isVerifyingOtp || otpCountdown > 0 ? 0.7 : 1,
+                  }}
                 >
-                  {isResendingOtp ? "Sending..." : otpCountdown > 0 ? `Resend in ${otpCountdown}s` : "Resend OTP"}
+                  {isResendingOtp ? "Sending..." : otpCountdown > 0 ? `Resend in ${otpCountdown}s` : "Resend"}
                 </Button>
                 <Button
                   type="button"
                   onClick={handleVerifyOtp}
                   disabled={isVerifyingOtp || isResendingOtp || !/^\d{6,8}$/.test(otp.trim())}
+                  style={{
+                    ...buttonStyle,
+                    padding: "12px 18px",
+                    opacity: isVerifyingOtp || isResendingOtp || !/^\d{6,8}$/.test(otp.trim()) ? 0.7 : 1,
+                  }}
                 >
-                  {isVerifyingOtp ? "Verifying..." : "Verify OTP"}
+                  {isVerifyingOtp ? "Verifying..." : "Verify"}
                 </Button>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -492,6 +518,40 @@ const timerTextStyle = {
   color: "#166534",
   fontSize: 13,
   fontWeight: 700,
+};
+
+const modalStyle = {
+  width: "min(92vw, 460px)",
+  borderRadius: 24,
+  padding: 28,
+  border: "1px solid rgba(148,163,184,0.2)",
+  boxShadow: "0 24px 80px rgba(15,23,42,0.24)",
+};
+
+const modalTitleStyle = {
+  margin: 0,
+  color: "#0f172a",
+  fontSize: 24,
+  fontWeight: 800,
+};
+
+const modalTextStyle = {
+  margin: "12px 0 0",
+  color: "#475569",
+  lineHeight: 1.65,
+  fontSize: 15,
+};
+
+const secondaryButtonStyle = {
+  width: "100%",
+  padding: "12px 18px",
+  borderRadius: 12,
+  border: "1px solid #dbe3ef",
+  background: "#ffffff",
+  color: "#334155",
+  fontWeight: 700,
+  fontSize: 14,
+  cursor: "pointer",
 };
 
 const mutedTextStyle = {

@@ -15,7 +15,7 @@ import { GrLinkNext } from "react-icons/gr";
 import { useEffect, useMemo } from 'react';
 
 // Kenyan counties and sub-counties data
-const kenyaCounties = {
+export const kenyaCounties = {
   "Mombasa": ["Changamwe", "Jomvu", "Kisauni", "Nyali", "Likoni", "Mvita"],
   "Kwale": ["Msambweni", "Lunga Lunga", "Matuga", "Kinango"],
   "Kilifi": ["Kilifi North", "Kilifi South", "Kaloleni", "Rabai", "Ganze", "Malindi", "Magarini"],

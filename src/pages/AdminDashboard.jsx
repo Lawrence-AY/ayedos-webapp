@@ -116,7 +116,7 @@ export default function AdminDashboard() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
   const [notifications, setNotifications] = useState([]);
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const unreadCount = notifications.filter((n) => !n.read && !n.isRead && !n.readAt).length;
 
   const path = location.pathname;
   const db = getDashboardPath("ADMIN");
@@ -186,7 +186,7 @@ export default function AdminDashboard() {
           : [],
       transactions:
         r[4].status === "fulfilled" && Array.isArray(r[4].value)
-          ? r[4].value
+          ? r[4].value.filter((transaction) => ["SUCCESS", "PAID", "COMPLETED"].includes(String(transaction.status || "").toUpperCase()))
           : [],
       loans:
         r[5].status === "fulfilled" && Array.isArray(r[5].value)
@@ -224,19 +224,23 @@ export default function AdminDashboard() {
   }, [accessToken]);
 
   async function markAllRead() {
+    const readAt = new Date().toISOString();
+    setNotifications((p) => p.map((n) => ({ ...n, read: true, isRead: true, readAt: n.readAt || readAt })));
     try {
       await markAllAdminNotificationsRead(accessToken);
-      setNotifications((p) => p.map((n) => ({ ...n, read: true, isRead: true })));
     } catch (error) {
+      loadData({ showLoading: false });
       alert(error.message);
     }
   }
 
   async function markOneRead(id) {
+    const readAt = new Date().toISOString();
+    setNotifications((p) => p.map((n) => (n.id === id ? { ...n, read: true, isRead: true, readAt: n.readAt || readAt } : n)));
     try {
       await markAdminNotificationRead(id, accessToken);
-      setNotifications((p) => p.map((n) => (n.id === id ? { ...n, read: true, isRead: true } : n)));
     } catch (error) {
+      loadData({ showLoading: false });
       alert(error.message);
     }
   }
