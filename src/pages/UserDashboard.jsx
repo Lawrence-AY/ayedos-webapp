@@ -33,7 +33,7 @@ import { MIN_SHARE_CAPITAL, matchesSearch, normalizeStatus } from "../components
 
 export default function UserDashboard() {
   const location = useLocation();
-  const { user, accessToken, loadCurrentUser, updateCurrentUser } = useContext(AuthContext);
+  const { user, accessToken, updateCurrentUser } = useContext(AuthContext);
   const dashboardBasePath = getDashboardPath("MEMBER");
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -50,6 +50,31 @@ export default function UserDashboard() {
     activeSessions: [],
     loginHistory: [],
   });
+
+  const markNotificationReadLocal = (id) => {
+    const readAt = new Date().toISOString();
+    setData((current) => ({
+      ...current,
+      notifications: current.notifications.map((notification) => (
+        notification.id === id
+          ? { ...notification, isRead: true, read: true, readAt: notification.readAt || readAt }
+          : notification
+      )),
+    }));
+  };
+
+  const markAllNotificationsReadLocal = () => {
+    const readAt = new Date().toISOString();
+    setData((current) => ({
+      ...current,
+      notifications: current.notifications.map((notification) => ({
+        ...notification,
+        isRead: true,
+        read: true,
+        readAt: notification.readAt || readAt,
+      })),
+    }));
+  };
 
   async function loadDashboardData({ showLoading = true } = {}) {
       if (!accessToken) {
@@ -69,7 +94,9 @@ export default function UserDashboard() {
       const sessions = results[3].status === "fulfilled" && Array.isArray(results[3].value) ? results[3].value : [];
 
       setData({
-        transactions: results[0].status === "fulfilled" && Array.isArray(results[0].value) ? results[0].value : [],
+        transactions: results[0].status === "fulfilled" && Array.isArray(results[0].value)
+          ? results[0].value.filter((transaction) => ["SUCCESS", "PAID", "COMPLETED"].includes(String(transaction.status || "").toUpperCase()))
+          : [],
         loans: results[1].status === "fulfilled" && Array.isArray(results[1].value) ? results[1].value : [],
         shares: results[2].status === "fulfilled" && Array.isArray(results[2].value) ? results[2].value : [],
         notifications: results[4].status === "fulfilled" && Array.isArray(results[4].value) ? results[4].value : [],
@@ -254,7 +281,7 @@ export default function UserDashboard() {
           accessToken={accessToken}
           onProfileUpdated={(updatedUser) => {
             updateCurrentUser?.(updatedUser);
-            return loadCurrentUser?.(accessToken);
+            return updatedUser;
           }}
           onRefresh={() => loadDashboardData({ showLoading: false })}
         />
@@ -268,12 +295,20 @@ export default function UserDashboard() {
             paginate
             pageSize={10}
             onMarkRead={async (id) => {
-              await markNotificationRead(id, accessToken);
-              await loadDashboardData({ showLoading: false });
+              markNotificationReadLocal(id);
+              try {
+                await markNotificationRead(id, accessToken);
+              } catch {
+                await loadDashboardData({ showLoading: false });
+              }
             }}
             onMarkAllRead={async () => {
-              await markAllNotificationsRead(accessToken);
-              await loadDashboardData({ showLoading: false });
+              markAllNotificationsReadLocal();
+              try {
+                await markAllNotificationsRead(accessToken);
+              } catch {
+                await loadDashboardData({ showLoading: false });
+              }
             }}
           />
         </div>
@@ -319,7 +354,7 @@ export default function UserDashboard() {
             if (window.innerWidth >= 1024) setSidebarCollapsed((current) => !current);
             else setSidebarOpen((current) => !current);
           }}
-          unreadCount={data.notifications.filter((notification) => !notification.isRead && !notification.readAt).length}
+          unreadCount={data.notifications.filter((notification) => !notification.read && !notification.isRead && !notification.readAt).length}
           searchValue={search}
           onSearchChange={setSearch}
         />

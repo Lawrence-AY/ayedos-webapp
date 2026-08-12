@@ -60,7 +60,17 @@ import {
   PaginationPrevious,
   PaginationNext,
 } from "../ui/pagination.jsx";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select.jsx";
 import { getDashboardPath } from "../../utils/dashboardRoutes.js";
+import { kenyaCounties } from "../onboarding/PersonalDetailsForm.jsx";
 import SavingsContributionForm from "./SavingsContributionForm.jsx";
 import {
   updateMemberProfile,
@@ -77,8 +87,12 @@ import {
   changePassword,
   revokeAuthSession,
 } from "../../services/authService.js";
+<<<<<<< Updated upstream
 import { uploadKycDocuments, uploadProfilePhoto } from "../../lib/supabaseStorage.js";
 import { toast } from "sonner";
+=======
+import { uploadProfilePhoto } from "../../lib/supabaseStorage.js";
+>>>>>>> Stashed changes
 
 const emptyProfile = {
   fullName: "",
@@ -205,7 +219,7 @@ function maskNationalId(nationalId) {
 }
 
 function normalizeStatus(status) {
-  return String(status || "Pending").replace(/_/g, " ");
+  return String(status || "Pending").replace(/loan_repayments?/gi, "loan repayment").replace(/_/g, " ");
 }
 
 function getTransactionPromptLabel(transaction) {
@@ -412,13 +426,6 @@ function QuickActions() {
 function ProfileCompletion({ user }) {
   const profilePath = getDashboardPath("MEMBER", "settings");
   const member = user?.Member || user?.member || {};
-  const identityType = String(member.identityType || user?.identityType || "").toLowerCase();
-  const hasKycDocuments = identityType === "passport"
-    ? Boolean(member.passportUrl)
-    : Boolean(
-      (member.nationalIdUrl || user?.idDocumentUrl) &&
-      (member.nationalIdBackUrl || member.passportPhotoUrl),
-    );
   const checks = [
     {
       label: "Identity details",
@@ -429,7 +436,6 @@ function ProfileCompletion({ user }) {
     { label: "Address", complete: Boolean(user?.address || user?.poBox), icon: MapPin },
     { label: "County", complete: Boolean(user?.county), icon: MapPin },
     { label: "Sub-County", complete: Boolean(user?.subCounty), icon: MapPin },
-    { label: "KYC documents", complete: hasKycDocuments, icon: FileText },
     {
       label: "Verify phone number",
       complete: Boolean(
@@ -455,7 +461,7 @@ function ProfileCompletion({ user }) {
             to={profilePath}
             className="text-sm font-medium text-slate-500 transition hover:text-emerald-700"
           >
-            Complete your personal and KYC details for faster approvals.
+            Complete your personal details for faster approvals.
           </Link>
         </div>
         <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700 ring-1 ring-emerald-200">
@@ -1197,7 +1203,6 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
   const [preview, setPreview] = useState(user?.passportPhotoUrl || null);
   const [photoFile, setPhotoFile] = useState(null);
   const [editingPersonal, setEditingPersonal] = useState(false);
-  const [kycFiles, setKycFiles] = useState({ front: null, back: null });
   const [optOutForm, setOptOutForm] = useState({
     reason: "",
     buyerMemberNumber: "",
@@ -1209,7 +1214,6 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
     setForm(buildProfileForm(user));
     setPreview(user?.passportPhotoUrl || null);
     setPhotoFile(null);
-    setKycFiles({ front: null, back: null });
     setNominees(user?.nominees || []);
   }, [user]);
 
@@ -1220,10 +1224,28 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
     : "—";
   const showStaffId = isAyedosMember(user);
   const shareCapital = Number(stats.shareCapital || 0);
+  const subCountiesList = useMemo(() => (
+    form.county && kenyaCounties[form.county] ? kenyaCounties[form.county] : []
+  ), [form.county]);
+
+  useEffect(() => {
+    if (form.subCounty && !subCountiesList.includes(form.subCounty)) {
+      setForm((current) => ({ ...current, subCounty: "" }));
+    }
+  }, [form.subCounty, subCountiesList]);
+
   function update(event) {
     setForm((current) => ({
       ...current,
       [event.target.name]: event.target.value,
+    }));
+  }
+
+  function updateProfileField(name, value) {
+    setForm((current) => ({
+      ...current,
+      [name]: value,
+      ...(name === "county" ? { subCounty: "" } : {}),
     }));
   }
 
@@ -1365,30 +1387,6 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
         type: "error",
         message: error?.message || "Failed to save profile changes.",
       });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleKycUpload() {
-    const identityType = user?.identityType || user?.Member?.identityType || "national";
-    const isPassport = identityType === "passport";
-    if (!kycFiles.front || (!isPassport && !kycFiles.back)) {
-      setAlert({ type: "error", message: isPassport ? "Upload your passport document." : "Upload both document front and document back." });
-      return;
-    }
-    setSaving(true);
-    try {
-      const updatedProfile = await uploadKycDocuments({
-        identityType,
-        frontFile: kycFiles.front,
-        backFile: kycFiles.back,
-      }, accessToken);
-      setKycFiles({ front: null, back: null });
-      await onProfileUpdated?.(updatedProfile);
-      setAlert({ type: "success", message: "KYC documents uploaded successfully." });
-    } catch (error) {
-      setAlert({ type: "error", message: error?.message || "Failed to upload KYC documents." });
     } finally {
       setSaving(false);
     }
@@ -1555,8 +1553,42 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
             <Field label="National ID" name="nationalId" value={form.nationalId} onChange={update} error={errors.nationalId} />
             <Field label="KRA PIN" name="kraPin" value={form.kraPin} onChange={update} placeholder="e.g., A123456789B" />
             <Field label="Physical Address / P.O. Box" name="poBox" value={form.poBox} onChange={update} placeholder="e.g., P.O. Box 12345-00100" />
-            <Field label="County" name="county" value={form.county} onChange={update} />
-            <Field label="Sub-County" name="subCounty" value={form.subCounty} onChange={update} />
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-700">County</label>
+              <Select value={form.county} onValueChange={(value) => updateProfileField("county", value)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select your county" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectLabel>Counties</SelectLabel>
+                    {Object.keys(kenyaCounties).map((county) => (
+                      <SelectItem key={county} value={county}>{county}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-700">Sub-County</label>
+              <Select
+                value={form.subCounty}
+                onValueChange={(value) => updateProfileField("subCounty", value)}
+                disabled={!form.county}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder={form.county ? "Select sub-county" : "Select county first"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectLabel>Sub-Counties</SelectLabel>
+                    {subCountiesList.map((subCounty) => (
+                      <SelectItem key={subCounty} value={subCounty}>{subCounty}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
             <Field label="Address Notes" name="address" value={form.address} onChange={update} as="textarea" />
             <Field label="Date of Birth" name="dateOfBirth" value={form.dateOfBirth} onChange={update} type="date" />
             <Field
@@ -1572,40 +1604,6 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
                 { label: "Prefer not to say", value: "Prefer not to say" },
               ]}
             />
-            <div className="md:col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-4">
-              <h6 className="text-sm font-semibold text-slate-900">KYC documents</h6>
-              <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <label className="text-sm font-semibold text-slate-700">
-                  {(user?.identityType || user?.Member?.identityType) === "passport" ? "Passport Document" : "Document Front"}
-                  <input
-                    type="file"
-                    accept=".jpg,.jpeg,.png,.pdf"
-                    onChange={(event) => setKycFiles((current) => ({ ...current, front: event.target.files?.[0] || null }))}
-                    className="mt-2 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
-                  />
-                </label>
-                {(user?.identityType || user?.Member?.identityType) !== "passport" ? (
-                  <label className="text-sm font-semibold text-slate-700">
-                    Document Back
-                    <input
-                      type="file"
-                      accept=".jpg,.jpeg,.png,.pdf"
-                      onChange={(event) => setKycFiles((current) => ({ ...current, back: event.target.files?.[0] || null }))}
-                      className="mt-2 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
-                    />
-                  </label>
-                ) : null}
-              </div>
-              <button
-                type="button"
-                disabled={saving}
-                onClick={handleKycUpload}
-                className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-100 disabled:opacity-60"
-              >
-                <FileText size={16} className="text-[#8cc63f]" />
-                Upload KYC documents
-              </button>
-            </div>
           </EditableSection>
         ) : null}
 
@@ -2164,8 +2162,12 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
     if (selectedProduct.requiresFullShareCapital && stats.shareCapitalRemaining > 0) { setMessage({ type: "error", text: "Minimum share capital must be fully paid." }); return; }
     if (loanForm.selfGuarantee && requestedAmount > savingsBalance) { setMessage({ type: "error", text: `Self-guarantee limit exceeded. Available savings: ${formatCurrency(savingsBalance)}.` }); return; }
     if (requiresGuarantors && selectedGuarantors.length < 1) { setMessage({ type: "error", text: "Select at least one guarantor, or use self-guarantee if your savings cover the loan." }); return; }
+<<<<<<< Updated upstream
     if (!loanForm.reason.trim()) { setMessage({ type: "error", text: "Please add the reason for this loan request." }); return; }
     if (!confirmed) { setConfirmation({ type: "BORROW", amount: requestedAmount, charges: totalInterest }); return; }
+=======
+    if (loanForm.type !== "EMERGENCY" && !loanForm.reason.trim()) { setMessage({ type: "error", text: "Please add the reason for this loan request." }); return; }
+>>>>>>> Stashed changes
     try {
       setBusyAction("borrow"); setConfirmation(null);
       const result = await applyForLoan({ type: loanForm.type, amount: requestedAmount, duration: requestedDuration, interestRate: selectedProduct.interestRate, reason: loanForm.reason.trim(), selfGuarantee: loanForm.selfGuarantee, selfGuaranteedAmount: loanForm.selfGuarantee ? requestedAmount : undefined, guarantors: requiresGuarantors ? selectedGuarantors.map((member) => ({ memberId: member.memberId, amount: requestedAmount })) : undefined }, accessToken);
@@ -2412,6 +2414,10 @@ function LoansTable({ loans }) {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const formatLoanDuration = (loan) => {
+    const duration = loan.duration || loan.loanDuration || loan.term;
+    return duration ? `${duration} month${Number(duration) === 1 ? "" : "s"}` : "-";
+  };
   const statusMap = {
     PENDING_GUARANTORS: "Pending Guarantors",
     UNDER_REVIEW: "Under Review",
@@ -2461,7 +2467,7 @@ function LoansTable({ loans }) {
         />
       ) : (
         <div className="overflow-x-auto">
-          <table className="min-w-[720px]">
+          <table className="min-w-[840px]">
             <thead>
               <tr className="bg-slate-50">
                 <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">
@@ -2472,6 +2478,9 @@ function LoansTable({ loans }) {
                 </th>
                 <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">
                   Balance
+                </th>
+                <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">
+                  Duration
                 </th>
                 <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">
                   Status
@@ -2492,6 +2501,9 @@ function LoansTable({ loans }) {
                   </td>
                   <td className="px-5 py-4 text-sm">
                     {formatCurrency(loan.balance)}
+                  </td>
+                  <td className="px-5 py-4 text-sm">
+                    {formatLoanDuration(loan)}
                   </td>
                   <td className="px-5 py-4 text-sm">
                     {loan.selfGuaranteed ? "Self-guaranteed | " : ""}{statusMap[String(loan.status || "").toUpperCase()] || normalizeStatus(loan.status)}
@@ -3319,25 +3331,84 @@ function SearchResultsPage({
 
 function ReportsPage({ accessToken, data = {} }) {
   const [reportType, setReportType] = useState("transactions");
+  const [loanReportTab, setLoanReportTab] = useState("loans");
   const [duration, setDuration] = useState("all");
   const [message, setMessage] = useState(null);
   const [sending, setSending] = useState(false);
+  const [tabSending, setTabSending] = useState(null);
   const [showOnScreen, setShowOnScreen] = useState(false);
   const { transactions = [], loans = [], shares = [], stats: reportStats } = data;
+  const successfulTransactions = transactions.filter((transaction) => ["SUCCESS", "PAID", "COMPLETED"].includes(String(transaction.status || "").toUpperCase()));
 
   const filterByDuration = (items, df = "createdAt") => {
     if (duration === "all") return items;
     const now = new Date(); const ago = new Date(); ago.setMonth(now.getMonth() - Number(duration));
     return items.filter(i => { const d = i[df] || i.date; return d ? new Date(d) >= ago : true; });
   };
-  const ft = filterByDuration(transactions); const fl = filterByDuration(loans); const fs = filterByDuration(shares, "createdAt");
+  const ft = filterByDuration(successfulTransactions); const fl = filterByDuration(loans); const fs = filterByDuration(shares, "createdAt");
   const lbl = (tx) => { const l = getTransactionPromptLabel(tx).toLowerCase(); return l; };
   const fw = ft.filter(t => lbl(t).includes("withdraw")||lbl(t).includes("payout")||lbl(t).includes("disburse"));
   const fr = ft.filter(t => lbl(t).includes("repay")||lbl(t).includes("loan")||lbl(t).includes("credit"));
   const fd = ft.filter(t => lbl(t).includes("dividend"));
   const fpd = ft.filter(t => lbl(t).includes("payroll")||lbl(t).includes("deduction")||lbl(t).includes("salary"));
+  const dateTime = (value) => value ? new Date(value).toLocaleString() : "-";
+  const loanAmount = (loan) => Number(loan.amount || loan.principal || loan.requestedAmount || 0);
+  const loanInterest = (loan) => {
+    const savedInterest = Number(loan.interestToBePaid || loan.totalInterest || loan.interestAmount || 0);
+    if (savedInterest) return savedInterest;
+    const rate = Number(loan.interestRate || loan.interest || 0);
+    const durationValue = Number(loan.duration || loan.term || loan.loanDuration || 1);
+    return loanAmount(loan) && rate ? (loanAmount(loan) * rate * durationValue) / 100 : 0;
+  };
+  const loanGuarantors = (loan) => Array.isArray(loan.guarantors) ? loan.guarantors : Array.isArray(loan.Guarantors) ? loan.Guarantors : [];
+  const guarantorDisplayName = (guarantor) => guarantor.Member?.User?.name || guarantor.Member?.User?.fullName || guarantor.Member?.name || guarantor.Member?.fullName || guarantor.User?.name || guarantor.User?.fullName || guarantor.name || guarantor.guarantorName || guarantor.memberName || guarantor.fullName || guarantor.memberNumber || guarantor.Member?.memberNumber || "Guarantor";
+  const formatKenyanPhone = (value) => {
+    const digits = String(value || "").replace(/\D/g, "");
+    if (digits.length >= 12 && digits.startsWith("254")) return `+${digits.slice(-12)}`;
+    if (digits.length >= 10 && digits.startsWith("0")) return `+254${digits.slice(-9)}`;
+    if (digits.length >= 9) return `+254${digits.slice(-9)}`;
+    return "";
+  };
+  const transactionPhone = (transaction) => {
+    const checkoutId = transaction.checkoutRequestId || transaction.CheckoutRequestID || transaction.checkout_request_id || transaction.mpesaCheckoutRequestId || transaction.reference || transaction.internalReference;
+    return formatKenyanPhone(checkoutId) || formatKenyanPhone(transaction.phoneNumber || transaction.msisdn || transaction.customerPhone || transaction.memberPhone || transaction.sourcePhone || transaction.senderPhone || transaction.User?.phone || transaction.Member?.User?.phone) || "-";
+  };
+  const transactionCategory = (transaction) => {
+    const label = getTransactionPromptLabel(transaction).toLowerCase();
+    if (label.includes("loan")) return "Loan repayment";
+    if (label.includes("share")) return "Share capital";
+    if (label.includes("saving") || label.includes("monthly")) return "Savings";
+    if (label.includes("withdraw")) return "Withdrawal";
+    if (label.includes("deposit")) return "Deposit";
+    return getTransactionPromptLabel(transaction);
+  };
+  const transactionDetails = (transaction) => {
+    const label = getTransactionPromptLabel(transaction).toLowerCase();
+    if (label.includes("withdraw")) return `Withdrawn from ${transaction.sourceAccount || transaction.accountName || transaction.walletName || "member account"}`;
+    return `Deposited to ${transaction.destinationAccount || transaction.accountName || transaction.walletName || transactionCategory(transaction).toLowerCase()}`;
+  };
+  const loanGuarantorLabel = (loan) => {
+    if (loan.selfGuaranteed) return "Self-guaranteed";
+    const guarantors = loanGuarantors(loan);
+    if (!guarantors.length) return "-";
+    return guarantors.map(guarantorDisplayName).join(", ");
+  };
+  const guarantorRows = fl.flatMap((loan) => {
+    const guarantors = loanGuarantors(loan);
+    return guarantors.map((guarantor) => {
+      const guaranteedAmount = Number(guarantor.guaranteedAmount || guarantor.amount || guarantor.liabilityAmount || 0);
+      return {
+        "Guarantor Name": guarantorDisplayName(guarantor),
+        "Guaranteed Amount": formatCurrency(guaranteedAmount),
+        Status: normalizeStatus(guarantor.status || loan.status || "Active"),
+        "Guaranteed Loan Type": loan.type || loan.loanType || "Loan",
+        _amount: guaranteedAmount,
+      };
+    });
+  });
 
   const reportData = {
+<<<<<<< Updated upstream
     transactions: { title: "Transaction Statement", headers: ["Date & Time (EAT)","Type","Reference","Amount","Status"], rows: ft.map(t=>({"Date & Time (EAT)":t.createdAtEAT||formatTransactionTimestamp(t.createdAt||t.date),Type:getTransactionPromptLabel(t),Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{Total:formatCurrency(ft.reduce((s,t)=>s+Number(t.amount||0),0)),Count:ft.length} },
     loans: { title: "Loan Statement", headers: ["Type","Principal","Balance","Status","Date"], rows: fl.map(l=>({Type:l.type||"Loan",Principal:formatCurrency(Number(l.principal||0)),Balance:formatCurrency(Number(l.balance||0)),Status:normalizeStatus(l.status),Date:l.createdAt?new Date(l.createdAt).toLocaleDateString():"-"})),summary:{"Active Balance":formatCurrency(fl.reduce((s,l)=>s+Number(l.balance||l.principal||0),0)),Count:fl.length} },
     savings: { title: "Savings & Share Capital Report", headers: ["Record","Amount","Status","Date"], rows: fs.map(s=>({Record:s.type||"Share",Amount:formatCurrency(Number(s.totalInvested||s.amount||0)),Status:normalizeStatus(s.status||"Active"),Date:s.createdAt?new Date(s.createdAt).toLocaleDateString():"-"})),summary:{"Share Capital":formatCurrency(reportStats?.shareCapital||fs.reduce((s,sh)=>s+Number(sh.totalInvested||0),0)),Count:fs.length} },
@@ -3346,23 +3417,48 @@ function ReportsPage({ accessToken, data = {} }) {
     dividend: { title: "Dividend Report", headers: ["Date & Time (EAT)","Reference","Amount","Status"], rows: fd.map(t=>({"Date & Time (EAT)":t.createdAtEAT||formatTransactionTimestamp(t.createdAt||t.date),Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Dividends":formatCurrency(fd.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fd.length} },
     guarantor: { title: "Guarantor Report", headers: ["Date & Time (EAT)","Reference","Amount","Status"], rows: fr.map(t=>({"Date & Time (EAT)":t.createdAtEAT||formatTransactionTimestamp(t.createdAt||t.date),Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Guaranteed Amount":formatCurrency(fr.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fr.length} },
     "payroll-deduction": { title: "Payroll Deduction Report", headers: ["Date & Time (EAT)","Reference","Amount","Status"], rows: fpd.map(t=>({"Date & Time (EAT)":t.createdAtEAT||formatTransactionTimestamp(t.createdAt||t.date),Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Deducted":formatCurrency(fpd.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fpd.length} },
+=======
+    transactions: { title: "Transaction Statement", headers: ["Date","Phone Number","Details","Type","Reference","Amount"], rows: ft.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-","Phone Number":transactionPhone(t),Details:transactionDetails(t),Type:transactionCategory(t),Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0))})),summary:{"Share capital":formatCurrency(ft.filter(t=>transactionCategory(t)==="Share capital").reduce((s,t)=>s+Number(t.amount||0),0)),"Savings":formatCurrency(ft.filter(t=>transactionCategory(t)==="Savings").reduce((s,t)=>s+Number(t.amount||0),0))} },
+    savings: { title: "Share Capital Report", headers: ["Date","Record","Amount","Status"], rows: fs.map(s=>({Date:s.createdAt?new Date(s.createdAt).toLocaleDateString():"-",Record:s.type||"Share",Amount:formatCurrency(Number(s.totalInvested||s.amount||0)),Status:normalizeStatus(s.status||"Active")})),summary:{"Share Capital":formatCurrency(reportStats?.shareCapital||fs.reduce((s,sh)=>s+Number(sh.totalInvested||0),0)),Count:fs.length} },
+    dividend: { title: "Dividend Report", headers: ["Date","Reference","Amount","Status"], rows: fd.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-",Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Dividends":formatCurrency(fd.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fd.length} },
+    "payroll-deduction": { title: "Payroll Deduction Report", headers: ["Date","Reference","Amount","Status"], rows: fpd.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-",Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Deducted":formatCurrency(fpd.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fpd.length} },
+>>>>>>> Stashed changes
   };
-  const cr = reportData[reportType] || reportData.transactions;
+  const loanReportData = {
+    loans: { title: "Loans", headers: ["Date & Time","Type","Amount","Guarantor","Status","Loan Duration","Interest to be Paid","Reason"], rows: fl.map(l=>({"Date & Time":dateTime(l.createdAt||l.date),Type:l.type||l.loanType||"Loan",Amount:formatCurrency(loanAmount(l)),Guarantor:loanGuarantorLabel(l),Status:normalizeStatus(l.status||"Pending"),"Loan Duration":l.duration||l.loanDuration||l.term?`${l.duration||l.loanDuration||l.term} month${Number(l.duration||l.loanDuration||l.term)===1?"":"s"}`:"-","Interest to be Paid":formatCurrency(loanInterest(l)),Reason:l.reason||"-"})),summary:{"Active Balance":formatCurrency(fl.reduce((s,l)=>s+Number(l.balance||l.outstandingBalance||l.principal||l.amount||0),0)),Count:fl.length} },
+    "loan-repayment": { title: "Loan Repayment", headers: ["Date","Amount","Balance","Duration Remaining","Interest","Reference"], rows: fr.map(t=>({Date:dateTime(t.createdAt||t.date),Amount:formatCurrency(Number(t.amount||0)),Balance:formatCurrency(Number(t.balance||t.outstandingBalance||t.remainingBalance||0)),"Duration Remaining":t.durationRemaining||t.remainingDuration||"-",Interest:formatCurrency(Number(t.interest||t.interestAmount||0)),Reference:t.mpesaReference||t.reference||t.id||"-"})),summary:{"Total Repaid":formatCurrency(fr.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fr.length} },
+    guarantor: { title: "Guarantor", headers: ["Guarantor Name","Guaranteed Amount","Status","Guaranteed Loan Type"], rows: guarantorRows, summary:{"Guaranteed Amount":formatCurrency(guarantorRows.reduce((s,row)=>s+Number(row._amount||0),0)),Count:guarantorRows.length} },
+    withdrawals: { title: "Withdrawals", headers: ["Date & Time","Destination Device","Reference","Amount","Type"], rows: fw.map(t=>({"Date & Time":dateTime(t.createdAt||t.date),"Destination Device":t.destinationDevice||t.phoneNumber||t.msisdn||"-",Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Type:getTransactionPromptLabel(t)})),summary:{"Total Withdrawn":formatCurrency(fw.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fw.length} },
+  };
+  const loanTabs = [
+    { key: "loans", label: "Loans", reportType: "loans" },
+    { key: "loan-repayment", label: "Loan Repayment", reportType: "loan-repayment" },
+    { key: "guarantor", label: "Guarantor", reportType: "guarantor" },
+    { key: "withdrawals", label: "Withdrawals", reportType: "withdrawals" },
+  ];
+  const cr = reportType === "loans" ? loanReportData[loanReportTab] : (reportData[reportType] || reportData.transactions);
 
-  async function requestReport(e) { e.preventDefault(); setSending(true); setMessage(null); try { await emailMemberReport(reportType, accessToken, duration==="all"?undefined:Number(duration)); setMessage({ type: "success", text: "Report sent to your email." }); } catch (err) { setMessage({ type: "error", text: err?.message || "Failed." }); } finally { setSending(false); } }
+  async function sendReport(type, label, setBusy) {
+    setBusy(true); setMessage(null);
+    try { await emailMemberReport(type, accessToken, duration==="all"?undefined:Number(duration)); setMessage({ type: "success", text: `${label} sent to your email as a PDF.` }); }
+    catch (err) { setMessage({ type: "error", text: err?.message || "Failed to send report." }); }
+    finally { setBusy(false); }
+  }
+
+  async function requestReport(e) { e.preventDefault(); await sendReport(reportType, reportType==="loans"?"Full loans report":"Report", setSending); }
 
   return (<div className="space-y-6">
     <SectionHeader eyebrow="Reports" title="Generate & view reports" description="Select a report type and duration filter. Data renders instantly on screen." />
     <Surface className="p-5">
       {message&&<div className={`mb-4 rounded-lg border px-4 py-3 text-sm font-medium ${message.type==="success"?"border-emerald-200 bg-emerald-50 text-emerald-800":"border-rose-200 bg-rose-50 text-rose-800"}`}>{message.text}</div>}
       <form onSubmit={requestReport} className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,200px)_auto_auto] md:items-end">
-        <label className="text-sm font-semibold text-slate-700">Report type<select value={reportType} onChange={e=>{setReportType(e.target.value);setShowOnScreen(true);}} className="mt-2 w-full rounded-lg border px-3.5 py-3 text-sm"><option value="transactions">Transaction statement</option><option value="loans">Loan statement</option><option value="savings">Savings & share capital</option><option value="withdrawals">Withdrawal report</option><option value="loan-repayment">Loan repayment report</option><option value="dividend">Dividend report</option><option value="guarantor">Guarantor report</option><option value="payroll-deduction">Payroll deduction report</option></select></label>
+        <label className="text-sm font-semibold text-slate-700">Report type<select value={reportType} onChange={e=>{setReportType(e.target.value);setShowOnScreen(true);}} className="mt-2 w-full rounded-lg border px-3.5 py-3 text-sm"><option value="transactions">Transaction statement</option><option value="loans">Loans report</option><option value="savings">Savings & share capital</option><option value="payroll-deduction">Payroll deduction report</option></select></label>
         <label className="text-sm font-semibold text-slate-700">Duration<select value={duration} onChange={e=>{setDuration(e.target.value);setShowOnScreen(true);}} className="mt-2 w-full rounded-lg border px-3.5 py-3 text-sm"><option value="all">All time</option><option value="1">Last month</option><option value="3">Last 3 months</option><option value="6">Last 6 months</option><option value="12">Last 12 months</option></select></label>
         <button type="button" onClick={()=>setShowOnScreen(true)} className="inline-flex min-h-12 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-3 text-sm font-semibold text-emerald-800"><Eye size={17}/>View on screen</button>
         <button disabled={sending} className="inline-flex min-h-12 items-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"><MailCheck size={17}/>{sending?"Sending...":"Email report"}</button>
       </form>
     </Surface>
-    {showOnScreen?<Surface className="overflow-hidden"><div className="border-b p-5"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h4 className="text-base font-semibold">{cr.title}</h4><p className="mt-1 text-sm text-slate-500">{duration==="all"?"All records":`Last ${duration} month${Number(duration)>1?"s":""}`} · {cr.rows.length} row{cr.rows.length!==1?"s":""}</p></div><div className="flex flex-wrap gap-3">{Object.entries(cr.summary).map(([l,v])=>(<div key={l} className="rounded-lg bg-slate-50 px-4 py-2"><p className="text-xs font-semibold text-slate-500">{l}</p><p className="text-sm font-semibold">{v}</p></div>))}</div></div></div><div className="overflow-x-auto"><table className="min-w-full"><thead><tr className="bg-slate-50">{cr.headers.map(h=>(<th key={h} className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{h}</th>))}</tr></thead><tbody className="divide-y divide-slate-100">{cr.rows.length===0?<tr><td colSpan={cr.headers.length} className="px-5 py-12 text-center text-sm text-slate-500">No records found.</td></tr>:cr.rows.map((row,i)=>(<tr key={i} className="bg-white transition hover:bg-slate-50">{cr.headers.map(h=>(<td key={h} className="px-5 py-4 text-sm text-slate-700">{row[h]||"-"}</td>))}</tr>))}</tbody></table></div></Surface>:<Surface className="p-8"><EmptyState icon={FileText} title="Generate a report" description="Select report type and duration above, then click 'View on screen'." /></Surface>}
+    {showOnScreen?<Surface className="overflow-hidden"><div className="border-b p-5"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h4 className="text-base font-semibold">{cr.title}</h4><p className="mt-1 text-sm text-slate-500">{duration==="all"?"All records":`Last ${duration} month${Number(duration)>1?"s":""}`} · {cr.rows.length} row{cr.rows.length!==1?"s":""}</p></div><div className="flex flex-wrap gap-3">{Object.entries(cr.summary).map(([l,v])=>(<div key={l} className="rounded-lg bg-slate-50 px-4 py-2"><p className="text-xs font-semibold text-slate-500">{l}</p><p className="text-sm font-semibold">{v}</p></div>))}</div></div>{reportType==="loans"?<div className="mt-5 flex flex-wrap items-center gap-2">{loanTabs.map(tab=>(<button key={tab.key} type="button" onClick={()=>setLoanReportTab(tab.key)} className={`inline-flex min-h-10 items-center rounded-lg border px-4 py-2 text-sm font-semibold transition ${loanReportTab===tab.key?"border-slate-950 bg-slate-950 text-white":"border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}>{tab.label}</button>))}<button type="button" disabled={tabSending===loanReportTab} onClick={()=>{const tab=loanTabs.find(item=>item.key===loanReportTab);sendReport(tab.reportType, `${tab.label} report`, (busy)=>setTabSending(busy?loanReportTab:null));}} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 disabled:opacity-60"><Download size={16}/>{tabSending===loanReportTab?"Sending...":"Email tab PDF"}</button></div>:null}</div><div className="overflow-x-auto"><table className="min-w-full"><thead><tr className="bg-slate-50">{cr.headers.map((h,index)=>(<th key={h} className={`${index===0?"pl-12 pr-5":"px-5"} py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500`}>{h}</th>))}</tr></thead><tbody className="divide-y divide-slate-100">{cr.rows.length===0?<tr><td colSpan={cr.headers.length} className="px-5 py-12 text-center text-sm text-slate-500">No records found.</td></tr>:cr.rows.map((row,i)=>(<tr key={i} className="bg-white transition hover:bg-slate-50">{cr.headers.map((h,index)=>(<td key={h} className={`${index===0?"pl-12 pr-5":"px-5"} py-4 text-sm text-slate-700`}>{row[h]||"-"}</td>))}</tr>))}</tbody></table></div></Surface>:<Surface className="p-8"><EmptyState icon={FileText} title="Generate a report" description="Select report type and duration above, then click 'View on screen'." /></Surface>}
   </div>);
 }
 

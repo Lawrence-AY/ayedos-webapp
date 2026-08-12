@@ -132,7 +132,7 @@ export default function Login() {
         setOtpCountdown(Math.ceil(Math.max((nextSession?.resendAvailableAt || Date.now() + OTP_COOLDOWN_SECONDS * 1000) - Date.now(), 0) / 1000));
         setSubmitCooldown(0);
         setFormError(null);
-        setOtpMessage("We sent a verification code to your email.");
+        setOtpMessage("We sent a verification code via sms and email.");
         return;
       }
       navigate(getPostLoginPath(loggedInUser), { replace: true });
