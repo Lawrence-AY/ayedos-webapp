@@ -3,7 +3,12 @@ import { ArrowLeft, Check, LogOut, Plus, RefreshCw, Search, Trash2, UserPlus, Us
 import { borrowForGroup, createGroup, getGroups, inviteGroupMember, leaveGroup, removeGroupMember, repayGroupLoan, respondGroupInvitation, searchGroupMembers } from '../../features/groups/groupService.js'
 
 const money = (value) => `KES ${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-const date = (value) => value ? new Date(value).toLocaleDateString() : '—'
+const date = (value) => {
+  if (!value) return '—'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return '—'
+  return new Intl.DateTimeFormat('en-KE', { timeZone: 'Africa/Nairobi', dateStyle: 'medium', timeStyle: 'medium' }).format(parsed) + ' EAT'
+}
 const badge = (status) => ({ ACCEPTED: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200', PENDING: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200', ACTIVE: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200', REPAID: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200' }[status] || 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200')
 
 export default function GroupsPage({ accessToken, onRefresh }) {

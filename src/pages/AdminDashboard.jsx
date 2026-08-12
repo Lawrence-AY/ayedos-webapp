@@ -273,7 +273,12 @@ export default function AdminDashboard() {
               {
                 key: "status",
                 label: "Status",
-                render: (v) => <StatusBadge status={v || "Pending"} />,
+                render: (v, row) => (
+                  <div>
+                    <StatusBadge status={row?.autoApproved ? "Auto-Approved (Emergency)" : v || "Pending"} />
+                    {row?.autoApproved && row?.auditTimestamp ? <p className="mt-1 text-xs text-slate-500">{formatDate(row.auditTimestamp)}</p> : null}
+                  </div>
+                ),
               },
             ]}
             fileName="admin-loans.csv"

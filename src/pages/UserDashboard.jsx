@@ -28,6 +28,7 @@ import SecuritySection from "../components/user-dashboard/SecuritySection.jsx";
 import SkeletonDashboard from "../components/user-dashboard/SkeletonDashboard.jsx";
 import SupportPage from "../components/user-dashboard/SupportPage.jsx";
 import TransactionsTable from "../components/user-dashboard/TransactionsTable.jsx";
+import { formatDate } from "../components/dashboard/EnterpriseDashboard.jsx";
 import { MIN_SHARE_CAPITAL, matchesSearch, normalizeStatus } from "../components/user-dashboard/dashboardUtils.js";
 
 export default function UserDashboard() {
@@ -175,6 +176,7 @@ export default function UserDashboard() {
     }, 0);
 
     return {
+      memberNumber: user?.memberNumber || user?.Member?.memberNumber || user?.member?.memberNumber || "",
       balance,
       totalSavings: savings,
       shareCapital,
@@ -344,7 +346,7 @@ function GuaranteedLoans({ guarantees = [] }) {
                 <td className="px-3 py-2 font-medium">{item.loan?.type || 'Loan'}</td>
                 <td className="px-3 py-2">KES {Number(item.amount || 0).toLocaleString()}</td>
                 <td className="px-3 py-2">{item.status}</td>
-                <td className="px-3 py-2">{item.createdAt ? new Date(item.createdAt).toLocaleDateString() : '-'}</td>
+                <td className="px-3 py-2">{item.createdAtEAT || formatDate(item.createdAt)}</td>
               </tr>
             ))}
           </tbody>

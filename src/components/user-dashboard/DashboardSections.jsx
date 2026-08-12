@@ -67,7 +67,8 @@ import {
   requestMemberOptOut,
   applyForLoan,
   emailMemberReport,
-  repayLoan,
+  initiateLoanRepaymentStk,
+  getLoanPaymentStatus,
   searchQualifiedGuarantors,
   transferShareCapital,
 } from "../../features/member/memberService.js";
@@ -77,6 +78,7 @@ import {
   revokeAuthSession,
 } from "../../services/authService.js";
 import { uploadKycDocuments, uploadProfilePhoto } from "../../lib/supabaseStorage.js";
+import { toast } from "sonner";
 
 const emptyProfile = {
   fullName: "",
@@ -156,6 +158,17 @@ function formatCurrency(value, options = {}) {
     minimumFractionDigits,
     maximumFractionDigits,
   })}`;
+}
+
+function formatTransactionTimestamp(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Nairobi", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+  }).formatToParts(date).reduce((result, part) => ({ ...result, [part.type]: part.value }), {});
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second} EAT`;
 }
 
 function getGreeting(date = new Date()) {
@@ -777,7 +790,7 @@ function TransactionsTable({
               <thead>
                 <tr className="bg-slate-50">
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    Date
+                    Date &amp; time (EAT)
                   </th>
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
                     Transaction type
@@ -813,9 +826,7 @@ function TransactionsTable({
                       className="bg-white text-center transition hover:bg-slate-50"
                     >
                       <td className="px-5  text-center pl-5 py-4 text-sm text-slate-600">
-                        {createdAt
-                          ? new Date(createdAt).toLocaleDateString()
-                          : "-"}
+                        {transaction.createdAtEAT || formatTransactionTimestamp(createdAt)}
                       </td>
                       <td className="px-5 py-4 text-sm font-semibold text-slate-900">
                         {description}
@@ -1073,13 +1084,15 @@ function Field({
   options = [],
   suffix = null,
   placeholder,
+  min,
+  max,
 }) {
   const controlClass =
-    "mt-2 w-full rounded-lg border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100";
+    "mt-2 w-full rounded-lg border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-emerald-500 dark:focus:ring-emerald-950";
 
   return (
     <label className="block">
-      <span className="text-sm font-semibold text-slate-700">{label}</span>
+      <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{label}</span>
       <div className="relative">
         {as === "textarea" ? (
           <textarea
@@ -1110,6 +1123,8 @@ function Field({
             value={value}
             onChange={onChange}
             placeholder={placeholder}
+            min={min}
+            max={max}
           />
         )}
         {suffix ? (
@@ -2068,12 +2083,18 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
   const loanEligibilityMessage = "You are not yet eligible to apply for a loan. Please complete the minimum required share capital purchase before submitting a loan application.";
   const [loanForm, setLoanForm] = useState({ type: "EMERGENCY", amount: "10000", duration: "12", reason: "", selfGuarantee: false });
   const [repayAmount, setRepayAmount] = useState("");
+  const [mpesaPhone, setMpesaPhone] = useState("");
   const [message, setMessage] = useState(null);
+  const [busyAction, setBusyAction] = useState("");
+  const [confirmation, setConfirmation] = useState(null);
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [calculationTime, setCalculationTime] = useState(() => Date.now());
   const [selectedGuarantors, setSelectedGuarantors] = useState([]);
   const [guarantorQuery, setGuarantorQuery] = useState("");
   const [guarantorResults, setGuarantorResults] = useState([]);
   const [guarantorLoading, setGuarantorLoading] = useState(false);
-  const activeLoans = loans.filter((loan) => ["ACTIVE", "APPROVED"].includes(String(loan.status || "").toUpperCase()));
+  const activeLoans = loans.filter((loan) => ["ACTIVE", "APPROVED", "DISBURSED"].includes(String(loan.status || "").toUpperCase()));
+  const hasRestrictedLoan = loans.some((loan) => ["PENDING", "PENDING_GUARANTORS", "UNDER_REVIEW", "ACTIVE", "APPROVED", "DISBURSED"].includes(String(loan.status || "").toUpperCase()));
   const [repayLoanId, setRepayLoanId] = useState("");
   const totalBalance = activeLoans.reduce((sum, loan) => sum + Number(loan.balance || loan.principal || 0), 0);
   const rows = loans.filter((loan) => matchesSearch(loan, search));
@@ -2083,6 +2104,18 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
   const requestedDuration = Math.min(Number(loanForm.duration || 1), selectedProduct.duration);
   const totalInterest = requestedAmount * (selectedProduct.interestRate / 100) * requestedDuration;
   const monthlyRepayment = requestedDuration ? (requestedAmount + totalInterest) / requestedDuration : 0;
+  const selectedRepayLoan = activeLoans.find((loan) => loan.id === selectedRepayLoanId);
+  const repayValue = Number(repayAmount || 0);
+  const accrualStart = selectedRepayLoan?.lastInterestAccrualAt || selectedRepayLoan?.approvedAt || selectedRepayLoan?.createdAt;
+  const accruedDays = accrualStart ? Math.max(0, Math.floor((calculationTime - new Date(accrualStart).getTime()) / 86400000)) : 0;
+  const liveAccruedInterest = Number(selectedRepayLoan?.accruedInterest || 0) + Number(selectedRepayLoan?.principalBalance ?? selectedRepayLoan?.principal ?? 0) * (Number(selectedRepayLoan?.interestRate || 0) / 100 / 30) * accruedDays;
+  const outstanding = Number(selectedRepayLoan?.principalBalance ?? selectedRepayLoan?.principal ?? 0) + liveAccruedInterest;
+  const interestPortion = Math.min(repayValue, liveAccruedInterest);
+  const principalPortion = Math.max(Math.min(repayValue - interestPortion, Number(selectedRepayLoan?.principalBalance ?? selectedRepayLoan?.principal ?? 0)), 0);
+  const remainingAfterPayment = Math.max(outstanding - repayValue, 0);
+  const scheduledLoans = [...activeLoans].filter((loan) => loan.nextPaymentDueAt).sort((a, b) => new Date(a.nextPaymentDueAt) - new Date(b.nextPaymentDueAt));
+  const nextLoan = scheduledLoans[0];
+  const nextAmount = nextLoan ? Number(nextLoan.balance || 0) / Math.max(Number(nextLoan.duration || 1), 1) : 0;
 
   const savingsBalance = Number(stats.savings || stats.savingsBalance || 0);
   const requiresGuarantors = loanForm.type !== "EMERGENCY" && !loanForm.selfGuarantee;
@@ -2108,6 +2141,11 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
     return () => { cancelled = true; clearTimeout(timer); };
   }, [accessToken, guarantorQuery, requiresGuarantors]);
 
+  useEffect(() => {
+    const timer = setInterval(() => setCalculationTime(Date.now()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
   function toggleGuarantor(member) {
     const id = member.memberId;
     setSelectedGuarantors((prev) => {
@@ -2117,8 +2155,9 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
     });
   }
 
-  async function requestLoan(event) {
+  async function requestLoan(event, confirmed = false) {
     event.preventDefault();
+    if (hasRestrictedLoan) { toast.error("You already have an active or pending loan application", { duration: 4000 }); return; }
     if (!isLoanEligible) { setMessage({ type: "error", text: loanEligibilityMessage }); return; }
     if (requestedAmount <= 0) { setMessage({ type: "error", text: "Enter a valid loan amount." }); return; }
     if (!selectedProduct) { setMessage({ type: "error", text: "Select a valid loan product." }); return; }
@@ -2126,15 +2165,61 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
     if (loanForm.selfGuarantee && requestedAmount > savingsBalance) { setMessage({ type: "error", text: `Self-guarantee limit exceeded. Available savings: ${formatCurrency(savingsBalance)}.` }); return; }
     if (requiresGuarantors && selectedGuarantors.length < 1) { setMessage({ type: "error", text: "Select at least one guarantor, or use self-guarantee if your savings cover the loan." }); return; }
     if (!loanForm.reason.trim()) { setMessage({ type: "error", text: "Please add the reason for this loan request." }); return; }
+    if (!confirmed) { setConfirmation({ type: "BORROW", amount: requestedAmount, charges: totalInterest }); return; }
     try {
-      await applyForLoan({ type: loanForm.type, amount: requestedAmount, duration: requestedDuration, interestRate: selectedProduct.interestRate, reason: loanForm.reason.trim(), selfGuarantee: loanForm.selfGuarantee, selfGuaranteedAmount: loanForm.selfGuarantee ? requestedAmount : undefined, guarantors: requiresGuarantors ? selectedGuarantors.map((member) => ({ memberId: member.memberId, amount: requestedAmount })) : undefined }, accessToken);
-      setMessage({ type: "success", text: loanForm.selfGuarantee ? "Loan request submitted to Finance using your savings as self-guarantee." : requiresGuarantors ? "Loan request submitted. Guarantor links expire in 72 hours." : "Loan request submitted." });
+      setBusyAction("borrow"); setConfirmation(null);
+      const result = await applyForLoan({ type: loanForm.type, amount: requestedAmount, duration: requestedDuration, interestRate: selectedProduct.interestRate, reason: loanForm.reason.trim(), selfGuarantee: loanForm.selfGuarantee, selfGuaranteedAmount: loanForm.selfGuarantee ? requestedAmount : undefined, guarantors: requiresGuarantors ? selectedGuarantors.map((member) => ({ memberId: member.memberId, amount: requestedAmount })) : undefined }, accessToken);
+      const text = result?.loanDetails?.autoApproved ? "Emergency Loan Auto-Approved & Disbursed" : "Loan application submitted successfully";
+      setMessage({ type: "success", text }); toast.success(text, { duration: 4000 });
       setLoanForm((current) => ({ ...current, reason: "" }));
       setSelectedGuarantors([]); setGuarantorQuery(""); setGuarantorResults([]); await onRefresh?.();
-    } catch (error) { setMessage({ type: "error", text: error?.message || "Failed to request loan." }); }
+    } catch (error) { const text = error?.message || "Loan application failed"; setMessage({ type: "error", text }); toast.error(text, { duration: 4000 }); }
+    finally { setBusyAction(""); }
   }
 
-  function submitRepayment(event) { event.preventDefault(); repayLoan(selectedRepayLoanId, repayAmount, accessToken).then(async () => { setMessage({ type: "success", text: "Loan repayment recorded." }); setRepayAmount(""); await onRefresh?.(); }).catch((error) => setMessage({ type: "error", text: error?.message || "Failed." })); }
+  async function submitRepayment(event, confirmed = false) {
+    event.preventDefault();
+    if (!Number.isInteger(repayValue) || repayValue <= 0 || repayValue > outstanding) { toast.error(!Number.isInteger(repayValue) || repayValue <= 0 ? "Enter a whole-shilling repayment amount greater than zero" : "Payment exceeds the total outstanding loan balance", { duration: 4000 }); return; }
+    if (!/^(?:254|0)?7\d{8}$/.test(mpesaPhone.replace(/\s+/g, ""))) { toast.error("Enter a valid M-Pesa phone number", { duration: 4000 }); return; }
+    if (!confirmed) {
+      setConfirmation({
+        type: "REPAY",
+        amount: repayValue,
+        charges: interestPortion,
+        phone: (
+          <span>
+            {mpesaPhone}
+            <span className="mt-1 block text-xs font-medium text-emerald-700 dark:text-emerald-300">
+              Member number: {stats.memberNumber || "Not assigned"}
+            </span>
+          </span>
+        ),
+        memberNumber: stats.memberNumber,
+      });
+      return;
+    }
+    try {
+      setBusyAction("repay"); setConfirmation(null);
+      const request = await initiateLoanRepaymentStk(selectedRepayLoanId, repayValue, mpesaPhone, accessToken);
+      toast.success("STK Push Sent!", { description: "Check your phone and input your M-Pesa PIN. Waiting for confirmation...", duration: 4000 });
+      let payment = null;
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        payment = await getLoanPaymentStatus(request.checkoutRequestId, accessToken);
+        if (["SUCCESS", "FAILED"].includes(String(payment.status).toUpperCase())) break;
+      }
+      if (String(payment?.status).toUpperCase() === "SUCCESS") {
+        const text = `Payment Received! M-Pesa Ref: ${payment.mpesaReceiptNumber}`;
+        setMessage({ type: "success", text }); toast.success(text, { duration: 4000 }); setRepayAmount(""); await onRefresh?.();
+      } else if (String(payment?.status).toUpperCase() === "FAILED") {
+        throw new Error("Transaction failed or cancelled on phone. Please try again.");
+      } else {
+        throw new Error("Payment confirmation is taking longer than expected. Check your transactions before retrying.");
+      }
+    }
+    catch (error) { const text = error?.message || "Payment Failed"; setMessage({ type: "error", text }); toast.error(text, { duration: 4000 }); }
+    finally { setBusyAction(""); }
+  }
 
   const scrollToApplication = () => {
     if (!isLoanEligible) {
@@ -2154,18 +2239,18 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
           {loanEligibilityMessage}
         </div>
       ) : null}
-      <button onClick={scrollToApplication} aria-disabled={!isLoanEligible} className={`inline-flex w-full items-center justify-center gap-2 rounded-lg px-5 py-4 text-sm font-semibold text-white ${isLoanEligible ? "bg-slate-950" : "cursor-not-allowed bg-slate-400"}`}><Plus size={18} />New application</button>
-      <div className="grid gap-4 md:grid-cols-3">
+      <button onClick={scrollToApplication} disabled={!isLoanEligible || hasRestrictedLoan} className={`inline-flex w-full items-center justify-center gap-2 rounded-lg px-5 py-4 text-sm font-semibold text-white ${isLoanEligible && !hasRestrictedLoan ? "bg-slate-950" : "cursor-not-allowed bg-slate-400"}`}><Plus size={18} />{hasRestrictedLoan ? "Loan application unavailable while a loan is active" : "New application"}</button>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard icon={FileText} label="Active loans" value={activeLoans.length} trend="Live" helper="Approved or currently active facilities" tone="blue" />
         <StatCard icon={CreditCard} label="Outstanding balance" value={formatCurrency(totalBalance)} helper="Estimated from loan records" tone="amber" blur={!showValues} />
-        <StatCard icon={Clock3} label="Next repayment" value="-" helper="Repayment schedule will appear when available" tone="slate" />
+        <button type="button" onClick={() => setShowSchedule(true)} disabled={!nextLoan} className="w-full text-left disabled:cursor-default sm:col-span-2 xl:col-span-1"><StatCard icon={Clock3} label="Next loan due" value={nextLoan ? new Date(nextLoan.nextPaymentDueAt).toLocaleDateString() : "-"} helper={nextLoan ? `Amount: ${formatCurrency(nextAmount)}` : "No scheduled repayment"} tone="slate" /></button>
       </div>
-      {message ? (<div className={`rounded-lg border px-4 py-3 text-sm font-medium ${message.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800"}`}>{message.text}</div>) : null}
+      {message ? (<div className={`rounded-lg border px-4 py-3 text-sm font-medium ${message.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200" : "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-800 dark:bg-rose-950/60 dark:text-rose-200"}`}>{message.text}</div>) : null}
       <div className="grid gap-5 xl:grid-cols-2">
-        <Surface className="p-5">
-          <h5 className="text-base font-semibold tracking-normal text-slate-950">Request a loan</h5>
+        <Surface className="p-4 sm:p-5">
+          <h5 className="text-base font-semibold tracking-normal text-slate-950 dark:text-slate-100">Request a loan</h5>
           <form onSubmit={requestLoan} className="mt-4 grid gap-4">
-            <fieldset disabled={!isLoanEligible} className="contents">
+            <fieldset disabled={!isLoanEligible || hasRestrictedLoan || busyAction === "borrow"} className="contents">
             <label className="text-sm font-semibold text-slate-700">Loan product
               <select id="loan-product-select" value={loanForm.type} onChange={(e) => { setLoanForm((c) => ({ ...c, type: e.target.value, selfGuarantee: false })); setSelectedGuarantors([]); setGuarantorQuery(""); setGuarantorResults([]); }} className="mt-2 w-full rounded-lg border px-3.5 py-3 text-sm">{LOAN_PRODUCTS.map((p) => (<option key={p.type} value={p.type}>{p.name}</option>))}</select>
             </label>
@@ -2215,25 +2300,29 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
                 {selectedGuarantors.length > 0 && (<p className="mt-3 text-xs font-medium text-sky-700">Selected: {selectedMemberNames}</p>)}
               </div>
             ) : null}
-            <button className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"><FileText size={17} />Request loan</button>
+            <button className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"><FileText size={17} />{busyAction === "borrow" ? "Submitting..." : "Request loan"}</button>
             </fieldset>
           </form>
         </Surface>
-        <Surface className="p-5">
-          <h5 className="text-base font-semibold">Repay a loan</h5>
+        <Surface className="p-4 sm:p-5">
+          <h5 className="text-base font-semibold text-slate-950 dark:text-slate-100">Repay a loan</h5>
           <form onSubmit={submitRepayment} className="mt-4 grid gap-4">
-            <label className="text-sm font-semibold text-slate-700">Loan
-              <select value={selectedRepayLoanId} onChange={(e) => setRepayLoanId(e.target.value)} className="mt-2 w-full rounded-lg border px-3.5 py-3 text-sm">
+            <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">Loan
+              <select value={selectedRepayLoanId} onChange={(e) => setRepayLoanId(e.target.value)} className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
                 {activeLoans.length === 0 ? (<option>No active loans</option>) : activeLoans.map((loan) => (<option key={loan.id} value={loan.id}>{loan.type} - {formatCurrency(loan.balance || loan.principal)}</option>))}
               </select>
             </label>
-            <Field label="Repayment amount" name="repayAmount" type="number" value={repayAmount} onChange={(e) => setRepayAmount(e.target.value)} />
-            <button disabled={!selectedRepayLoanId || !repayAmount} className="inline-flex min-h-12 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-3 text-sm font-semibold text-emerald-800 disabled:opacity-60"><CreditCard size={17} />Start repayment</button>
+            <Field label="Repayment amount" name="repayAmount" type="number" min="1" max={outstanding} value={repayAmount} onChange={(e) => setRepayAmount(e.target.value)} />
+            <Field label="M-Pesa phone number" name="mpesaPhone" type="tel" value={mpesaPhone} onChange={(e) => setMpesaPhone(e.target.value)} placeholder="07XX XXX XXX" />
+            {repayValue > 0 ? <div className="rounded-lg border border-slate-100 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200"><div className="flex justify-between gap-3"><span>Interest portion</span><strong className="text-right">{formatCurrency(interestPortion)}</strong></div><div className="mt-2 flex justify-between gap-3"><span>Principal portion</span><strong className="text-right">{formatCurrency(principalPortion)}</strong></div><div className="mt-2 flex justify-between gap-3 border-t border-slate-200 pt-2 dark:border-slate-700"><span>Remaining balance</span><strong className="text-right">{formatCurrency(remainingAfterPayment)}</strong></div></div> : null}
+            <button disabled={!selectedRepayLoanId || !Number.isInteger(repayValue) || repayValue <= 0 || repayValue > outstanding || !mpesaPhone || busyAction === "repay"} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-800 disabled:opacity-60 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200"><CreditCard size={17} className="shrink-0" />{busyAction === "repay" ? "Waiting for M-Pesa confirmation..." : "Pay Now"}</button>
           </form>
         </Surface>
       </div>
       <LoanCalculator product={selectedProduct} amount={requestedAmount} duration={requestedDuration} totalInterest={totalInterest} monthlyRepayment={monthlyRepayment} />
       <LoansTable loans={rows} />
+      {confirmation ? <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-slate-950/60 p-0 backdrop-blur-sm sm:items-center sm:p-4"><div role="dialog" aria-modal="true" className="max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl sm:max-w-md sm:rounded-2xl sm:p-6 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"><h3 className="text-lg font-semibold">Confirm {confirmation.type === "BORROW" ? "loan application" : "M-Pesa repayment"}</h3><div className="mt-4 space-y-3 rounded-lg border border-slate-100 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-800">{confirmation.type === "REPAY" ? <div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-slate-400">Account</span><strong className="text-right">Your SACCO member number</strong></div> : null}<div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-slate-400">Action</span><strong>{confirmation.type === "BORROW" ? "Borrow" : "Repay"}</strong></div><div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-slate-400">Total amount</span><strong className="text-right">{formatCurrency(confirmation.amount)}</strong></div>{confirmation.type === "REPAY" ? <div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-slate-400">M-Pesa phone</span><strong className="text-right">{confirmation.phone}</strong></div> : <div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-slate-400">Calculated interest</span><strong className="text-right">{formatCurrency(confirmation.charges)}</strong></div>}</div>{confirmation.type === "REPAY" ? <p className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 p-3 text-sm leading-6 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200">An M-Pesa prompt will be sent to your phone {confirmation.phone}Please verify the details and enter your M-Pesa PIN to complete the repayment.</p> : null}<div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><button type="button" onClick={() => setConfirmation(null)} className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 font-semibold dark:border-slate-600 dark:text-slate-200">Cancel</button><button type="button" onClick={(event) => confirmation.type === "BORROW" ? requestLoan(event, true) : submitRepayment(event, true)} className="min-h-11 rounded-lg bg-slate-950 px-4 py-2 font-semibold text-white dark:bg-emerald-700">{confirmation.type === "REPAY" ? "Send PIN Prompt" : "Confirm & Proceed"}</button></div></div></div> : null}
+      {showSchedule ? <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-slate-950/60 p-0 backdrop-blur-sm sm:items-center sm:p-4"><div role="dialog" aria-modal="true" className="max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl sm:max-w-xl sm:rounded-2xl sm:p-6 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"><div className="flex items-start justify-between gap-4"><h3 className="text-lg font-semibold">Active loan repayment schedule</h3><button onClick={() => setShowSchedule(false)} aria-label="Close" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-200 text-xl dark:border-slate-700">×</button></div><div className="mt-4 space-y-3">{scheduledLoans.map((loan) => <div key={loan.id} className="rounded-lg border border-slate-200 p-4 dark:border-slate-700 dark:bg-slate-800/60"><div className="flex flex-col gap-1 font-semibold sm:flex-row sm:justify-between"><span>{loan.type}</span><span>{new Date(loan.nextPaymentDueAt).toLocaleDateString()}</span></div><p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">Due amount: {formatCurrency(Number(loan.balance || 0) / Math.max(Number(loan.duration || 1), 1))} · Balance: {formatCurrency(loan.balance)}</p></div>)}</div></div></div> : null}
     </div>
   );
 }
@@ -3249,14 +3338,14 @@ function ReportsPage({ accessToken, data = {} }) {
   const fpd = ft.filter(t => lbl(t).includes("payroll")||lbl(t).includes("deduction")||lbl(t).includes("salary"));
 
   const reportData = {
-    transactions: { title: "Transaction Statement", headers: ["Date","Type","Reference","Amount","Status"], rows: ft.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-",Type:getTransactionPromptLabel(t),Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{Total:formatCurrency(ft.reduce((s,t)=>s+Number(t.amount||0),0)),Count:ft.length} },
+    transactions: { title: "Transaction Statement", headers: ["Date & Time (EAT)","Type","Reference","Amount","Status"], rows: ft.map(t=>({"Date & Time (EAT)":t.createdAtEAT||formatTransactionTimestamp(t.createdAt||t.date),Type:getTransactionPromptLabel(t),Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{Total:formatCurrency(ft.reduce((s,t)=>s+Number(t.amount||0),0)),Count:ft.length} },
     loans: { title: "Loan Statement", headers: ["Type","Principal","Balance","Status","Date"], rows: fl.map(l=>({Type:l.type||"Loan",Principal:formatCurrency(Number(l.principal||0)),Balance:formatCurrency(Number(l.balance||0)),Status:normalizeStatus(l.status),Date:l.createdAt?new Date(l.createdAt).toLocaleDateString():"-"})),summary:{"Active Balance":formatCurrency(fl.reduce((s,l)=>s+Number(l.balance||l.principal||0),0)),Count:fl.length} },
     savings: { title: "Savings & Share Capital Report", headers: ["Record","Amount","Status","Date"], rows: fs.map(s=>({Record:s.type||"Share",Amount:formatCurrency(Number(s.totalInvested||s.amount||0)),Status:normalizeStatus(s.status||"Active"),Date:s.createdAt?new Date(s.createdAt).toLocaleDateString():"-"})),summary:{"Share Capital":formatCurrency(reportStats?.shareCapital||fs.reduce((s,sh)=>s+Number(sh.totalInvested||0),0)),Count:fs.length} },
-    withdrawals: { title: "Withdrawal Report", headers: ["Date","Reference","Amount","Status"], rows: fw.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-",Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Withdrawn":formatCurrency(fw.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fw.length} },
-    "loan-repayment": { title: "Loan Repayment Report", headers: ["Date","Reference","Amount","Status"], rows: fr.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-",Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Repaid":formatCurrency(fr.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fr.length} },
-    dividend: { title: "Dividend Report", headers: ["Date","Reference","Amount","Status"], rows: fd.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-",Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Dividends":formatCurrency(fd.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fd.length} },
-    guarantor: { title: "Guarantor Report", headers: ["Date","Reference","Amount","Status"], rows: fr.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-",Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Guaranteed Amount":formatCurrency(fr.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fr.length} },
-    "payroll-deduction": { title: "Payroll Deduction Report", headers: ["Date","Reference","Amount","Status"], rows: fpd.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-",Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Deducted":formatCurrency(fpd.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fpd.length} },
+    withdrawals: { title: "Withdrawal Report", headers: ["Date & Time (EAT)","Reference","Amount","Status"], rows: fw.map(t=>({"Date & Time (EAT)":t.createdAtEAT||formatTransactionTimestamp(t.createdAt||t.date),Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Withdrawn":formatCurrency(fw.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fw.length} },
+    "loan-repayment": { title: "Loan Repayment Report", headers: ["Date & Time (EAT)","Reference","Amount","Status"], rows: fr.map(t=>({"Date & Time (EAT)":t.createdAtEAT||formatTransactionTimestamp(t.createdAt||t.date),Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Repaid":formatCurrency(fr.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fr.length} },
+    dividend: { title: "Dividend Report", headers: ["Date & Time (EAT)","Reference","Amount","Status"], rows: fd.map(t=>({"Date & Time (EAT)":t.createdAtEAT||formatTransactionTimestamp(t.createdAt||t.date),Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Dividends":formatCurrency(fd.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fd.length} },
+    guarantor: { title: "Guarantor Report", headers: ["Date & Time (EAT)","Reference","Amount","Status"], rows: fr.map(t=>({"Date & Time (EAT)":t.createdAtEAT||formatTransactionTimestamp(t.createdAt||t.date),Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Guaranteed Amount":formatCurrency(fr.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fr.length} },
+    "payroll-deduction": { title: "Payroll Deduction Report", headers: ["Date & Time (EAT)","Reference","Amount","Status"], rows: fpd.map(t=>({"Date & Time (EAT)":t.createdAtEAT||formatTransactionTimestamp(t.createdAt||t.date),Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Deducted":formatCurrency(fpd.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fpd.length} },
   };
   const cr = reportData[reportType] || reportData.transactions;
 

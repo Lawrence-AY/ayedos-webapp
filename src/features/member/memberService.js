@@ -180,6 +180,22 @@ export async function repayLoan(id, amount, accessToken) {
   return unwrapEnvelopeData(res.json)
 }
 
+export async function initiateLoanRepaymentStk(id, amount, phone, accessToken) {
+  const res = await apiRequest(`/api/member/loans/${id}/repay/stk`, {
+    method: 'POST', accessToken, body: { amount: Number(amount), phone }, cache: false,
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to send M-Pesa PIN prompt')
+  return unwrapEnvelopeData(res.json)
+}
+
+export async function getLoanPaymentStatus(checkoutRequestId, accessToken) {
+  const res = await apiRequest(`/api/payments/status/${encodeURIComponent(checkoutRequestId)}`, {
+    method: 'GET', accessToken, cache: false,
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to verify M-Pesa payment')
+  return unwrapEnvelopeData(res.json)
+}
+
 export async function depositSavings(amount, accessToken) {
   const res = await apiRequest('/api/member/savings/deposit', {
     method: 'POST',
