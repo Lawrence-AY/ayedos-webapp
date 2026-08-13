@@ -10,7 +10,9 @@ async function checkHealth() {
     cacheTtlMs: 30 * 1000,
   })
 
-  if (!res.ok) throw res.error || new Error('Health check failed')
+  if (!res.ok || res.json?.success === false || typeof res.json !== 'object') {
+    throw res.error || new Error('Health check failed')
+  }
   return res.json
 }
 

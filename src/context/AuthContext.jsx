@@ -272,7 +272,7 @@ export function AuthProvider({ children }) {
     }
   }, [loadCurrentUser, persistAuth, refreshToken, sessionId])
 
-  const login = useCallback(
+const login = useCallback(
     async ({ email, password }) => {
       setAuthError(null)
       const normalizedEmail = email.trim().toLowerCase()
@@ -280,7 +280,9 @@ export function AuthProvider({ children }) {
       const parsedIdempotency = storedIdempotency ? JSON.parse(storedIdempotency) : null
       const idempotencyKey = parsedIdempotency?.email === normalizedEmail && parsedIdempotency.expiresAt > Date.now()
         ? parsedIdempotency.key
-        : globalThis.crypto.randomUUID()
+        // Older browsers and some embedded webviews expose crypto without
+        // randomUUID. The key only needs to be unique for this login retry.
+        : globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`
       sessionStorage.setItem(LOGIN_IDEMPOTENCY_KEY, JSON.stringify({
         key: idempotencyKey,
         email: normalizedEmail,

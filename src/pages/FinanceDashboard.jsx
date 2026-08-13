@@ -94,8 +94,8 @@ function formatDateSafe(v) {
 }
 
 
-function calculateReducingBalance(principal, annualRate, durationMonths) {
-  const monthlyRate = annualRate / 100 / 12;
+function calculateReducingBalance(principal, monthlyRatePercent, durationMonths) {
+  const monthlyRate = monthlyRatePercent / 100;
   const monthlyPayment =
     monthlyRate === 0
       ? principal / durationMonths
@@ -1827,7 +1827,8 @@ function UnifiedLoansPage({
     const amount = Number(loan?.principal || loan?.amount || 0);
     const rate = Number(loan?.interestRate ?? loan?.interest ?? 0);
     const duration = Number(loan?.duration || 0);
-    return Number(loan?.interestGenerated ?? (amount * (rate / 100) * duration));
+    if (!amount || !duration) return 0;
+    return Number(loan?.interestGenerated ?? calculateReducingBalance(amount, rate, duration).totalInterest);
   };
   const loanColumns = [
     {
@@ -2144,8 +2145,8 @@ function AmortizationPanel({ loan, onClose }) {
   const { monthlyPayment, schedule } = useMemo(
     () =>
       calculateReducingBalance(
-        Number(loan.principal || 0),
-        (loan.interest || 1) * 12,
+        Number(loan.principalBalance ?? loan.principal ?? loan.amount ?? 0),
+        Number(loan.interestRate ?? loan.interest ?? 0),
         loan.duration || 12,
       ),
     [loan],
@@ -2230,8 +2231,7 @@ function AmortizationPanel({ loan, onClose }) {
           </tbody>
         </table>
         <p className="mt-3 text-xs text-slate-500">
-          Reducing balance. Green = paid. APR:{" "}
-          {((loan.interest || 1) * 12).toFixed(1)}%
+          Reducing balance at {(Number(loan.interestRate ?? loan.interest ?? 0)).toFixed(1)}% monthly.
         </p>
       </div>
     </div>
