@@ -21,7 +21,6 @@ import {
   Search,
   Send,
   ShieldAlert,
-  TrendingDown,
   TrendingUp,
   UserRound,
   UsersRound,
@@ -93,6 +92,32 @@ function formatDateSafe(v) {
   return formatDate(v);
 }
 
+function getLoanPortfolioMetrics(loans = []) {
+  const disbursedStatuses = [
+    "DISBURSED",
+    "ACTIVE",
+    "OVERDUE",
+    "COMPLETED",
+    "DEFAULTED",
+    "WRITTEN_OFF",
+  ];
+  return {
+    totalDisbursed: loans
+      .filter((loan) =>
+        disbursedStatuses.includes(String(loan.status || "").toUpperCase()),
+      )
+      .reduce((sum, loan) => sum + Number(loan.principal || loan.amount || 0), 0),
+    totalRepaid: loans.reduce(
+      (sum, loan) => sum + Number(loan.paid ?? loan.repaid ?? 0),
+      0,
+    ),
+    totalArrears: loans.reduce(
+      (sum, loan) => sum + Number(loan.arrears || 0),
+      0,
+    ),
+  };
+}
+
 
 function calculateReducingBalance(principal, monthlyRatePercent, durationMonths) {
   const monthlyRate = monthlyRatePercent / 100;
@@ -126,6 +151,7 @@ function calculateReducingBalance(principal, monthlyRatePercent, durationMonths)
 function getFinanceStats(data) {
   const tx = data.transactions || [];
   const loans = data.loans || [];
+  const loanMetrics = getLoanPortfolioMetrics(loans);
   const reportTotals = data.reports?.totals || {};
   const eatToday = new Date(Date.now() + (3 * 60 * 60 * 1000)).toISOString().slice(0, 10);
   const todayReport = data.reports?.timeSeries?.daily?.find((row) => row.label === eatToday);
@@ -159,26 +185,18 @@ function getFinanceStats(data) {
         String(l.status || "").toUpperCase(),
       ),
     ).length,
-    loanRepayments: Number(reportTotals.repayments ?? byType("REPAYMENT")),
+    loanRepayments: loanMetrics.totalRepaid,
     pendingDisbursements: loans.filter(
       (l) => String(l.status || "").toUpperCase() === "APPROVED",
     ).length,
     monthlyRevenue: tx
       .filter((t) => isMonth(t.createdAt || t.date))
       .reduce((s, t) => s + Number(t.amount || 0), 0),
-    totalDisbursed: loans
-      .filter((l) =>
-        ["DISBURSED", "ACTIVE"].includes(String(l.status || "").toUpperCase()),
-      )
-      .reduce((s, l) => s + Number(l.principal || 0), 0),
+    totalDisbursed: loanMetrics.totalDisbursed,
     overdueLoans: loans.filter(
       (l) => String(l.status || "").toUpperCase() === "OVERDUE",
     ).length,
-    totalArrears: loans
-      .filter((l) =>
-        ["OVERDUE", "ACTIVE"].includes(String(l.status || "").toUpperCase()),
-      )
-      .reduce((s, l) => s + Number(l.arrears || l.balance || 0), 0),
+    totalArrears: loanMetrics.totalArrears,
   };
 }
 
@@ -1198,11 +1216,11 @@ function FinanceHome({ data, stats, globalSearch = "", onVerifyTransaction }) {
       path: "/transactions?type=deposit",
     },
     {
-      label: "Withdrawals",
-      value: formatCurrency(stats.totalWithdrawals),
-      icon: TrendingDown,
-      tone: "rose",
-      path: "/transactions?type=withdrawal",
+      label: "Disbursements",
+      value: formatCurrency(stats.totalDisbursed),
+      icon: Banknote,
+      tone: "amber",
+      path: "/loans?status=active",
     },
   ];
   const loanCards = [
@@ -1214,7 +1232,7 @@ function FinanceHome({ data, stats, globalSearch = "", onVerifyTransaction }) {
       path: "/loans?status=active",
     },
     {
-      label: "Repayments",
+      label: "Repaid",
       value: formatCurrency(stats.loanRepayments),
       icon: CreditCard,
       tone: "emerald",
@@ -1807,14 +1825,8 @@ function UnifiedLoansPage({
     search,
     ["id", "type", "member", "memberName", "memberId", "status"],
   );
-  const totalDisbursed = loans
-    .filter((l) =>
-      ["DISBURSED", "ACTIVE", "OVERDUE"].includes(
-        String(l.status || "").toUpperCase(),
-      ),
-    )
-    .reduce((s, l) => s + Number(l.principal || 0), 0);
-  const totalRepaid = loans.reduce((s, l) => s + Number(l.paid || 0), 0);
+  const { totalDisbursed, totalRepaid, totalArrears } =
+    getLoanPortfolioMetrics(loans);
   const displayLoanStatus = (status) => {
     const normalized = String(status || "").toUpperCase();
     if (["PENDING", "UNDER_REVIEW"].includes(normalized)) return "PENDING_FINANCE";
@@ -1933,9 +1945,7 @@ function UnifiedLoansPage({
         />
         <KpiCard
           label="Arrears"
-          value={formatCurrency(
-            loans.reduce((s, l) => s + Number(l.arrears || 0), 0),
-          )}
+          value={formatCurrency(totalArrears)}
           icon={ShieldAlert}
           tone="rose"
         />
@@ -2963,25 +2973,86 @@ function FinancialReportsPage({ data, currentUser }) {
   const [timeFilter, setTimeFilter] = useState("monthly");
   const [breakdown, setBreakdown] = useState(null);
   const report = data.reports || {};
-  const totals = report.totals || {};
+  const loans = data.loans || [];
+  const members = data.members || [];
+  const portfolio = getLoanPortfolioMetrics(loans);
   const timeSeries = (report.timeSeries?.[timeFilter] || []).slice(-30);
 
   const reportRows = timeSeries;
 
-  const totalDeposits = Number(totals.deposits || 0);
-  const shareCapitalDeposits = Number(totals.shareCapitalDeposits || 0);
-  const savingsDeposits = Number(totals.savingsDeposits || 0);
-  const openBreakdown = (key, title, total) => setBreakdown({ key, title, total, rows: report.memberBreakdowns?.[key] || [] });
+  const accountRows = (field) => members
+    .map((member) => ({
+      memberId: member.memberId || member.id,
+      memberNumber: member.memberNumber,
+      memberName: member.name || member.memberName || "Unknown member",
+      amount: Number(member[field] || 0),
+    }))
+    .filter((row) => row.amount > 0)
+    .sort((left, right) => right.amount - left.amount);
+  const shareCapitalRows = accountRows("shares");
+  const savingsRows = accountRows("savings");
+  const shareCapitalDeposits = shareCapitalRows.reduce((sum, row) => sum + row.amount, 0);
+  const savingsDeposits = savingsRows.reduce((sum, row) => sum + row.amount, 0);
+  const totalDeposits = shareCapitalDeposits + savingsDeposits;
 
   const loanProducts = ["EMERGENCY", "EDUCATION", "DEVELOPMENT", "WELFARE"];
   const repayByProduct = {};
   const disburseByProduct = {};
   loanProducts.forEach((p) => {
-    repayByProduct[p] = Number(report.byProduct?.[p]?.repayments || 0);
-    disburseByProduct[p] = Number(report.byProduct?.[p]?.disbursements || 0);
+    const productLoans = loans.filter(
+      (loan) => String(loan.type || loan.loanType || "").toUpperCase() === p,
+    );
+    repayByProduct[p] = productLoans.reduce(
+      (sum, loan) => sum + Number(loan.paid ?? loan.repaid ?? 0),
+      0,
+    );
+    disburseByProduct[p] = getLoanPortfolioMetrics(productLoans).totalDisbursed;
   });
-  const totalRepayments = Number(totals.repayments || 0);
-  const totalDisbursed = Number(totals.disbursements || 0);
+  const totalRepayments = portfolio.totalRepaid;
+  const totalDisbursed = portfolio.totalDisbursed;
+  const loanRows = (product, metric) => loans
+    .filter((loan) => !product || String(loan.type || loan.loanType || "").toUpperCase() === product)
+    .map((loan) => {
+      const status = String(loan.status || "").toUpperCase();
+      const amount = metric === "repayments"
+        ? Number(loan.paid ?? loan.repaid ?? 0)
+        : ["DISBURSED", "ACTIVE", "OVERDUE", "COMPLETED", "DEFAULTED", "WRITTEN_OFF"].includes(status)
+          ? Number(loan.principal || loan.amount || 0)
+          : 0;
+      return {
+        memberId: loan.memberId,
+        memberNumber: loan.memberNumber,
+        memberName: loan.member || loan.memberName || "Unknown member",
+        amount,
+      };
+    })
+    .filter((row) => row.amount > 0)
+    .reduce((rows, row) => {
+      const existing = rows.find((item) => item.memberId === row.memberId);
+      if (existing) existing.amount += row.amount;
+      else rows.push(row);
+      return rows;
+    }, [])
+    .sort((left, right) => right.amount - left.amount);
+  const localBreakdowns = {
+    ...(report.memberBreakdowns || {}),
+    deposits: [...shareCapitalRows, ...savingsRows].reduce((rows, row) => {
+      const existing = rows.find((item) => item.memberId === row.memberId);
+      if (existing) existing.amount += row.amount;
+      else rows.push({ ...row });
+      return rows;
+    }, []).sort((left, right) => right.amount - left.amount),
+    shareCapitalDeposits: shareCapitalRows,
+    savingsDeposits: savingsRows,
+    repayments: loanRows(null, "repayments"),
+    disbursements: loanRows(null, "disbursements"),
+  };
+  loanProducts.forEach((product) => {
+    localBreakdowns[`repayments_${product}`] = loanRows(product, "repayments");
+    localBreakdowns[`disbursements_${product}`] = loanRows(product, "disbursements");
+  });
+  const openBreakdown = (key, title, total) =>
+    setBreakdown({ key, title, total, rows: localBreakdowns[key] || [] });
 
   return (
     <div className="space-y-6">
@@ -3032,35 +3103,35 @@ function FinancialReportsPage({ data, currentUser }) {
         <div className="mb-4 flex items-center gap-2">
           <TrendingUp size={20} className="text-emerald-600" />
           <h5 className="text-base font-semibold text-slate-950">
-            Total Deposits
+            Total Member Funds
           </h5>
           <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700">
             {formatCurrency(totalDeposits)}
           </span>
-          <button type="button" onClick={() => openBreakdown("deposits", "Total deposits", totalDeposits)} className="ml-auto text-xs font-semibold text-emerald-700 hover:underline">View members</button>
+          <button type="button" onClick={() => openBreakdown("deposits", "Total member funds", totalDeposits)} className="ml-auto text-xs font-semibold text-emerald-700 hover:underline">View members</button>
         </div>
         <div className="grid gap-3 md:grid-cols-2">
           <button type="button" onClick={() => openBreakdown("shareCapitalDeposits", "Share capital deposits", shareCapitalDeposits)} className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-sky-300 hover:bg-sky-50">
             <p className="text-xs font-semibold text-slate-500">
-              Share Capital
+              Share Capital Balance
             </p>
             <p className="mt-1 text-xl font-semibold text-sky-700">
               {formatCurrency(shareCapitalDeposits)}
             </p>
             <p className="mt-1 text-xs text-slate-500">
-              Deposits allocated to share ownership
+              Current capital held across member accounts
             </p>
             <span className="mt-2 block text-xs font-semibold text-sky-700">View member summary</span>
           </button>
           <button type="button" onClick={() => openBreakdown("savingsDeposits", "Savings pool deposits", savingsDeposits)} className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-emerald-300 hover:bg-emerald-50">
             <p className="text-xs font-semibold text-slate-500">
-              Savings Pools
+              Savings Pool Balance
             </p>
             <p className="mt-1 text-xl font-semibold text-emerald-700">
               {formatCurrency(savingsDeposits)}
             </p>
             <p className="mt-1 text-xs text-slate-500">
-              General savings deposits
+              Current savings held across member accounts
             </p>
             <span className="mt-2 block text-xs font-semibold text-emerald-700">View member summary</span>
           </button>

@@ -4,7 +4,6 @@ import {
   CheckCircle2,
   Clock3,
   Headphones,
-  Mail,
   MapPin,
   Phone,
   Send,
@@ -19,10 +18,9 @@ const contactDetails = [
     icon: Phone,
   },
   {
-    label: "Email",
-    value: "info@cowrie.io",
-    href: "mailto:info@cowrie.io",
-    icon: Mail,
+    label: "Working hours",
+    value: "8am-5pm (GMT+3)",
+    icon: Clock3,
   },
   {
     label: "Visit",
@@ -135,9 +133,6 @@ export default function SupportPage({ user, role }) {
             <h1 className="mt-1 text-2xl font-semibold tracking-normal text-slate-950">
               Reach us
             </h1>
-            <p className="mt-2 text-sm leading-6 text-slate-500">
-              Monday - Friday, 8am - 5pm (GMT +3)
-            </p>
           </div>
         </div>
 
