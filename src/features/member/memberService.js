@@ -1,5 +1,5 @@
 // Member feature services - personal dashboard actions
-import { apiRequest, unwrapEnvelopeData } from '../../lib/apiClient'
+import { apiRequest, clearApiCache, unwrapEnvelopeData } from '../../lib/apiClient'
 
 // Profile
 export async function getMemberProfile(accessToken) {
@@ -16,8 +16,16 @@ export async function updateMemberProfile(data, accessToken) {
     method: 'PUT',
     accessToken,
     body: data,
+    cache: false,
   })
-  if (!res.ok) throw new Error(res.json?.message || 'Failed to update profile')
+  if (!res.ok) {
+    const details = res.json?.details || res.error?.response?.details
+    const firstFieldError = details && Object.entries(details)
+      .flatMap(([field, messages]) => (Array.isArray(messages) ? messages : [messages]).map((message) => `${field}: ${message}`))
+      .filter(Boolean)[0]
+    throw new Error(firstFieldError || res.json?.message || 'Failed to update profile')
+  }
+  clearApiCache()
   return unwrapEnvelopeData(res.json)
 }
 
@@ -37,6 +45,18 @@ export async function transferShareCapital(data, accessToken) {
   })
   if (!res.ok) throw new Error(res.json?.message || 'Failed to transfer share capital')
   return unwrapEnvelopeData(res.json)
+}
+
+export async function searchOptOutTransferees(query, accessToken) {
+  const q = String(query || '').trim()
+  if (q.length < 2) return []
+  const res = await apiRequest(`/api/member/opt-out/transferees?q=${encodeURIComponent(q)}`, {
+    method: 'GET',
+    accessToken,
+    cache: false,
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to search transferees')
+  return unwrapEnvelopeData(res.json) || []
 }
 
 // Loan application (member)

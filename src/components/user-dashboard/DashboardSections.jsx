@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  ArrowRight,
   ArrowUpRight,
   BadgeCheck,
   Bell,
@@ -75,6 +76,7 @@ import SavingsContributionForm from "./SavingsContributionForm.jsx";
 import {
   updateMemberProfile,
   requestMemberOptOut,
+  searchOptOutTransferees,
   applyForLoan,
   emailMemberReport,
   initiateLoanRepaymentStk,
@@ -89,6 +91,7 @@ import {
 } from "../../services/authService.js";
 import { uploadProfilePhoto } from "../../lib/supabaseStorage.js";
 import { toast } from "sonner";
+import ayedosLogo from "../../assets/logo-light.png";
 
 const emptyProfile = {
   fullName: "",
@@ -124,6 +127,10 @@ const MAX_PROFILE_PHOTO_BYTES = 1.5 * 1024 * 1024;
 function isAyedosMember(user = {}) {
   const company = String(user?.company || user?.employer || "").toLowerCase();
   return company === "ayedos" || Boolean(user?.isWhitelisted);
+}
+
+function hasStaffId(user = {}) {
+  return Boolean(String(user?.staffId || user?.payrollNumber || "").trim());
 }
 
 const LOAN_PRODUCTS = [
@@ -950,7 +957,7 @@ function DashboardOverview({
   onToggleValues,
 }) {
   const greeting = getGreeting();
-  const showEmployerContribution = isAyedosMember(user);
+  const showEmployerContribution = hasStaffId(user);
   const cards = [
     {
       label: "Share Capital",
@@ -1096,9 +1103,11 @@ function Field({
   placeholder,
   min,
   max,
+  disabled = false,
+  helper = "",
 }) {
   const controlClass =
-    "mt-2 w-full rounded-lg border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-emerald-500 dark:focus:ring-emerald-950";
+    "mt-2 w-full rounded-lg border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-900 outline-none transition disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:disabled:bg-slate-800 dark:disabled:text-slate-400 dark:focus:border-emerald-500 dark:focus:ring-emerald-950";
 
   return (
     <label className="block">
@@ -1111,6 +1120,7 @@ function Field({
             value={value}
             onChange={onChange}
             placeholder={placeholder}
+            disabled={disabled}
           />
         ) : as === "select" ? (
           <select
@@ -1118,6 +1128,7 @@ function Field({
             name={name}
             value={value}
             onChange={onChange}
+            disabled={disabled}
           >
             {options.map((option) => (
               <option key={option.value} value={option.value}>
@@ -1135,6 +1146,7 @@ function Field({
             placeholder={placeholder}
             min={min}
             max={max}
+            disabled={disabled}
           />
         )}
         {suffix ? (
@@ -1146,6 +1158,11 @@ function Field({
       {error ? (
         <span className="mt-1 block text-xs font-medium text-rose-600">
           {error}
+        </span>
+      ) : null}
+      {helper ? (
+        <span className="mt-1 block text-xs font-medium text-slate-500">
+          {helper}
         </span>
       ) : null}
     </label>
@@ -1207,6 +1224,7 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
   const [preview, setPreview] = useState(user?.passportPhotoUrl || null);
   const [photoFile, setPhotoFile] = useState(null);
   const [editingPersonal, setEditingPersonal] = useState(false);
+  const [showLockedValues, setShowLockedValues] = useState(false);
   const [optOutForm, setOptOutForm] = useState({
     reason: "",
     buyerMemberNumber: "",
@@ -1226,7 +1244,19 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
   const maskedNationalId = form.nationalId
     ? maskNationalId(form.nationalId)
     : "—";
-  const showStaffId = isAyedosMember(user);
+  const lockedProfileFields = {
+    fullName: Boolean(user?.name || user?.fullName),
+    email: Boolean(user?.email),
+    phone: Boolean(user?.phone),
+    nationalId: Boolean(user?.nationalId || user?.Member?.nationalId || user?.member?.nationalId),
+    dateOfBirth: Boolean(user?.dateOfBirth),
+    gender: Boolean(user?.gender),
+  };
+  const showValue = (value, masked = "••••••••") => {
+    if (!value) return "—";
+    return showLockedValues ? value : masked;
+  };
+  const showStaffId = hasStaffId(user);
   const shareCapital = Number(stats.shareCapital || 0);
   const subCountiesList = useMemo(() => (
     form.county && kenyaCounties[form.county] ? kenyaCounties[form.county] : []
@@ -1343,8 +1373,8 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
       const uploadedProfile = photoFile
         ? await uploadProfilePhoto(photoFile, accessToken)
         : null;
-      const passportPhotoUrl =
-        uploadedProfile?.passportPhotoUrl || form.passportPhotoUrl;
+      const passportPhotoUrl = uploadedProfile?.passportPhotoUrl || form.passportPhotoUrl;
+      const changedPassportPhotoUrl = uploadedProfile?.passportPhotoUrl || "";
 
       if (photoFile && !passportPhotoUrl) {
         throw new Error(
@@ -1352,26 +1382,36 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
         );
       }
 
+      const profilePayload = {
+        kraPin: form.kraPin,
+        address: form.address,
+        poBox: form.poBox,
+        county: form.county,
+        subCounty: form.subCounty,
+        occupation: form.jobTitle,
+        monthlyIncome: form.monthlyIncome,
+        payrollNumber: form.payrollNumber,
+        employer: form.employer,
+      };
+      if (changedPassportPhotoUrl) profilePayload.passportPhotoUrl = changedPassportPhotoUrl;
+      const completeNominees = nominees.filter((nominee) => (
+        nominee.fullName?.trim() ||
+        nominee.relationship?.trim() ||
+        nominee.phone?.trim() ||
+        nominee.nationalId?.trim() ||
+        nominee.allocationPercentage
+      ));
+      if (completeNominees.length) profilePayload.nominees = completeNominees;
+      else profilePayload.nominees = [];
+      if (!lockedProfileFields.fullName) profilePayload.name = form.fullName;
+      if (!lockedProfileFields.email) profilePayload.email = form.email;
+      if (!lockedProfileFields.phone) profilePayload.phone = form.phone;
+      if (!lockedProfileFields.nationalId) profilePayload.nationalId = form.nationalId;
+      if (!lockedProfileFields.gender) profilePayload.gender = form.gender;
+      if (!lockedProfileFields.dateOfBirth) profilePayload.dateOfBirth = form.dateOfBirth;
+
       const updatedProfile = await updateMemberProfile(
-        {
-          name: form.fullName,
-          email: form.email,
-          phone: form.phone,
-          nationalId: form.nationalId,
-          kraPin: form.kraPin,
-          address: form.address,
-          poBox: form.poBox,
-          county: form.county,
-          subCounty: form.subCounty,
-          occupation: form.jobTitle,
-          monthlyIncome: form.monthlyIncome,
-          payrollNumber: form.payrollNumber,
-          ...(passportPhotoUrl ? { passportPhotoUrl } : {}),
-          gender: form.gender,
-          dateOfBirth: form.dateOfBirth,
-          employer: form.employer,
-          nominees,
-        },
+        profilePayload,
         accessToken,
       );
       setForm((current) => ({ ...current, passportPhotoUrl }));
@@ -1452,14 +1492,24 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
               <UserRound className="text-[#8cc63f] h-5 w-5" />
               <h3 className="text-lg font-semibold">Personal information</h3>
             </div>
-            <button
-              type="button"
-              onClick={() => setEditingPersonal((current) => !current)}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#8cc63f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#7ab534]"
-            >
-              <Pencil size={16} />
-              {editingPersonal ? "Close editor" : "Edit Profile"}
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setShowLockedValues((current) => !current)}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                {showLockedValues ? <EyeOff size={16} /> : <Eye size={16} />}
+                {showLockedValues ? "Hide values" : "Show values"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditingPersonal((current) => !current)}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#8cc63f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#7ab534]"
+              >
+                <Pencil size={16} />
+                {editingPersonal ? "Close editor" : "Edit Profile"}
+              </button>
+            </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -1474,26 +1524,26 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
             <div>
               <label className="text-sm font-medium">Full Name</label>
               <p className="mt-1 text-sm text-foreground">
-                {form.fullName || "—"}
+                {showValue(form.fullName)}
               </p>
             </div>
 
             {/* Email */}
             <div>
               <label className="text-sm font-medium">Email</label>
-              <p className="mt-1 text-sm text-foreground">{maskedEmail}</p>
+              <p className="mt-1 text-sm text-foreground">{showValue(form.email, maskedEmail)}</p>
             </div>
 
             {/* Phone Number */}
             <div>
               <label className="text-sm font-medium">Phone Number</label>
-              <p className="mt-1 text-sm text-foreground">{maskedPhone}</p>
+              <p className="mt-1 text-sm text-foreground">{showValue(form.phone, maskedPhone)}</p>
             </div>
 
             {/* National ID */}
             <div>
               <label className="text-sm font-medium">National ID</label>
-              <p className="mt-1 text-sm text-foreground">{maskedNationalId}</p>
+              <p className="mt-1 text-sm text-foreground">{showValue(form.nationalId, maskedNationalId)}</p>
             </div>
 
             <div>
@@ -1514,7 +1564,7 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
             <div>
               <label className="text-sm font-medium">Date of Birth</label>
               <p className="mt-1 text-sm text-foreground">
-                {form.dateOfBirth || "—"}
+                {showValue(form.dateOfBirth)}
               </p>
             </div>
 
@@ -1522,7 +1572,7 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
             <div>
               <label className="text-sm font-medium">Gender</label>
               <p className="mt-1 text-sm text-foreground">
-                {form.gender || "—"}
+                {showValue(form.gender)}
               </p>
             </div>
 
@@ -1552,9 +1602,9 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
         {/* Employment information – editable */}
         {editingPersonal ? (
           <EditableSection title="Edit profile" icon={UserRound}>
-            <Field label="Full Name" name="fullName" value={form.fullName} onChange={update} error={errors.fullName} />
-            <Field label="Phone Number" name="phone" value={form.phone} onChange={update} error={errors.phone} />
-            <Field label="National ID" name="nationalId" value={form.nationalId} onChange={update} error={errors.nationalId} />
+            <Field label="Full Name" name="fullName" value={form.fullName} onChange={update} error={errors.fullName} disabled={lockedProfileFields.fullName} helper={lockedProfileFields.fullName ? "Captured during onboarding" : ""} />
+            <Field label="Phone Number" name="phone" value={form.phone} onChange={update} error={errors.phone} disabled={lockedProfileFields.phone} helper={lockedProfileFields.phone ? "Captured during onboarding" : ""} />
+            <Field label="National ID" name="nationalId" value={form.nationalId} onChange={update} error={errors.nationalId} disabled={lockedProfileFields.nationalId} helper={lockedProfileFields.nationalId ? "Captured during onboarding" : ""} />
             <Field label="KRA PIN" name="kraPin" value={form.kraPin} onChange={update} placeholder="e.g., A123456789B" />
             <Field label="Physical Address / P.O. Box" name="poBox" value={form.poBox} onChange={update} placeholder="e.g., P.O. Box 12345-00100" />
             <div className="space-y-2">
@@ -1594,13 +1644,15 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
               </Select>
             </div>
             <Field label="Address Notes" name="address" value={form.address} onChange={update} as="textarea" />
-            <Field label="Date of Birth" name="dateOfBirth" value={form.dateOfBirth} onChange={update} type="date" />
+            <Field label="Date of Birth" name="dateOfBirth" value={form.dateOfBirth} onChange={update} type="date" disabled={lockedProfileFields.dateOfBirth} helper={lockedProfileFields.dateOfBirth ? "Captured during onboarding" : ""} />
             <Field
               label="Gender"
               name="gender"
               as="select"
               value={form.gender}
               onChange={update}
+              disabled={lockedProfileFields.gender}
+              helper={lockedProfileFields.gender ? "Captured during onboarding" : ""}
               options={[
                 { label: "Select gender", value: "" },
                 { label: "Female", value: "Female" },
@@ -1702,6 +1754,7 @@ function SecuritySection({
   activeSessions = [],
   loginHistory = [],
   onRefresh,
+  onPasswordChanged,
 }) {
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: "",
@@ -1737,19 +1790,20 @@ function SecuritySection({
       return;
     }
     try {
-      await changePassword(
+      const response = await changePassword(
         {
           currentPassword: passwordForm.currentPassword,
           newPassword: passwordForm.newPassword,
         },
         accessToken,
       );
-      setMessage({ type: "success", text: "Password changed successfully." });
+      setMessage({ type: "success", text: response?.message || "Password changed successfully. Full portal access is now enabled." });
       setPasswordForm({
         currentPassword: "",
         newPassword: "",
         confirmPassword: "",
       });
+      await onPasswordChanged?.(response?.data?.notification);
     } catch (error) {
       setMessage({
         type: "error",
@@ -3355,6 +3409,8 @@ function ReportsPage({ accessToken, data = {} }) {
   const [tabSending, setTabSending] = useState(null);
   const [showOnScreen, setShowOnScreen] = useState(false);
   const { transactions = [], loans = [], shares = [], stats: reportStats } = data;
+  const user = data.user || data.profile || {};
+  const showPayrollReports = hasStaffId(user);
   const successfulTransactions = transactions.filter((transaction) => ["SUCCESS", "PAID", "COMPLETED"].includes(String(transaction.status || "").toUpperCase()));
 
   const filterByDuration = (items, df = "createdAt") => {
@@ -3367,7 +3423,7 @@ function ReportsPage({ accessToken, data = {} }) {
   const fw = ft.filter(t => lbl(t).includes("withdraw")||lbl(t).includes("payout")||lbl(t).includes("disburse"));
   const fr = ft.filter(t => lbl(t).includes("repay")||lbl(t).includes("loan")||lbl(t).includes("credit"));
   const fd = ft.filter(t => lbl(t).includes("dividend"));
-  const fpd = ft.filter(t => lbl(t).includes("payroll")||lbl(t).includes("deduction")||lbl(t).includes("salary"));
+  const fpd = showPayrollReports ? ft.filter(t => lbl(t).includes("payroll")||lbl(t).includes("deduction")||lbl(t).includes("salary")) : [];
   const dateTime = (value) => value ? new Date(value).toLocaleString() : "-";
   const loanAmount = (loan) => Number(loan.amount || loan.principal || loan.requestedAmount || 0);
   const loanInterest = (loan) => {
@@ -3427,7 +3483,7 @@ function ReportsPage({ accessToken, data = {} }) {
     transactions: { title: "Transaction Statement", headers: ["Date","Phone Number","Details","Reference","Amount"], rows: ft.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-","Phone Number":transactionPhone(t),Details:transactionDetails(t),Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0))})),summary:{"Share capital":formatCurrency(ft.filter(t=>transactionCategory(t)==="Share capital").reduce((s,t)=>s+Number(t.amount||0),0)),"Savings":formatCurrency(ft.filter(t=>transactionCategory(t)==="Savings").reduce((s,t)=>s+Number(t.amount||0),0))} },
     savings: { title: "Share Capital Report", headers: ["Date","Record","Amount","Status"], rows: fs.map(s=>({Date:s.createdAt?new Date(s.createdAt).toLocaleDateString():"-",Record:s.type||"Share",Amount:formatCurrency(Number(s.totalInvested||s.amount||0)),Status:normalizeStatus(s.status||"Active")})),summary:{"Share Capital":formatCurrency(reportStats?.shareCapital||fs.reduce((s,sh)=>s+Number(sh.totalInvested||0),0)),Count:fs.length} },
     dividend: { title: "Dividend Report", headers: ["Date","Reference","Amount","Status"], rows: fd.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-",Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Dividends":formatCurrency(fd.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fd.length} },
-    "payroll-deduction": { title: "Payroll Deduction Report", headers: ["Date","Reference","Amount","Status"], rows: fpd.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-",Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Deducted":formatCurrency(fpd.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fpd.length} },
+    ...(showPayrollReports ? { "payroll-deduction": { title: "Payroll Deduction Report", headers: ["Date","Reference","Amount","Status"], rows: fpd.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-",Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Deducted":formatCurrency(fpd.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fpd.length} } } : {}),
   };
   const loanReportData = {
     loans: { title: "Loans", headers: ["Date & Time","Type","Amount","Guarantor","Status","Loan Duration","Interest to be Paid","Reason"], rows: fl.map(l=>({"Date & Time":dateTime(l.createdAt||l.date),Type:l.type||l.loanType||"Loan",Amount:formatCurrency(loanAmount(l)),Guarantor:loanGuarantorLabel(l),Status:normalizeStatus(l.status||"Pending"),"Loan Duration":l.duration||l.loanDuration||l.term?`${l.duration||l.loanDuration||l.term} month${Number(l.duration||l.loanDuration||l.term)===1?"":"s"}`:"-","Interest to be Paid":formatCurrency(loanInterest(l)),Reason:l.reason||"-"})),summary:{"Active Balance":formatCurrency(fl.reduce((s,l)=>s+Number(l.balance||l.outstandingBalance||l.principal||l.amount||0),0)),Count:fl.length} },
@@ -3457,7 +3513,7 @@ function ReportsPage({ accessToken, data = {} }) {
     <Surface className="p-5">
       {message&&<div className={`mb-4 rounded-lg border px-4 py-3 text-sm font-medium ${message.type==="success"?"border-emerald-200 bg-emerald-50 text-emerald-800":"border-rose-200 bg-rose-50 text-rose-800"}`}>{message.text}</div>}
       <form onSubmit={requestReport} className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,200px)_auto_auto] md:items-end">
-        <label className="text-sm font-semibold text-slate-700">Report type<select value={reportType} onChange={e=>{setReportType(e.target.value);setShowOnScreen(true);}} className="mt-2 w-full rounded-lg border px-3.5 py-3 text-sm"><option value="transactions">Transaction statement</option><option value="loans">Loans report</option><option value="savings">Savings & share capital</option><option value="payroll-deduction">Payroll deduction report</option></select></label>
+        <label className="text-sm font-semibold text-slate-700">Report type<select value={reportType} onChange={e=>{setReportType(e.target.value);setShowOnScreen(true);}} className="mt-2 w-full rounded-lg border px-3.5 py-3 text-sm"><option value="transactions">Transaction statement</option><option value="loans">Loans report</option><option value="savings">Savings & share capital</option>{showPayrollReports ? <option value="payroll-deduction">Payroll deduction report</option> : null}</select></label>
         <label className="text-sm font-semibold text-slate-700">Duration<select value={duration} onChange={e=>{setDuration(e.target.value);setShowOnScreen(true);}} className="mt-2 w-full rounded-lg border px-3.5 py-3 text-sm"><option value="all">All time</option><option value="1">Last month</option><option value="3">Last 3 months</option><option value="6">Last 6 months</option><option value="12">Last 12 months</option></select></label>
         <button type="button" onClick={()=>setShowOnScreen(true)} className="inline-flex min-h-12 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-3 text-sm font-semibold text-emerald-800"><Eye size={17}/>View on screen</button>
         <button disabled={sending} className="inline-flex min-h-12 items-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"><MailCheck size={17}/>{sending?"Sending...":"Email report"}</button>
@@ -3560,39 +3616,185 @@ function SavingsPage({
 }
 
 function OptOutSection({ accessToken, user, shareCapitalAmount = 0, stats = {}, onRefresh }) {
-  const [form, setForm] = useState({ reason: "", confirm: "" });
+  const [form, setForm] = useState({
+    reason: "",
+    transfereeInfo: "",
+    transferRecipientName: "",
+    transferRecipientMemberNumber: "",
+    transferRecipientPhone: "",
+    transferAmount: "",
+    confirm: "",
+  });
+  const [signedForm, setSignedForm] = useState(null);
+  const [selectedTransferee, setSelectedTransferee] = useState(null);
+  const [transfereeMatches, setTransfereeMatches] = useState([]);
+  const [lookupStatus, setLookupStatus] = useState("");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
-  const [step, setStep] = useState("initial"); // initial | confirm | success | shareCapitalModal
+  const [step, setStep] = useState("initial"); // initial | details | final | success
   const [optOutResult, setOptOutResult] = useState(null);
   // The API is the source of truth for loan and guarantor eligibility.
   const canOptOut = true;
+  const memberNumber = user?.memberNumber || user?.membershipNumber || user?.memberId || "Auto";
+  const exitShareCapital = Number(stats.shareCapital ?? shareCapitalAmount ?? user?.shareCapital ?? 0);
+  const exitSavings = Number(stats.totalSavings ?? stats.savings ?? user?.savings ?? 0);
+  const exitLoans = Number(stats.loanBalance ?? user?.loans ?? 0);
+  const exitDividendsInterest = Number(stats.dividends ?? stats.dividend ?? stats.interest ?? user?.interest ?? 0);
+  const exitEmployerContribution = hasStaffId(user) ? Number(stats.employerContribution || user?.employerContribution || user?.Member?.employerContribution || 0) : 0;
+  const refundAmount = exitSavings + exitDividendsInterest + exitEmployerContribution;
+  const saccoAdminFee = exitShareCapital * 0.05;
+  const transferableShareCapital = Math.max(exitShareCapital - saccoAdminFee, 0);
+  const memberName = user?.name || user?.fullName || [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "";
+  const transferAmount = Number(form.transferAmount || 0);
+  const transferSummary = form.transfereeInfo || [
+    form.transferRecipientName ? `Full name: ${form.transferRecipientName}` : "",
+    form.transferRecipientMemberNumber ? `Member ID: ${form.transferRecipientMemberNumber}` : "",
+    form.transferRecipientPhone ? `Phone number: ${form.transferRecipientPhone}` : "",
+    transferAmount > 0 ? `Share capital sale amount: ${formatCurrency(transferAmount)}` : "",
+  ].filter(Boolean).join("; ");
+
+  useEffect(() => {
+    if (step !== "details") return undefined;
+    const query = form.transferRecipientMemberNumber.trim() || form.transferRecipientName.trim();
+    if (query.length < 2) {
+      setTransfereeMatches([]);
+      setLookupStatus("");
+      return undefined;
+    }
+    let cancelled = false;
+    setLookupStatus("Searching...");
+    const id = setTimeout(async () => {
+      try {
+        const matches = await searchOptOutTransferees(query, accessToken);
+        if (cancelled) return;
+        setTransfereeMatches(matches);
+        setLookupStatus(matches.length ? `${matches.length} match${matches.length === 1 ? "" : "es"} found` : "No matching member found");
+        const exact = matches.find((member) => (
+          String(member.memberNumber || "").toLowerCase() === query.toLowerCase()
+          || String(member.fullName || "").toLowerCase() === query.toLowerCase()
+        ));
+        if (exact) applyTransferee(exact);
+      } catch (error) {
+        if (!cancelled) {
+          setTransfereeMatches([]);
+          setLookupStatus(error?.message || "Unable to search members");
+        }
+      }
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(id);
+    };
+  }, [accessToken, form.transferRecipientMemberNumber, form.transferRecipientName, step]);
+
+  function applyTransferee(member) {
+    if (!member) return;
+    setSelectedTransferee(member);
+    setForm((current) => ({
+      ...current,
+      transferRecipientName: member.fullName || current.transferRecipientName,
+      transferRecipientMemberNumber: member.memberNumber || current.transferRecipientMemberNumber,
+      transferRecipientPhone: member.phone || current.transferRecipientPhone,
+    }));
+    setTransfereeMatches([]);
+    setLookupStatus("Recipient details filled from member records.");
+  }
+
+  function downloadOptOutForm() {
+    if (!form.reason.trim()) {
+      setMsg({ type: "error", text: "Enter your reason for leaving before downloading the form." });
+      return;
+    }
+    const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+    const executionDate = new Date().toLocaleDateString();
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>SACCO Exit Form - ${esc(memberNumber)}</title><style>@page{size:A4;margin:18mm}body{font-family:Arial,sans-serif;color:#111827}.brand{display:flex;align-items:center;gap:14px;border-bottom:3px solid #8cc63f;padding-bottom:12px}img{height:44px;width:auto}h1{font-size:20px;margin:0}h2{font-size:14px;margin:22px 0 0;color:#14532d}table{border-collapse:collapse;width:100%;margin-top:10px}td{border:1px solid #b7dca2;padding:9px;vertical-align:top}.label{font-weight:bold;background:#eaf7df;width:34%}.title{background:#d9f0c9;font-weight:bold;text-transform:uppercase;color:#14532d}.sign{height:64px}.muted{color:#64748b;font-size:12px}</style></head><body><div class="brand"><img src="${ayedosLogo}" alt="AYEDOS SACCO Logo"><div><h1>SACCO Exit Form</h1><p class="muted">Prefilled from the member portal. Save this print view as PDF, sign, and upload the signed copy before confirming.</p></div></div><h2>Transferor Details</h2><table><tr><td class="title" colspan="2">Member Identity</td></tr><tr><td class="label">Full Name</td><td>${esc(memberName)}</td></tr><tr><td class="label">Member ID Number</td><td>${esc(memberNumber)}</td></tr><tr><td class="label">Phone Number</td><td>${esc(user?.phone)}</td></tr><tr><td class="title" colspan="2">System Balances</td></tr><tr><td class="label">Share Capital</td><td>${esc(formatCurrency(exitShareCapital))}</td></tr><tr><td class="label">Total Savings</td><td>${esc(formatCurrency(exitSavings))}</td></tr><tr><td class="label">Active Loan Balance</td><td>${esc(formatCurrency(exitLoans))}</td></tr><tr><td class="label">Dividends / Interest</td><td>${esc(formatCurrency(exitDividendsInterest))}</td></tr><tr><td class="label">Employer Contributions</td><td>${esc(hasStaffId(user) ? formatCurrency(exitEmployerContribution) : "Not applicable")}</td></tr><tr><td class="label">Refund Amount</td><td>${esc(formatCurrency(refundAmount))}</td></tr></table><h2>Transferee Details</h2><table><tr><td class="title" colspan="2">Recipient Information</td></tr><tr><td class="label">Full Name</td><td>${esc(form.transferRecipientName || "Skipped for now")}</td></tr><tr><td class="label">Member ID</td><td>${esc(form.transferRecipientMemberNumber || "Skipped for now")}</td></tr><tr><td class="label">Phone Number</td><td>${esc(form.transferRecipientPhone || "Skipped for now")}</td></tr><tr><td class="label">Share Capital</td><td>${esc(formatCurrency(selectedTransferee?.shareCapital || 0))}</td></tr><tr><td class="label">Savings</td><td>${esc(formatCurrency(selectedTransferee?.savings || 0))}</td></tr><tr><td class="label">Loan Balance</td><td>${esc(formatCurrency(selectedTransferee?.loanBalance || 0))}</td></tr></table><h2>Transaction Metadata</h2><table><tr><td class="title" colspan="2">Share Capital Transfer</td></tr><tr><td class="label">Transfer Amount</td><td>${esc(transferAmount > 0 ? formatCurrency(transferAmount) : "Skipped for now")}</td></tr><tr><td class="label">SACCO Administration Fee (5%)</td><td>${esc(formatCurrency(saccoAdminFee))}</td></tr><tr><td class="label">Transferable Share Capital</td><td>${esc(formatCurrency(transferableShareCapital))}</td></tr><tr><td class="label">Execution Date</td><td>${esc(executionDate)}</td></tr><tr><td class="label">Reason for Exit</td><td>${esc(form.reason)}</td></tr><tr><td class="label">Member Signature</td><td class="sign"></td></tr><tr><td class="label">Date Signed</td><td class="sign"></td></tr></table><script>window.addEventListener("load",()=>window.print())</script></body></html>`;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+  }
+
+  function handleSignedForm(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setSignedForm({ name: file.name, dataUrl: String(reader.result || "") });
+    reader.onerror = () => setMsg({ type: "error", text: "Unable to read the uploaded signed form." });
+    reader.readAsDataURL(file);
+  }
+
   async function handleOptOut(e) {
     e.preventDefault();
+    if (!form.reason.trim()) { setMsg({ type: "error", text: "Reason for leaving is required." }); return; }
+    if (!signedForm?.dataUrl) { setMsg({ type: "error", text: "Upload the signed opt-out form before confirming." }); return; }
     if (form.confirm.trim().toUpperCase() !== "CONFIRM") { setMsg({ type: "error", text: 'Type "CONFIRM" to proceed.' }); return; }
     setSaving(true); setMsg(null);
     try {
-      const result = await requestMemberOptOut({ reason: form.reason, acknowledgedTerms: true }, accessToken);
+      const result = await requestMemberOptOut({
+        reason: form.reason,
+        transfereeInfo: transferSummary,
+        transfereeMemberId: selectedTransferee?.memberId,
+        transferAmount: transferAmount > 0 ? transferAmount : undefined,
+        uploadedFormName: signedForm.name,
+        uploadedFormDataUrl: signedForm.dataUrl,
+        confirmText: form.confirm,
+        acknowledgedTerms: true,
+      }, accessToken);
       setOptOutResult(result);
-      setStep("shareCapitalModal");
+      setStep("success");
     }
     catch (err) { setMsg({ type: "error", text: err?.message || "Failed to submit." }); }
     finally { setSaving(false); }
   }
 
+  function advanceToFinal(skipTransfer = false) {
+    if (!form.reason.trim()) {
+      setMsg({ type: "error", text: "Reason for leaving is required." });
+      return;
+    }
+    if (!skipTransfer) {
+      if (!form.transferRecipientName.trim() && !form.transferRecipientMemberNumber.trim() && !form.transferRecipientPhone.trim()) {
+        setMsg({ type: "error", text: "Enter recipient information or choose Skip Now." });
+        return;
+      }
+      if (!transferAmount || transferAmount <= 0) {
+        setMsg({ type: "error", text: "Enter the share capital amount to be sold or choose Skip Now." });
+        return;
+      }
+      if (transferAmount > exitShareCapital) {
+        setMsg({ type: "error", text: `Amount cannot exceed available share capital (${formatCurrency(exitShareCapital)}).` });
+        return;
+      }
+    }
+    setMsg(null);
+    setStep("final");
+    if (skipTransfer) {
+      setSelectedTransferee(null);
+      setForm((current) => ({
+        ...current,
+        transfereeInfo: "",
+        transferRecipientName: "",
+        transferRecipientMemberNumber: "",
+        transferRecipientPhone: "",
+        transferAmount: "",
+      }));
+    } else {
+      setForm((current) => ({ ...current, transfereeInfo: transferSummary }));
+    }
+  }
+
   return (
     <>
       <div className="space-y-6">
-        <div className={step === "confirm" ? "rounded-lg border border-rose-300 bg-rose-50/60 p-6" : "rounded-lg border border-slate-200 bg-slate-50/60 p-6"}>
+        <div className={step === "details" || step === "final" ? "rounded-lg border border-rose-300 bg-rose-50/60 p-6" : "rounded-lg border border-slate-200 bg-slate-50/60 p-6"}>
           <div className="mb-4 flex items-center gap-3">
-            <div className={step === "confirm" ? "grid h-10 w-10 place-items-center rounded-lg bg-rose-100" : "grid h-10 w-10 place-items-center rounded-lg bg-slate-200"}>
-              <LogOut size={20} className={step === "confirm" ? "text-rose-600" : "text-slate-400"} />
+            <div className={step === "details" || step === "final" ? "grid h-10 w-10 place-items-center rounded-lg bg-rose-100" : "grid h-10 w-10 place-items-center rounded-lg bg-slate-200"}>
+              <LogOut size={20} className={step === "details" || step === "final" ? "text-rose-600" : "text-slate-400"} />
             </div>
             <div>
-              <h5 className={step === "confirm" ? "text-base font-semibold text-rose-900" : "text-base font-medium text-slate-500"}>
+              <h5 className={step === "details" || step === "final" ? "text-base font-semibold text-rose-900" : "text-base font-medium text-slate-500"}>
                 Opt-Out of SACCO
               </h5>
-              <p className={step === "confirm" ? "text-sm text-rose-700" : "text-xs text-slate-400"}>
+              <p className={step === "details" || step === "final" ? "text-sm text-rose-700" : "text-xs text-slate-400"}>
                 Voluntary membership exit. This action is irreversible pending financier approval.
               </p>
             </div>
@@ -3605,76 +3807,97 @@ function OptOutSection({ accessToken, user, shareCapitalAmount = 0, stats = {}, 
             </div>
           ) : step === "initial" ? (
             <button
-              onClick={() => setStep("confirm")}
+              onClick={() => setStep("details")}
               className="text-xs font-medium text-slate-400 underline decoration-slate-300 underline-offset-2 transition hover:text-slate-600 hover:decoration-slate-500"
             >
               Request membership cancellation
             </button>
-          ) : step === "confirm" ? (
+          ) : step === "details" ? (
             <div className="space-y-5">
-              <div className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
-                <h5 className="font-semibold text-slate-950 dark:text-white">Completed opt-out form</h5>
-                <p className="mt-1 text-sm text-slate-500 dark:text-slate-300">Download, complete and upload the membership exit form.</p>
-                <div className="mt-4 flex flex-wrap items-center gap-3">
-                  <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 dark:border-slate-600 dark:bg-slate-800 dark:text-white"><Download size={16} />Download form</button>
-                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 dark:border-slate-600 dark:bg-slate-800 dark:text-white"><FileText size={16} />Upload completed form<input type="file" accept=".pdf,.doc,.docx,image/*" className="sr-only" /></label>
+              {msg && <div className={`rounded-lg border px-4 py-3 text-sm font-medium ${msg.type==="success"?"border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200":"border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-200"}`}>{msg.text}</div>}
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-rose-700 dark:text-rose-200">Step 1</p>
+                <h5 className="text-base font-semibold text-slate-950 dark:text-white">Exit details & share capital transfer</h5>
+              </div>
+              <div className="grid gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950 md:grid-cols-3">
+                <span><strong>Refund amount:</strong> {formatCurrency(refundAmount)}</span>
+                <span><strong>SACCO fee:</strong> {formatCurrency(saccoAdminFee)}</span>
+                <span><strong>Transferable share capital:</strong> {formatCurrency(transferableShareCapital)}</span>
+                <span className="md:col-span-3 text-xs text-emerald-800">Refund = total savings + dividends / interest</span>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="block text-sm font-semibold text-rose-900 dark:text-rose-200">Reason for leaving<textarea value={form.reason} onChange={e=>setForm(f=>({...f,reason:e.target.value}))} rows={4} className="mt-1 w-full rounded-lg border border-rose-200 px-3.5 py-3 text-sm dark:border-rose-800" placeholder="Explain why you wish to leave the SACCO..." required /></label>
+                <div className="rounded-lg border border-rose-200 bg-white p-4 dark:border-rose-800 dark:bg-slate-900">
+                  <p className="text-sm font-semibold text-rose-900 dark:text-rose-200">Transfer of Share Capital / Recipient Information <span className="font-normal text-slate-400">(optional)</span></p>
+                  <div className="relative mt-3 grid gap-3">
+                    <input value={form.transferRecipientName} onChange={e=>{setSelectedTransferee(null);setForm(f=>({...f,transferRecipientName:e.target.value}))}} className="w-full rounded-lg border border-rose-200 px-3.5 py-3 text-sm dark:border-rose-800" placeholder="Recipient full name" />
+                    <input value={form.transferRecipientMemberNumber} onChange={e=>{setSelectedTransferee(null);setForm(f=>({...f,transferRecipientMemberNumber:e.target.value}))}} className="w-full rounded-lg border border-rose-200 px-3.5 py-3 text-sm dark:border-rose-800" placeholder="Recipient member ID" />
+                    <input value={form.transferRecipientPhone} onChange={e=>setForm(f=>({...f,transferRecipientPhone:e.target.value}))} className="w-full rounded-lg border border-rose-200 px-3.5 py-3 text-sm dark:border-rose-800" placeholder="Recipient phone number" />
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Amount of share capital to be sold<input type="number" min="1" max={exitShareCapital || undefined} step="0.01" value={form.transferAmount} onChange={e=>setForm(f=>({...f,transferAmount:e.target.value}))} className="mt-1 w-full rounded-lg border border-rose-200 px-3.5 py-3 text-sm normal-case tracking-normal text-slate-900 dark:border-rose-800" placeholder={`Max ${formatCurrency(exitShareCapital)}`} /></label>
+                    {lookupStatus ? <p className="text-xs font-medium text-slate-500">{lookupStatus}</p> : null}
+                    {transfereeMatches.length ? (
+                      <div className="rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                        {transfereeMatches.map((member) => (
+                          <button key={member.memberId} type="button" onClick={() => applyTransferee(member)} className="flex w-full items-center justify-between gap-3 border-b border-slate-100 px-3 py-2 text-left text-sm last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800">
+                            <span><strong>{member.fullName}</strong><span className="block text-xs text-slate-500">{member.memberNumber} • {member.phone || "No phone"}</span></span>
+                            <span className="text-xs text-slate-500">{formatCurrency(member.shareCapital)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                    {selectedTransferee ? (
+                      <div className="grid gap-2 rounded-lg bg-emerald-50 p-3 text-xs text-emerald-900 md:grid-cols-3">
+                        <span><strong>Recipient shares:</strong> {formatCurrency(selectedTransferee.shareCapital)}</span>
+                        <span><strong>Savings:</strong> {formatCurrency(selectedTransferee.savings)}</span>
+                        <span><strong>Loan:</strong> {formatCurrency(selectedTransferee.loanBalance)}</span>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               </div>
-              <ShareCapitalTransfer stats={stats} accessToken={accessToken} onRefresh={onRefresh} />
+              <div className="flex flex-wrap items-center gap-3">
+                <button type="button" onClick={() => advanceToFinal(false)} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"><CheckCircle2 size={16} />Confirm Transfer</button>
+                <button type="button" onClick={() => advanceToFinal(true)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-white"><ArrowRight size={16} />Skip Now</button>
+                <button type="button" onClick={()=>{setStep("initial");setMsg(null);}} className="text-sm font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">Cancel</button>
+              </div>
+            </div>
+          ) : step === "final" ? (
+            <div className="space-y-5">
+              {msg && <div className={`rounded-lg border px-4 py-3 text-sm font-medium ${msg.type==="success"?"border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200":"border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-200"}`}>{msg.text}</div>}
+              <div className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
+                <p className="text-xs font-bold uppercase tracking-widest text-rose-700 dark:text-rose-200">Step 2</p>
+                <h5 className="font-semibold text-slate-950 dark:text-white">Completed opt-out form</h5>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-300">Download the prefilled form, sign it, then upload the signed copy before final confirmation.</p>
+                <div className="mt-4 grid gap-2 rounded-lg bg-slate-50 p-4 text-sm text-slate-700 dark:bg-slate-800 dark:text-slate-200 md:grid-cols-3">
+                  <span><strong>Member:</strong> {memberNumber}</span>
+                  <span><strong>Share capital:</strong> {formatCurrency(exitShareCapital)}</span>
+                  <span><strong>Savings:</strong> {formatCurrency(exitSavings)}</span>
+                  <span><strong>Loan:</strong> {formatCurrency(exitLoans)}</span>
+                  <span><strong>Refund:</strong> {formatCurrency(refundAmount)}</span>
+                  <span><strong>Transferable shares:</strong> {formatCurrency(transferableShareCapital)}</span>
+                  <span className="md:col-span-3"><strong>Reason:</strong> {form.reason}</span>
+                  <span className="md:col-span-3"><strong>Transfer:</strong> {transferSummary || "Skipped for now"}</span>
+                </div>
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <button type="button" onClick={downloadOptOutForm} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 dark:border-slate-600 dark:bg-slate-800 dark:text-white"><Download size={16} />Download PDF</button>
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 dark:border-slate-600 dark:bg-slate-800 dark:text-white"><FileText size={16} />Upload signed form<input type="file" accept=".pdf,.doc,.docx,image/*" onChange={(e)=>handleSignedForm(e.target.files?.[0])} className="sr-only" /></label>
+                  {signedForm?.name ? <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">{signedForm.name}</span> : null}
+                </div>
+              </div>
               <form onSubmit={handleOptOut} className="space-y-4">
-                {msg && <div className={`rounded-lg border px-4 py-3 text-sm font-medium ${msg.type==="success"?"border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200":"border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-200"}`}>{msg.text}</div>}
-                <label className="block text-sm font-semibold text-rose-900 dark:text-rose-200">Reason for leaving<textarea value={form.reason} onChange={e=>setForm(f=>({...f,reason:e.target.value}))} rows={3} className="mt-1 w-full rounded-lg border border-rose-200 px-3.5 py-3 text-sm dark:border-rose-800" placeholder="Explain why you wish to leave the SACCO..."/></label>
                 <label className="block text-sm font-semibold text-rose-900 dark:text-rose-200">Type CONFIRM to proceed<input value={form.confirm} onChange={e=>setForm(f=>({...f,confirm:e.target.value}))} className="mt-1 w-full rounded-lg border border-rose-200 px-3.5 py-3 text-sm dark:border-rose-800" placeholder='Type "CONFIRM" to verify'/></label>
                 <div className="flex flex-wrap items-center gap-3">
                   <button type="submit" disabled={saving} className="inline-flex min-h-12 items-center gap-2 rounded-lg bg-red-600 px-5 py-3 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60">
                     {saving?<RefreshCw className="animate-spin" size={17}/>:<LogOut size={17}/>}
                     {saving?"Submitting...":"Confirm opt-out"}
                   </button>
-                  <button type="button" onClick={()=>{setStep("initial");setMsg(null);}} className="text-sm font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">Cancel</button>
+                  <button type="button" onClick={()=>{setStep("details");setMsg(null);}} className="text-sm font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">Back</button>
                 </div>
               </form>
             </div>
           ) : null}
         </div>
       </div>
-
-      {/* PHASE 2.1: Share Capital Transfer Modal after opt-out */}
-      {step === "shareCapitalModal" ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-              <div className="flex items-center gap-3">
-                <div className="grid h-10 w-10 place-items-center rounded-lg bg-sky-100">
-                  <Send size={20} className="text-sky-600" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-950">Transfer Share Capital</h3>
-                  <p className="text-sm text-slate-500">Transfer 100% of your share capital to an active member.</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setStep("success")}
-                className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-              >
-                <span className="text-lg leading-none">&times;</span>
-              </button>
-            </div>
-
-            <div className="px-6 py-5">
-              <p className="mb-4 rounded-lg bg-sky-50 px-4 py-3 text-sm text-sky-800">
-                Your opt-out request has been submitted. Select the member who will receive your full share capital of <strong>{formatCurrency(optOutResult?.shareCapitalAmount || 0)}</strong>. A 5% SACCO fee will be deducted.
-              </p>
-              <TransferShareCapitalForm
-                accessToken={accessToken}
-                shareCapitalAmount={optOutResult?.shareCapitalAmount || 0}
-                optOut
-                onComplete={() => setStep("success")}
-                onCancel={() => setStep("success")}
-              />
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       {step === "success" ? (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-6">

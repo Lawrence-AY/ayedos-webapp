@@ -26,13 +26,22 @@ export function isMemberOnboardingComplete(user) {
   ) return true;
 
   const member = user.Member || user.member || {};
-  return Boolean(
+  const activeVerifiedMember = Boolean(
     member.memberNumber &&
       member.isVerified &&
       String(member.status || 'ACTIVE').toUpperCase() === 'ACTIVE' &&
       user.consentGiven &&
       (user.nationalId || member.nationalId) &&
-      (user.phone || user.phoneNumber) &&
+      (user.phone || user.phoneNumber)
+  );
+  if (
+    activeVerifiedMember &&
+    (user.isWhitelisted || String(user.employer || user.company || '').toLowerCase() === 'ayedos')
+  ) {
+    return true;
+  }
+  return Boolean(
+    activeVerifiedMember &&
       (user.address || user.county || user.subCounty)
   );
 }

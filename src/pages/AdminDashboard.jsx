@@ -1,5 +1,6 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
+import * as XLSX from "xlsx";
 import {
   AlertTriangle,
   BadgeCheck,
@@ -81,6 +82,26 @@ import MemberFinancialProfile from "../components/staff-dashboard/MemberFinancia
 import OptOutRequestsPage from "../components/staff-dashboard/OptOutRequestsPage.jsx";
 import SentNotificationsPanel from "../components/staff-dashboard/SentNotificationsPanel.jsx";
 import { applyLoanPaymentEvent, useDashboardEvents } from "../features/realtime/dashboardEvents.js";
+
+const csvEscape = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+
+function workbookRowsToCsv(workbook) {
+  const rows = [];
+  workbook.SheetNames.forEach((sheetName) => {
+    const sheet = workbook.Sheets[sheetName];
+    const records = XLSX.utils.sheet_to_json(sheet, { defval: "", raw: false });
+    records.forEach((record) => rows.push({ Sheet: sheetName, ...record }));
+  });
+  if (!rows.length) return "";
+  const headers = [...rows.reduce((set, row) => {
+    Object.keys(row).forEach((key) => set.add(key));
+    return set;
+  }, new Set(["Sheet"]))];
+  return [
+    headers.map(csvEscape).join(","),
+    ...rows.map((row) => headers.map((header) => csvEscape(row[header])).join(",")),
+  ].join("\n");
+}
 
 function filterRows(rows, search, keys) {
   const term = search.trim().toLowerCase();
@@ -812,6 +833,7 @@ function MemberRegistryTable({ regTab, data, search, onSelectMember }) {
 
 function AdminBulkMemberImport({ accessToken, onImported }) {
   const [csv, setCsv] = useState("");
+  const [fileInfo, setFileInfo] = useState(null);
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(null);
@@ -819,10 +841,24 @@ function AdminBulkMemberImport({ accessToken, onImported }) {
   async function handleFile(event) {
     const file = event.target.files?.[0];
     if (!file) return;
-    const text = await file.text();
-    setCsv(text);
-    setPreview(null);
-    setMessage(null);
+    try {
+      const extension = file.name.split(".").pop()?.toLowerCase();
+      const text = extension === "xls" || extension === "xlsx"
+        ? workbookRowsToCsv(XLSX.read(await file.arrayBuffer(), { type: "array" }))
+        : await file.text();
+      if (!text.trim()) throw new Error("The selected file is empty or has no tabular rows.");
+      setCsv(text);
+      setFileInfo({ name: file.name, size: file.size, rows: text.split(/\r\n|\r|\n/).filter(Boolean).length });
+      setPreview(null);
+      setMessage(null);
+    } catch (error) {
+      setCsv("");
+      setFileInfo(null);
+      setPreview(null);
+      setMessage({ type: "error", text: error?.message || "Unable to read import file." });
+    } finally {
+      event.target.value = "";
+    }
   }
 
   async function previewImport() {
@@ -845,6 +881,7 @@ function AdminBulkMemberImport({ accessToken, onImported }) {
       setMessage({ type: "success", text: `Imported ${result.imported?.length || 0} member${result.imported?.length === 1 ? "" : "s"}.` });
       setPreview(null);
       setCsv("");
+      setFileInfo(null);
       await onImported?.();
     } catch (error) {
       setMessage({ type: "error", text: error?.message || "Import failed." });
@@ -858,13 +895,15 @@ function AdminBulkMemberImport({ accessToken, onImported }) {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h3 className="text-base font-semibold text-slate-950">Bulk Ayedos member onboarding</h3>
-          <p className="text-sm text-slate-500">CSV columns: name, email, phone, nationalId, memberNumber, staffId, status. Imported members are tagged Ayedos and whitelisted.</p>
+          <p className="text-sm text-slate-500">Bulk-register new members, create default-login accounts, and initialize baseline savings and share capital.</p>
+          <p className="text-xs text-slate-500">CSV columns: Staff ID, Email, Member ID, Share Capital, Savings, Join Date, Status, National ID, Name, Phone Number.</p>
+          {fileInfo ? <p className="mt-1 text-xs font-semibold text-emerald-700">Loaded {fileInfo.name} ({fileInfo.rows} row{fileInfo.rows === 1 ? "" : "s"}, {fileInfo.size.toLocaleString()} bytes)</p> : null}
         </div>
         <div className="flex flex-wrap gap-2">
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold">
             <FileText size={14} />
             Choose CSV
-            <input type="file" accept=".csv,text/csv" className="sr-only" onChange={handleFile} />
+            <input type="file" accept=".csv,text/csv,.xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="sr-only" onChange={handleFile} />
           </label>
           <button disabled={!csv || busy} onClick={previewImport} className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Working..." : "Preview"}</button>
           <button disabled={!preview?.readyCount || busy} onClick={commitImport} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Import ready rows</button>
@@ -875,17 +914,21 @@ function AdminBulkMemberImport({ accessToken, onImported }) {
         <div className="mt-4 overflow-x-auto rounded-lg border">
           <div className="border-b bg-slate-50 px-4 py-2 text-sm font-semibold">{preview.readyCount} ready, {preview.errorCount} need fixes</div>
           <table className="min-w-full">
-            <thead><tr className="bg-slate-50">{["Row", "Name", "Email", "Phone", "National ID", "Member No.", "Staff ID", "Readiness"].map((h) => <th key={h} className="px-3 py-2 text-left text-xs uppercase text-slate-500">{h}</th>)}</tr></thead>
+            <thead><tr className="bg-slate-50">{["Row", "Staff ID", "Email", "Member ID", "Share Capital", "Savings", "Join Date", "Status", "National ID", "Name", "Phone Number", "Readiness"].map((h) => <th key={h} className="px-3 py-2 text-left text-xs uppercase text-slate-500">{h}</th>)}</tr></thead>
             <tbody className="divide-y">
               {preview.rows.map((row) => (
                 <tr key={row.rowNumber}>
                   <td className="px-3 py-2 text-sm">{row.rowNumber}</td>
-                  <td className="px-3 py-2 text-sm">{row.data.fullName || "-"}</td>
-                  <td className="px-3 py-2 text-sm">{row.data.email || "-"}</td>
-                  <td className="px-3 py-2 text-sm">{row.data.phone || "-"}</td>
-                  <td className="px-3 py-2 text-sm">{row.data.nationalId || "-"}</td>
-                  <td className="px-3 py-2 text-sm">{row.data.memberNumber || "Auto"}</td>
                   <td className="px-3 py-2 text-sm">{row.data.staffId || "-"}</td>
+                  <td className="px-3 py-2 text-sm">{row.data.email || "-"}</td>
+                  <td className="px-3 py-2 text-sm">{row.data.memberNumber || "Auto"}</td>
+                  <td className="px-3 py-2 text-sm">{row.data.shareCapital || 0}</td>
+                  <td className="px-3 py-2 text-sm">{row.data.savings || 0}</td>
+                  <td className="px-3 py-2 text-sm">{row.data.joinDate || "-"}</td>
+                  <td className="px-3 py-2 text-sm">{row.data.status || "-"}</td>
+                  <td className="px-3 py-2 text-sm">{row.data.nationalId || "-"}</td>
+                  <td className="px-3 py-2 text-sm">{row.data.fullName || "-"}</td>
+                  <td className="px-3 py-2 text-sm">{row.data.phone || "-"}</td>
                   <td className="px-3 py-2 text-sm"><StatusBadge status={row.ready ? "Ready" : `Missing ${row.missing.join(", ")}`} /></td>
                 </tr>
               ))}

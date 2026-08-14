@@ -2889,7 +2889,8 @@ function FinanceFinancialCsvImport({ accessToken, onImported }) {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h3 className="text-base font-semibold text-slate-950">Bulk financial records import</h3>
-          <p className="text-sm text-slate-500">Supports CSV, XLS, and XLSX files. Multi-sheet workbooks are imported sheet by sheet and mapped by memberNumber, email, or staffId.</p>
+          <p className="text-sm text-slate-500">Post periodic financial transactions, payroll deductions, and employer contributions to existing member accounts.</p>
+          <p className="text-xs text-slate-500">Supports CSV, XLS, and XLSX files. Multi-sheet workbooks are imported sheet by sheet and mapped by memberNumber, email, or staffId.</p>
           {fileName ? <p className="mt-1 text-xs font-semibold text-emerald-700">{fileName}</p> : null}
         </div>
         <div className="flex flex-wrap gap-2">
