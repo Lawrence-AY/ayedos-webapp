@@ -1,7 +1,7 @@
 import { Navigate, useLocation } from 'react-router-dom'
 import { useContext } from 'react'
 import { AuthContext } from '../context/AuthContext.jsx'
-import { isMemberOnboardingComplete } from '../utils/dashboardRoutes.js'
+import { getDashboardPath, isMemberOnboardingComplete } from '../utils/dashboardRoutes.js'
 
 export default function ProtectedRoute({ element, allowedRoles }) {
   const { user, accessToken, isLoading } = useContext(AuthContext)
@@ -43,6 +43,13 @@ export default function ProtectedRoute({ element, allowedRoles }) {
 
   if (allowedRoles?.length && !allowedRoles.includes(user.role)) {
     return <Navigate to="/dashboard" replace />
+  }
+
+  if (
+    user.mustChangePassword &&
+    location.pathname !== getDashboardPath(user.role, 'security')
+  ) {
+    return <Navigate to={getDashboardPath(user.role, 'security')} replace state={{ forcePasswordChange: true }} />
   }
 
   if (

@@ -1,5 +1,5 @@
 import { useContext, useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext.jsx";
 import Sidebar from "../components/layout/Sidebar.jsx";
 import TopNavbar from "../components/layout/TopNavbar.jsx";
@@ -42,7 +42,8 @@ const loanOutstandingBalance = (loan) => {
 
 export default function UserDashboard() {
   const location = useLocation();
-  const { user, accessToken, updateCurrentUser } = useContext(AuthContext);
+  const navigate = useNavigate();
+  const { user, accessToken, loadCurrentUser, updateCurrentUser } = useContext(AuthContext);
   const dashboardBasePath = getDashboardPath("MEMBER");
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -87,6 +88,10 @@ export default function UserDashboard() {
 
   async function loadDashboardData({ showLoading = true } = {}) {
       if (!accessToken) {
+        setLoading(false);
+        return;
+      }
+      if (user?.mustChangePassword) {
         setLoading(false);
         return;
       }
@@ -143,7 +148,7 @@ export default function UserDashboard() {
       if (intervalId) window.clearInterval(intervalId);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken]);
+  }, [accessToken, user?.mustChangePassword]);
 
   useEffect(() => {
     const query = search.trim();
@@ -291,6 +296,22 @@ export default function UserDashboard() {
           activeSessions={data.activeSessions}
           loginHistory={data.loginHistory}
           onRefresh={() => loadDashboardData({ showLoading: false })}
+          onPasswordChanged={(notification) => {
+            updateCurrentUser?.({
+              ...user,
+              mustChangePassword: false,
+              onboardingComplete: true,
+              onboardingCompleted: true,
+              onboardingStatus: true,
+            });
+            if (notification) {
+              setData((current) => ({
+                ...current,
+                notifications: [notification, ...current.notifications],
+              }));
+            }
+            navigate(getDashboardPath("MEMBER"), { replace: true });
+          }}
         />
       );
     }
@@ -302,7 +323,7 @@ export default function UserDashboard() {
           accessToken={accessToken}
           onProfileUpdated={(updatedUser) => {
             updateCurrentUser?.(updatedUser);
-            return updatedUser;
+            return loadCurrentUser?.(accessToken, { force: true }) || updatedUser;
           }}
           onRefresh={() => loadDashboardData({ showLoading: false })}
         />
@@ -339,7 +360,7 @@ export default function UserDashboard() {
       return <PortfolioPage stats={stats} transactions={data.transactions} shares={data.shares} search={search} user={user} showValues={showValues} onToggleValues={() => setShowValues((current) => !current)} />;
     }
     if (path.includes("/reports")) {
-      return <ReportsPage accessToken={accessToken} data={{ transactions: data.transactions, loans: data.loans, shares: data.shares, stats }} />;
+      return <ReportsPage accessToken={accessToken} data={{ transactions: data.transactions, loans: data.loans, shares: data.shares, stats, user }} />;
     }
     if (path.includes("/groups")) {
       return <GroupsPage user={user} accessToken={accessToken} stats={stats} onRefresh={() => loadDashboardData({ showLoading: false })} />;
