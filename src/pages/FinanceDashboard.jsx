@@ -51,6 +51,8 @@ import {
   getAllTransactions,
   getFinanceNotifications,
   getFinancialReports,
+  getGroupBorrowingOverview,
+  dismantleBorrowingGroup,
   getMemberFinancialProfile,
   markAllFinanceNotificationsRead,
   markFinanceNotificationRead,
@@ -75,6 +77,7 @@ import {
   formatDate,
 } from "../components/dashboard/EnterpriseDashboard.jsx";
 import { findMemberByNumber } from "../features/search/searchService.js";
+import GroupBorrowingOverview from "../components/staff-dashboard/GroupBorrowingOverview.jsx";
 import { applyLoanPaymentEvent, useDashboardEvents } from "../features/realtime/dashboardEvents.js";
 
 function filterRows(rows, search, keys) {
@@ -355,6 +358,7 @@ export default function FinanceDashboard() {
     members: [],
     companies: [],
     reports: {},
+    groupBorrowing: { items: [], summary: {} },
   });
 
   const loadAllData = useCallback(async ({ showLoading = true } = {}) => {
@@ -373,6 +377,7 @@ export default function FinanceDashboard() {
       getAllCompanies(accessToken),
       getFinancialReports(accessToken),
       getFinanceNotifications(accessToken, { limit: 100 }),
+      getGroupBorrowingOverview(accessToken),
     ]);
     setData({
       transactions:
@@ -404,6 +409,7 @@ export default function FinanceDashboard() {
           ? results[6].value
           : [],
       reports: results[7].status === "fulfilled" ? results[7].value : {},
+      groupBorrowing: results[9].status === "fulfilled" ? results[9].value : { items: [], summary: {} },
     });
     if (results[8].status === "fulfilled" && Array.isArray(results[8].value)) {
       setNotifications(results[8].value.map(normalizeNotification));
@@ -522,6 +528,17 @@ export default function FinanceDashboard() {
       }
     }
   }
+  async function handleDismantleGroup(group) {
+    const confirmed = window.confirm(`Dismantle ${group.name}? Members will be removed, pending proposals will be cancelled, and every member will be notified. This cannot be undone.`)
+    if (!confirmed) return
+    try {
+      const result = await dismantleBorrowingGroup(group.id, accessToken)
+      toast.success(`Group dismantled. ${result.notifiedMembers || 0} member(s) notified.`)
+      await loadAllData({ showLoading: false })
+    } catch (error) {
+      toast.error(error?.message || 'Failed to dismantle group', { duration: 8000 })
+    }
+  }
 
   function renderContent() {
     if (loading) return <SkeletonDashboard />;
@@ -538,6 +555,7 @@ export default function FinanceDashboard() {
         );
       case "loans":
         return (
+          <div className="space-y-6">
           <UnifiedLoansPage
             loans={data.loans}
             onApproveLoan={handleApproveLoan}
@@ -549,6 +567,8 @@ export default function FinanceDashboard() {
             globalSearch={globalSearch}
             currentUser={user}
           />
+          <GroupBorrowingOverview data={data.groupBorrowing} onRefresh={() => loadAllData({ showLoading: false })} onDismantle={handleDismantleGroup} title="Group Borrowing Overview" />
+          </div>
         );
       case "liquidity":
         return <WalletLiquidityPage data={data} />;
