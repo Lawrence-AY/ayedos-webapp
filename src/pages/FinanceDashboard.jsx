@@ -602,7 +602,7 @@ export default function FinanceDashboard() {
           />
         );
       case "dividends":
-        return <DividendsPage dividends={data.dividends} />;
+        return <DividendsPage dividends={data.dividends} accessToken={accessToken} onRefresh={() => loadAllData({ showLoading: false })} />;
       case "reports":
         return <FinancialReportsPage data={data} currentUser={user} />;
       case "settings":
@@ -2870,7 +2870,7 @@ function workbookRowsToCsv(workbook) {
   ].join("\n");
 }
 
-function FinanceFinancialCsvImport({ accessToken, onImported }) {
+function FinanceFinancialCsvImport({ accessToken, onImported, mode = "financial" }) {
   const [csv, setCsv] = useState("");
   const [fileName, setFileName] = useState("");
   const [preview, setPreview] = useState(null);
@@ -2913,7 +2913,11 @@ function FinanceFinancialCsvImport({ accessToken, onImported }) {
     setBusy(true);
     try {
       const result = await commitFinancialCsvImport(csv, accessToken);
-      toast.success(`Imported ${result.imported?.length || 0} financial record${result.imported?.length === 1 ? "" : "s"} and published ${result.dividends?.imported?.length || 0} dividend allocation${result.dividends?.imported?.length === 1 ? "" : "s"}.`);
+      if (mode === "dividends") {
+        toast.success(`Published ${result.dividends?.imported?.length || 0} dividend allocation${result.dividends?.imported?.length === 1 ? "" : "s"}.`);
+      } else {
+        toast.success(`Imported ${result.imported?.length || 0} financial record${result.imported?.length === 1 ? "" : "s"} and published ${result.dividends?.imported?.length || 0} dividend allocation${result.dividends?.imported?.length === 1 ? "" : "s"}.`);
+      }
       setCsv("");
       setFileName("");
       setPreview(null);
@@ -2929,19 +2933,19 @@ function FinanceFinancialCsvImport({ accessToken, onImported }) {
     <div className="rounded-lg border bg-white p-5">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h3 className="text-base font-semibold text-slate-950">Bulk financial records import</h3>
-          <p className="text-sm text-slate-500">Post periodic financial transactions, payroll deductions, employer contributions, and annual member dividend allocations.</p>
+          <h3 className="text-base font-semibold text-slate-950">{mode === "dividends" ? "Annual dividend CSV import" : "Bulk financial records import"}</h3>
+          <p className="text-sm text-slate-500">{mode === "dividends" ? "Upload, preview, and publish the post-financial year dividend allocation file to member portfolios." : "Post periodic financial transactions, payroll deductions, employer contributions, and annual member dividend allocations."}</p>
           <p className="text-xs text-slate-500">Supports CSV, XLS, and XLSX files. Multi-sheet workbooks are imported sheet by sheet; Dividends sheets or dividend columns are published to member portfolios.</p>
           {fileName ? <p className="mt-1 text-xs font-semibold text-emerald-700">{fileName}</p> : null}
         </div>
         <div className="flex flex-wrap gap-2">
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold">
             <FileText size={14} />
-            Choose file
+            {mode === "dividends" ? "Choose dividend CSV" : "Choose file"}
             <input type="file" accept=".csv,text/csv,.xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="sr-only" onChange={handleFile} />
           </label>
           <button disabled={!csv || busy} onClick={previewImport} className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Working..." : "Preview"}</button>
-          <button disabled={!preview?.readyCount || busy} onClick={commitImport} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Import ready rows</button>
+          <button disabled={!preview?.readyCount || busy} onClick={commitImport} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{mode === "dividends" ? "Publish dividends" : "Import ready rows"}</button>
         </div>
       </div>
       {preview ? (
@@ -3329,7 +3333,7 @@ function FinancialReportsPage({ data, currentUser }) {
 // ============================================================
 // DIVIDENDS
 // ============================================================
-function DividendsPage({ dividends }) {
+function DividendsPage({ dividends, accessToken, onRefresh }) {
   const totalPublished = dividends.reduce((sum, dividend) => sum + Number(dividend.amount || dividend.totalDistributed || 0), 0);
   return (
     <div className="space-y-6">
@@ -3338,6 +3342,7 @@ function DividendsPage({ dividends }) {
         title="Historical distributions"
         description="Yearly dividend tracking."
       />
+      <FinanceFinancialCsvImport accessToken={accessToken} onImported={onRefresh} mode="dividends" />
       <div className="grid gap-4 md:grid-cols-3">
         <KpiCard label="Published allocations" value={dividends.length} icon={PieChart} tone="emerald" />
         <KpiCard label="Total dividends" value={formatCurrency(totalPublished)} icon={Banknote} tone="emerald" />
