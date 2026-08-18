@@ -13,22 +13,31 @@ const date = (value) => {
 const badge = (status) => ({ ACTIVE: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200', INVITED: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200', PENDING: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200', REPAID: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200' }[status] || 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200')
 
 export default function GroupsPage({ accessToken, onRefresh }) {
-  const [data, setData] = useState({ eligibility: null, groups: [] })
+  const cached = groupsMemoryCache.get(accessToken)
+  const [data, setData] = useState(cached || { eligibility: null, groups: [] })
   const [selectedId, setSelectedId] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!cached)
+  const [detailLoading, setDetailLoading] = useState(false)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState(null)
   const [showCreate, setShowCreate] = useState(false)
   const [createForm, setCreateForm] = useState({ name: '', description: '' })
+  const loadInFlight = useRef(false)
 
   async function load() {
-    try { setData(await getGroups(accessToken) || { eligibility: null, groups: [] }) }
+    if (!accessToken || loadInFlight.current) return
+    loadInFlight.current = true
+    try {
+      const next = await getGroups(accessToken) || { eligibility: null, groups: [] }
+      groupsMemoryCache.set(accessToken, next)
+      setData((current) => ({ ...next, groups: next.groups.map((group) => ({ ...current.groups.find((item) => item.id === group.id), ...group })) }))
+    }
     catch (error) { setMessage({ type: 'error', text: error.message }) }
-    finally { setLoading(false) }
+    finally { loadInFlight.current = false; setLoading(false) }
   }
   useEffect(() => {
     load()
-    const interval = window.setInterval(load, 15000)
+    const interval = window.setInterval(load, 30000)
     return () => window.clearInterval(interval)
   }, [accessToken])
   const selected = data.groups.find((group) => group.id === selectedId)
@@ -36,11 +45,12 @@ export default function GroupsPage({ accessToken, onRefresh }) {
 
   async function run(action, success) {
     setBusy(true); setMessage(null)
-    try { await action(); setMessage({ type: 'success', text: success }); toast.success(success); await load(); await onRefresh?.() }
+    try { await action(); setMessage({ type: 'success', text: success }); toast.success(success, { duration: 4000 }); window.setTimeout(() => setMessage((current) => current?.text === success ? null : current), 4500); await load(); await onRefresh?.() }
     catch (error) {
       const timedOut = error?.kind === 'timeout' || /timed out|timeout/i.test(String(error?.message || ''))
       const text = timedOut ? 'The request took too long. We refreshed the proposal status—check it before trying again to avoid a duplicate action.' : (error.message || 'The process failed. No second request was sent.')
       setMessage({ type: 'error', text }); toast.error(text, { duration: 8000 })
+      window.setTimeout(() => setMessage((current) => current?.text === text ? null : current), 8500)
       await load()
     }
     finally { setBusy(false) }
@@ -48,6 +58,19 @@ export default function GroupsPage({ accessToken, onRefresh }) {
   async function submitCreate(event) {
     event.preventDefault()
     await run(async () => { const group = await createGroup(createForm, accessToken); setSelectedId(group.id); setShowCreate(false); setCreateForm({ name: '', description: '' }) }, 'Group created successfully.')
+  }
+  async function openGroup(groupId) {
+    setSelectedId(groupId)
+    setDetailLoading(true)
+    try {
+      const details = await getGroup(groupId, accessToken)
+      setData((current) => {
+        const next = { ...current, groups: current.groups.map((group) => group.id === groupId ? details : group) }
+        groupsMemoryCache.set(accessToken, next)
+        return next
+      })
+    } catch (error) { toast.error(error.message || 'Failed to load group details', { duration: 5000 }) }
+    finally { setDetailLoading(false) }
   }
 
   if (loading) return <div className="grid min-h-72 place-items-center"><RefreshCw className="animate-spin text-emerald-600" /></div>
@@ -65,7 +88,7 @@ export default function GroupsPage({ accessToken, onRefresh }) {
 
       {showCreate && <form onSubmit={submitCreate} className="grid gap-4 rounded-xl border bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:grid-cols-2"><div className="sm:col-span-2"><h3 className="font-bold">Create a borrowing group</h3><p className="text-sm text-slate-500 dark:text-slate-300">You will be the only member allowed to add or remove people.</p></div><label className="text-sm font-semibold">Group name<input required minLength={3} value={createForm.name} onChange={(e) => setCreateForm((form) => ({ ...form, name: e.target.value }))} className="mt-1 w-full rounded-lg border px-3 py-2.5" placeholder="e.g. Development Circle" /></label><label className="text-sm font-semibold">Purpose or description<input value={createForm.description} onChange={(e) => setCreateForm((form) => ({ ...form, description: e.target.value }))} className="mt-1 w-full rounded-lg border px-3 py-2.5" placeholder="What will the group borrow for?" /></label><div className="flex gap-2 sm:col-span-2"><button disabled={busy} className="rounded-lg bg-emerald-700 px-4 py-2.5 font-semibold text-white">Create group</button><button type="button" onClick={() => setShowCreate(false)} className="rounded-lg border px-4 py-2.5 font-semibold">Cancel</button></div></form>}
 
-      {selected ? <GroupDetail group={selected} accessToken={accessToken} busy={busy} run={run} onBack={() => setSelectedId(null)} /> : <GroupSummary groups={data.groups} onSelect={setSelectedId} />}
+      {selected ? <><GroupDetail group={selected} accessToken={accessToken} busy={busy} run={run} onBack={() => setSelectedId(null)} />{detailLoading && <div className="fixed bottom-5 right-5 z-50 inline-flex items-center gap-2 rounded-lg bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-xl"><RefreshCw className="animate-spin" size={16} />Loading group history…</div>}</> : <GroupSummary groups={data.groups} onSelect={openGroup} />}
     </div>
   )
 }
@@ -102,6 +125,19 @@ function GroupDetail({ group, accessToken, busy, run, onBack }) {
     voteInFlight.current.add(proposalId)
     try { await run(() => voteGroupLoanProposal(group.id, proposalId, accept, accessToken), accept ? 'Proposal accepted.' : 'Proposal denied.') }
     finally { voteInFlight.current.delete(proposalId) }
+  }
+  async function openGroup(groupId) {
+    setSelectedId(groupId)
+    setDetailLoading(true)
+    try {
+      const details = await getGroup(groupId, accessToken)
+      setData((current) => {
+        const next = { ...current, groups: current.groups.map((group) => group.id === groupId ? details : group) }
+        groupsMemoryCache.set(accessToken, next)
+        return next
+      })
+    } catch (error) { toast.error(error.message || 'Failed to load group details', { duration: 5000 }) }
+    finally { setDetailLoading(false) }
   }
   return <div className="space-y-5"><button onClick={onBack} className="inline-flex items-center gap-2 text-sm font-bold text-slate-600 dark:text-slate-300"><ArrowLeft size={17} />All groups</button>
     <section className="rounded-xl border bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start"><div><div className="flex flex-wrap items-center gap-2"><h3 className="text-xl font-bold">{group.name}</h3>{group.isCreator && <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">Creator</span>}</div><p className="mt-1 text-sm text-slate-500 dark:text-slate-300">{group.description || 'No description provided.'}</p></div>{group.viewerStatus === 'PENDING' ? <div className="flex gap-2"><button disabled={busy} onClick={() => run(() => respondGroupInvitation(group.id, group.viewerMembershipId, true, accessToken), 'Invitation accepted.')} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 font-semibold text-white"><Check size={16} />Accept</button><button disabled={busy} onClick={() => run(() => respondGroupInvitation(group.id, group.viewerMembershipId, false, accessToken), 'Invitation rejected.')} className="inline-flex items-center gap-2 rounded-lg border border-rose-300 px-4 py-2 font-semibold text-rose-700 dark:text-rose-300"><X size={16} />Reject</button></div> : !group.isCreator && <button disabled={busy} onClick={() => run(() => leaveGroup(group.id, accessToken), 'You left the group.')} className="inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-semibold text-rose-700 dark:text-rose-300"><LogOut size={16} />Leave group</button>}</div></section>

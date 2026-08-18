@@ -481,6 +481,8 @@ export default function FinanceDashboard() {
   }
   async function handleApproveLoan(id) {
     if (!id) return null;
+    const confirmed = window.confirm("Approve this loan request? The member will be notified immediately.");
+    if (!confirmed) return null;
     setApprovingLoanId(id);
     try {
       const updated = await approveLoan(id, accessToken);
@@ -489,7 +491,7 @@ export default function FinanceDashboard() {
         loans: current.loans.map((loan) => loan.id === id ? { ...loan, ...updated } : loan),
       }));
       await loadAllData({ showLoading: false });
-      toast.success("Loan approved and disbursed successfully");
+      toast.success("Loan approved. The member has been notified.");
       return updated;
     } catch (e) {
       toast.error(e.message || "Failed to approve loan");
@@ -500,12 +502,13 @@ export default function FinanceDashboard() {
   }
   async function handleRejectLoan(id) {
     const reason = prompt("Reason for rejection:");
-    if (reason) {
+    if (reason?.trim()) {
       try {
-        await rejectLoan(id, reason, accessToken);
+        await rejectLoan(id, reason.trim(), accessToken);
         await loadAllData({ showLoading: false });
+        toast.success("Loan rejected. The member has been notified.");
       } catch (e) {
-        alert(e.message);
+        toast.error(e.message || "Failed to reject loan");
       }
     }
   }

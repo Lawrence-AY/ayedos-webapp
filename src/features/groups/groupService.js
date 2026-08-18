@@ -7,6 +7,7 @@ async function request(path, options, fallback) {
 }
 
 export const getGroups = (accessToken) => request('', { method: 'GET', accessToken }, 'Failed to load groups')
+export const getGroup = (groupId, accessToken) => request(`/${groupId}`, { method: 'GET', accessToken }, 'Failed to load group details')
 export const createGroup = (data, accessToken) => request('', { method: 'POST', accessToken, body: data }, 'Failed to create group')
 export const searchGroupMembers = (q, accessToken) => request(`/member-search?q=${encodeURIComponent(q)}`, { method: 'GET', accessToken }, 'Failed to search members')
 export const inviteGroupMember = (groupId, memberNumber, accessToken) => request(`/${groupId}/invitations`, { method: 'POST', accessToken, body: { memberNumber } }, 'Failed to send invitation')
