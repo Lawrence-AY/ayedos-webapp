@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext.jsx";
 import Sidebar from "../components/layout/Sidebar.jsx";
@@ -51,11 +51,14 @@ export default function UserDashboard() {
   const [search, setSearch] = useState("");
   const [remoteSearch, setRemoteSearch] = useState({ loading: false, error: "", results: null, query: "" });
   const [showValues, setShowValues] = useState(false);
+  const locallyReadNotificationIds = useRef(new Set());
+  const markAllReadAt = useRef(null);
   const [data, setData] = useState({
     transactions: [],
     loans: [],
     shares: [],
     notifications: [],
+    notificationUnreadCount: 0,
     guarantees: [],
     activeSessions: [],
     loginHistory: [],
@@ -63,6 +66,7 @@ export default function UserDashboard() {
 
   const markNotificationReadLocal = (id) => {
     const readAt = new Date().toISOString();
+    locallyReadNotificationIds.current.add(id);
     setData((current) => ({
       ...current,
       notifications: current.notifications.map((notification) => (
@@ -70,11 +74,13 @@ export default function UserDashboard() {
           ? { ...notification, isRead: true, read: true, readAt: notification.readAt || readAt }
           : notification
       )),
+      notificationUnreadCount: current.notifications.filter((notification) => notification.id !== id && !notification.read && !notification.isRead && !notification.readAt).length,
     }));
   };
 
   const markAllNotificationsReadLocal = () => {
     const readAt = new Date().toISOString();
+    markAllReadAt.current = readAt;
     setData((current) => ({
       ...current,
       notifications: current.notifications.map((notification) => ({
@@ -83,6 +89,7 @@ export default function UserDashboard() {
         read: true,
         readAt: notification.readAt || readAt,
       })),
+      notificationUnreadCount: 0,
     }));
   };
 
@@ -107,14 +114,27 @@ export default function UserDashboard() {
       ]);
       const sessions = results[3].status === "fulfilled" && Array.isArray(results[3].value) ? results[3].value : [];
 
-      setData({
+      const fetchedNotifications = results[4].status === "fulfilled" && Array.isArray(results[4].value) ? results[4].value : [];
+      const notifications = fetchedNotifications.map((notification) => {
+        const notificationTime = new Date(notification.createdAt || notification.time || 0).getTime();
+        const markAllTime = markAllReadAt.current ? new Date(markAllReadAt.current).getTime() : 0;
+        const preserveLocalRead = locallyReadNotificationIds.current.has(notification.id)
+          || (markAllTime > 0 && notificationTime > 0 && notificationTime <= markAllTime);
+        return preserveLocalRead && !notification.readAt
+          ? { ...notification, read: true, isRead: true, readAt: markAllReadAt.current || new Date().toISOString() }
+          : notification;
+      });
+      const fetchedUnreadCount = notifications.filter((notification) => !notification.read && !notification.isRead && !notification.readAt).length;
+
+      setData((current) => ({
         transactions: results[0].status === "fulfilled" && Array.isArray(results[0].value)
           ? results[0].value.filter((transaction) => ["SUCCESS", "PAID", "COMPLETED"].includes(String(transaction.status || "").toUpperCase()))
-          : [],
-        loans: results[1].status === "fulfilled" && Array.isArray(results[1].value) ? results[1].value : [],
-        shares: results[2].status === "fulfilled" && Array.isArray(results[2].value) ? results[2].value : [],
-        notifications: results[4].status === "fulfilled" && Array.isArray(results[4].value) ? results[4].value : [],
-        guarantees: results[5].status === "fulfilled" && Array.isArray(results[5].value) ? results[5].value : [],
+          : current.transactions,
+        loans: results[1].status === "fulfilled" && Array.isArray(results[1].value) ? results[1].value : current.loans,
+        shares: results[2].status === "fulfilled" && Array.isArray(results[2].value) ? results[2].value : current.shares,
+        notifications: results[4].status === "fulfilled" ? notifications : current.notifications,
+        notificationUnreadCount: results[4].status === "fulfilled" ? fetchedUnreadCount : current.notificationUnreadCount,
+        guarantees: results[5].status === "fulfilled" && Array.isArray(results[5].value) ? results[5].value : current.guarantees,
         activeSessions: sessions.filter((session) => String(session.status || "").toUpperCase() === "ACTIVE"),
         loginHistory: sessions.map((session) => ({
           date: session.date ? new Date(session.date).toLocaleString() : "-",
@@ -124,7 +144,7 @@ export default function UserDashboard() {
           location: session.location || "",
           status: session.isNewDevice ? "New device" : normalizeStatus(session.status),
         })),
-      });
+      }));
       setLoading(false);
     }
 
@@ -308,6 +328,7 @@ export default function UserDashboard() {
               setData((current) => ({
                 ...current,
                 notifications: [notification, ...current.notifications],
+                notificationUnreadCount: current.notificationUnreadCount + (notification.readAt || notification.isRead || notification.read ? 0 : 1),
               }));
             }
             navigate(getDashboardPath("MEMBER"), { replace: true });
@@ -341,6 +362,7 @@ export default function UserDashboard() {
               try {
                 await markNotificationRead(id, accessToken);
               } catch {
+                locallyReadNotificationIds.current.delete(id);
                 await loadDashboardData({ showLoading: false });
               }
             }}
@@ -349,8 +371,13 @@ export default function UserDashboard() {
               try {
                 await markAllNotificationsRead(accessToken);
               } catch {
+                markAllReadAt.current = null;
                 await loadDashboardData({ showLoading: false });
               }
+            }}
+            onOpenNotice={(notice) => {
+              const target = String(notice?.actionUrl || "");
+              if (target.startsWith(`${dashboardBasePath}/`)) navigate(target);
             }}
           />
         </div>
@@ -396,7 +423,7 @@ export default function UserDashboard() {
             if (window.innerWidth >= 1024) setSidebarCollapsed((current) => !current);
             else setSidebarOpen((current) => !current);
           }}
-          unreadCount={data.notifications.filter((notification) => !notification.read && !notification.isRead && !notification.readAt).length}
+          unreadCount={data.notificationUnreadCount}
           searchValue={search}
           onSearchChange={setSearch}
         />

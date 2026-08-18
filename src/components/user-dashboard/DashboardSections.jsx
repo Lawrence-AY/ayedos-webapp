@@ -520,6 +520,7 @@ function NotificationsPanel({
   pageSize = 10,
   onMarkRead,
   onMarkAllRead,
+  onOpenNotice,
 }) {
   const [activeTab, setActiveTab] = useState("all");
   const [page, setPage] = useState(1);
@@ -632,8 +633,23 @@ function NotificationsPanel({
             return (
               <div
                 key={notice.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  if (!isRead) onMarkRead?.(notice.id);
+                  if (notice.actionUrl && onOpenNotice) onOpenNotice(notice);
+                  else setSelectedNotice(notice);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    if (!isRead) onMarkRead?.(notice.id);
+                    if (notice.actionUrl && onOpenNotice) onOpenNotice(notice);
+                    else setSelectedNotice(notice);
+                  }
+                }}
                 className={`
-                  group flex items-start gap-3 py-3 border-b border-slate-100
+                  group flex cursor-pointer items-start gap-3 py-3 border-b border-slate-100
                   ${!isRead ? "bg-emerald-50/30" : ""}
                   hover:bg-slate-50 transition-colors
                 `}
@@ -666,15 +682,15 @@ function NotificationsPanel({
                     {!isRead && onMarkRead && (
                       <button
                         type="button"
-                        onClick={() => onMarkRead(notice.id)}
+                        onClick={(event) => { event.stopPropagation(); onMarkRead(notice.id); }}
                         className="text-xs font-medium text-emerald-600 hover:text-emerald-700 transition"
                       >
                         Mark read
                       </button>
                     )}
                     {notice.actionUrl && (
-                      <button type="button" onClick={() => { setSelectedNotice(notice); if (!isRead) onMarkRead?.(notice.id); }} className="text-xs font-medium text-slate-500 hover:text-slate-700 transition">
-                        View details →
+                      <button type="button" onClick={(event) => { event.stopPropagation(); if (!isRead) onMarkRead?.(notice.id); if (onOpenNotice) onOpenNotice(notice); else setSelectedNotice(notice); }} className="text-xs font-medium text-slate-500 hover:text-slate-700 transition">
+                        Open →
                       </button>
                     )}
                   </div>
@@ -2175,7 +2191,6 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
   const [confirmation, setConfirmation] = useState(null);
   const [showSchedule, setShowSchedule] = useState(false);
   const [loanValuesVisible, setLoanValuesVisible] = useState(Boolean(showValues));
-  const [calculationTime, setCalculationTime] = useState(() => Date.now());
   const [selectedGuarantors, setSelectedGuarantors] = useState([]);
   const [guarantorQuery, setGuarantorQuery] = useState("");
   const [guarantorResults, setGuarantorResults] = useState([]);
@@ -2189,20 +2204,24 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
   const selectedRepayLoanId = repayLoanId || activeLoans[0]?.id || "";
   const requestedAmount = Math.min(Number(loanForm.amount || 0), selectedProduct.max);
   const requestedDuration = Math.min(Number(loanForm.duration || 1), selectedProduct.duration);
-  const totalInterest = requestedAmount * (selectedProduct.interestRate / 100) * requestedDuration;
-  const monthlyRepayment = requestedDuration ? (requestedAmount + totalInterest) / requestedDuration : 0;
+  const monthlyRate = selectedProduct.interestRate / 100;
+  const monthlyRepayment = requestedDuration ? (monthlyRate === 0 ? requestedAmount / requestedDuration : requestedAmount * monthlyRate / (1 - Math.pow(1 + monthlyRate, -requestedDuration))) : 0;
+  const totalInterest = Math.max(monthlyRepayment * requestedDuration - requestedAmount, 0);
   const selectedRepayLoan = activeLoans.find((loan) => loan.id === selectedRepayLoanId);
   const repayValue = Number(repayAmount || 0);
-  const accrualStart = selectedRepayLoan?.lastInterestAccrualAt || selectedRepayLoan?.approvedAt || selectedRepayLoan?.createdAt;
-  const accruedDays = accrualStart ? Math.max(0, Math.floor((calculationTime - new Date(accrualStart).getTime()) / 86400000)) : 0;
-  const liveAccruedInterest = Number(selectedRepayLoan?.accruedInterest || 0) + Number(selectedRepayLoan?.principalBalance ?? selectedRepayLoan?.principal ?? 0) * (Number(selectedRepayLoan?.interestRate || 0) / 100 / 30) * accruedDays;
-  const outstanding = selectedRepayLoan ? Number((Number(selectedRepayLoan.principalBalance ?? selectedRepayLoan.principal ?? 0) + liveAccruedInterest).toFixed(2)) : 0;
-  const interestPortion = Math.min(repayValue, liveAccruedInterest);
-  const principalPortion = Math.max(Math.min(repayValue - interestPortion, Number(selectedRepayLoan?.principalBalance ?? selectedRepayLoan?.principal ?? 0)), 0);
-  const remainingAfterPayment = Math.max(outstanding - repayValue, 0);
+  const principalBalance = Number(selectedRepayLoan?.principalBalance ?? selectedRepayLoan?.principal ?? 0);
+  const liveAccruedInterest = Number(selectedRepayLoan?.currentAccruedInterest ?? selectedRepayLoan?.accruedInterest ?? 0);
+  const outstanding = selectedRepayLoan ? Number(selectedRepayLoan.outstandingBalance ?? selectedRepayLoan.balance ?? (principalBalance + liveAccruedInterest)) : 0;
+  const maximumWholeShillingPayment = Math.ceil(outstanding);
+  const appliedPayment = Math.min(repayValue, outstanding);
+  const interestPortion = Math.round(Math.min(appliedPayment, liveAccruedInterest) * 100) / 100;
+  const principalPortion = Math.round(Math.max(Math.min(appliedPayment - interestPortion, principalBalance), 0) * 100) / 100;
+  const remainingInterest = Math.round(Math.max(liveAccruedInterest - interestPortion, 0) * 100) / 100;
+  const remainingPrincipal = Math.round(Math.max(principalBalance - principalPortion, 0) * 100) / 100;
+  const remainingAfterPayment = Math.round((remainingPrincipal + remainingInterest) * 100) / 100;
   const scheduledLoans = [...activeLoans].filter((loan) => loan.nextPaymentDueAt).sort((a, b) => new Date(a.nextPaymentDueAt) - new Date(b.nextPaymentDueAt));
   const nextLoan = scheduledLoans[0];
-  const nextAmount = nextLoan ? loanOutstandingBalance(nextLoan) / Math.max(Number(nextLoan.duration || 1), 1) : 0;
+  const nextAmount = nextLoan ? Number(nextLoan.scheduledPaymentAmount || 0) : 0;
   const loanMoney = (value) => loanValuesVisible ? formatCurrency(value) : "KES ****";
 
   const savingsBalance = Number(stats.savings || stats.savingsBalance || 0);
@@ -2228,11 +2247,6 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
     }, 250);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [accessToken, guarantorQuery, requiresGuarantors]);
-
-  useEffect(() => {
-    const timer = setInterval(() => setCalculationTime(Date.now()), 60000);
-    return () => clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     setLoanValuesVisible(Boolean(showValues));
@@ -2270,7 +2284,7 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
 
   async function submitRepayment(event, confirmed = false) {
     event.preventDefault();
-    if (!Number.isInteger(repayValue) || repayValue <= 0 || repayValue > outstanding) { toast.error(!Number.isInteger(repayValue) || repayValue <= 0 ? "Enter a whole-shilling repayment amount greater than zero" : "Payment exceeds the total outstanding loan balance", { duration: 4000 }); return; }
+    if (!Number.isInteger(repayValue) || repayValue <= 0 || repayValue > maximumWholeShillingPayment) { toast.error(!Number.isInteger(repayValue) || repayValue <= 0 ? "Enter a whole-shilling repayment amount greater than zero" : "Payment exceeds the total outstanding loan balance", { duration: 4000 }); return; }
     if (!/^(?:254|0)?7\d{8}$/.test(mpesaPhone.replace(/\s+/g, ""))) { toast.error("Enter a valid M-Pesa phone number", { duration: 4000 }); return; }
     if (!confirmed) {
       setConfirmation({
@@ -2414,17 +2428,17 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
                 {activeLoans.length === 0 ? (<option>No active loans</option>) : activeLoans.map((loan) => (<option key={loan.id} value={loan.id}>{loan.type} - {loanMoney(loanOutstandingBalance(loan))}</option>))}
               </select>
             </label>
-            <Field label="Repayment amount" name="repayAmount" type="number" min="1" max={outstanding} value={repayAmount} onChange={(e) => setRepayAmount(e.target.value)} />
+            <Field label="Repayment amount" name="repayAmount" type="number" min="1" max={maximumWholeShillingPayment} value={repayAmount} onChange={(e) => setRepayAmount(e.target.value)} />
             <Field label="M-Pesa phone number" name="mpesaPhone" type="tel" value={mpesaPhone} onChange={(e) => setMpesaPhone(e.target.value)} placeholder="07XX XXX XXX" />
-            {repayValue > 0 ? <div className="rounded-lg border border-slate-100 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200"><div className="flex justify-between gap-3"><span>Interest portion</span><strong className="text-right">{loanMoney(interestPortion)}</strong></div><div className="mt-2 flex justify-between gap-3"><span>Principal portion</span><strong className="text-right">{loanMoney(principalPortion)}</strong></div><div className="mt-2 flex justify-between gap-3 border-t border-slate-200 pt-2 dark:border-slate-700"><span>Remaining balance</span><strong className="text-right">{loanMoney(remainingAfterPayment)}</strong></div></div> : null}
-            <button disabled={!selectedRepayLoanId || !Number.isInteger(repayValue) || repayValue <= 0 || repayValue > outstanding || !mpesaPhone || busyAction === "repay"} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-800 disabled:opacity-60 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200"><CreditCard size={17} className="shrink-0" />{busyAction === "repay" ? "Waiting for M-Pesa confirmation..." : "Pay Now"}</button>
+            {selectedRepayLoan ? <div className="rounded-lg border border-slate-100 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200"><p className="mb-3 text-xs leading-5 text-slate-500 dark:text-slate-400">Your payment clears interest already added first. The rest reduces the loan amount, so future interest is charged on a smaller balance.</p><div className="flex justify-between gap-3"><span>Loan amount still unpaid</span><strong>{loanMoney(principalBalance)}</strong></div><div className="mt-2 flex justify-between gap-3"><span>Interest added so far</span><strong>{loanMoney(liveAccruedInterest)}</strong></div><div className="mt-2 flex justify-between gap-3"><span>Total you owe today</span><strong>{loanMoney(outstanding)}</strong></div>{repayValue > 0 && <><div className="my-3 border-t border-slate-200 dark:border-slate-700"/><div className="flex justify-between gap-3"><span>This payment clears interest</span><strong>{loanMoney(interestPortion)}</strong></div><div className="mt-2 flex justify-between gap-3"><span>This payment reduces your loan</span><strong>{loanMoney(principalPortion)}</strong></div><div className="mt-2 flex justify-between gap-3"><span>Loan amount left</span><strong>{loanMoney(remainingPrincipal)}</strong></div><div className="mt-2 flex justify-between gap-3"><span>Interest still unpaid</span><strong>{loanMoney(remainingInterest)}</strong></div><div className="mt-2 flex justify-between gap-3 border-t border-slate-200 pt-2 dark:border-slate-700"><span>Total you will still owe</span><strong>{loanMoney(remainingAfterPayment)}</strong></div></>}</div> : null}
+            <button disabled={!selectedRepayLoanId || !Number.isInteger(repayValue) || repayValue <= 0 || repayValue > maximumWholeShillingPayment || !mpesaPhone || busyAction === "repay"} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-800 disabled:opacity-60 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200"><CreditCard size={17} className="shrink-0" />{busyAction === "repay" ? "Waiting for M-Pesa confirmation..." : "Pay Now"}</button>
           </form>
         </Surface>
       </div>
       <LoanCalculator product={selectedProduct} amount={requestedAmount} duration={requestedDuration} totalInterest={totalInterest} monthlyRepayment={monthlyRepayment} />
       <LoansTable loans={rows} showValues={loanValuesVisible} />
       {confirmation ? <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-slate-950/60 p-0 backdrop-blur-sm sm:items-center sm:p-4"><div role="dialog" aria-modal="true" className="max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl sm:max-w-md sm:rounded-2xl sm:p-6 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"><h3 className="text-lg font-semibold">Confirm {confirmation.type === "BORROW" ? "loan application" : "M-Pesa repayment"}</h3><div className="mt-4 space-y-3 rounded-lg border border-slate-100 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-800">{confirmation.type === "REPAY" ? <div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-slate-400">Account</span><strong className="text-right">Your SACCO member number</strong></div> : null}<div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-slate-400">Action</span><strong>{confirmation.type === "BORROW" ? "Borrow" : "Repay"}</strong></div><div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-slate-400">Total amount</span><strong className="text-right">{formatCurrency(confirmation.amount)}</strong></div>{confirmation.type === "REPAY" ? <div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-slate-400">M-Pesa phone</span><strong className="text-right">{confirmation.phone}</strong></div> : <div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-slate-400">Calculated interest</span><strong className="text-right">{formatCurrency(confirmation.charges)}</strong></div>}</div>{confirmation.type === "REPAY" ? <p className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 p-3 text-sm leading-6 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200">An M-Pesa prompt will be sent to your phone {confirmation.phone}Please verify the details and enter your M-Pesa PIN to complete the repayment.</p> : null}<div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><button type="button" onClick={() => setConfirmation(null)} className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 font-semibold dark:border-slate-600 dark:text-slate-200">Cancel</button><button type="button" onClick={(event) => confirmation.type === "BORROW" ? requestLoan(event, true) : submitRepayment(event, true)} className="min-h-11 rounded-lg bg-slate-950 px-4 py-2 font-semibold text-white dark:bg-emerald-700">{confirmation.type === "REPAY" ? "Send PIN Prompt" : "Confirm & Proceed"}</button></div></div></div> : null}
-      {showSchedule ? <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-slate-950/60 p-0 backdrop-blur-sm sm:items-center sm:p-4"><div role="dialog" aria-modal="true" className="max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl sm:max-w-xl sm:rounded-2xl sm:p-6 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"><div className="flex items-start justify-between gap-4"><h3 className="text-lg font-semibold">Active loan repayment schedule</h3><button onClick={() => setShowSchedule(false)} aria-label="Close" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-200 text-xl dark:border-slate-700">×</button></div><div className="mt-4 space-y-3">{scheduledLoans.map((loan) => <div key={loan.id} className="rounded-lg border border-slate-200 p-4 dark:border-slate-700 dark:bg-slate-800/60"><div className="flex flex-col gap-1 font-semibold sm:flex-row sm:justify-between"><span>{loan.type}</span><span>{new Date(loan.nextPaymentDueAt).toLocaleDateString()}</span></div><p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">Due amount: {loanMoney(loanOutstandingBalance(loan) / Math.max(Number(loan.duration || 1), 1))} · Balance: {loanMoney(loanOutstandingBalance(loan))}</p></div>)}</div></div></div> : null}
+      {showSchedule ? <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-slate-950/60 p-0 backdrop-blur-sm sm:items-center sm:p-4"><div role="dialog" aria-modal="true" className="max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl sm:max-w-xl sm:rounded-2xl sm:p-6 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"><div className="flex items-start justify-between gap-4"><h3 className="text-lg font-semibold">Active loan repayment schedule</h3><button onClick={() => setShowSchedule(false)} aria-label="Close" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-200 text-xl dark:border-slate-700">×</button></div><div className="mt-4 space-y-3">{scheduledLoans.map((loan) => <div key={loan.id} className="rounded-lg border border-slate-200 p-4 dark:border-slate-700 dark:bg-slate-800/60"><div className="flex flex-col gap-1 font-semibold sm:flex-row sm:justify-between"><span>{loan.type}</span><span>{new Date(loan.nextPaymentDueAt).toLocaleDateString()}</span></div><p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">Scheduled installment: {loanMoney(loan.scheduledPaymentAmount || 0)} · Principal: {loanMoney(loan.principalBalance)} · Accrued interest: {loanMoney(loan.currentAccruedInterest || 0)} · Balance: {loanMoney(loan.outstandingBalance)}</p></div>)}</div></div></div> : null}
     </div>
   );
 }
@@ -2535,6 +2549,9 @@ function LoansTable({ loans, showValues = true }) {
     const toMatches = !dateTo || (date && date <= new Date(`${dateTo}T23:59:59`));
     return statusMatches && fromMatches && toMatches;
   });
+  const repaymentRecords = filteredLoans
+    .flatMap((loan) => (loan.repayments || []).map((repayment) => ({ ...repayment, loanType: loan.type, loanId: loan.id })))
+    .sort((a, b) => new Date(b.paidAt) - new Date(a.paidAt));
   return (
     <Surface className="overflow-hidden">
       <div className="border-b border-slate-200 p-5">
@@ -2620,6 +2637,33 @@ function LoansTable({ loans, showValues = true }) {
           </table>
         </div>
       )}
+      <div className="border-t border-slate-200">
+        <div className="p-5">
+          <h5 className="text-base font-semibold tracking-normal text-slate-950">Loan repayment records</h5>
+          <p className="mt-1 text-sm text-slate-500">Each completed payment, showing exactly how it was applied and what remained immediately afterward.</p>
+        </div>
+        {repaymentRecords.length === 0 ? (
+          <div className="border-t border-slate-100 px-5 py-8 text-center text-sm text-slate-500">No completed loan repayments recorded yet.</div>
+        ) : (
+          <div className="overflow-x-auto border-t border-slate-100">
+            <table className="min-w-[1100px]">
+              <thead><tr className="bg-slate-50">{["Loan", "Amount paid", "Interest paid", "Loan amount reduced", "Amount remaining", "Duration left", "Payment date and time", "Reference"].map((heading) => <th key={heading} className="px-5 py-3 text-left text-xs font-semibold uppercase text-slate-500">{heading}</th>)}</tr></thead>
+              <tbody className="divide-y divide-slate-100">
+                {repaymentRecords.map((repayment) => <tr key={repayment.id}>
+                  <td className="px-5 py-4 text-sm font-semibold text-slate-900">{repayment.loanType || "Loan"}</td>
+                  <td className="px-5 py-4 text-sm font-semibold text-emerald-700">{loanMoney(repayment.amountPaid)}</td>
+                  <td className="px-5 py-4 text-sm">{loanMoney(repayment.interestPaid)}</td>
+                  <td className="px-5 py-4 text-sm">{loanMoney(repayment.principalPaid)}</td>
+                  <td className="px-5 py-4 text-sm font-semibold">{loanMoney(repayment.remainingAmount)}</td>
+                  <td className="px-5 py-4 text-sm"><span className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-700">{Number(repayment.durationRemaining || 0)} month{Number(repayment.durationRemaining || 0) === 1 ? "" : "s"} left</span></td>
+                  <td className="px-5 py-4 text-sm">{repayment.paidAt ? new Date(repayment.paidAt).toLocaleString("en-KE", { timeZone: "Africa/Nairobi", dateStyle: "medium", timeStyle: "short" }) : "-"} EAT</td>
+                  <td className="px-5 py-4 font-mono text-xs text-slate-600">{repayment.reference || repayment.ledgerTransactionId || "-"}</td>
+                </tr>)}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </Surface>
   );
 }

@@ -62,7 +62,11 @@ export async function getLoanById(id, accessToken) {
 }
 
 export async function approveLoan(id, accessToken) {
-  const res = await apiRequest(`/api/loans/${id}/approve`, { method: 'PATCH', accessToken })
+  const res = await apiRequest(`/api/finance/loans/${id}/approve`, {
+    method: 'POST',
+    accessToken,
+    cache: false,
+  })
   if (!res.ok) throw new Error(res.json?.message || 'Failed to approve loan')
   return unwrapEnvelopeData(res.json)
 }
