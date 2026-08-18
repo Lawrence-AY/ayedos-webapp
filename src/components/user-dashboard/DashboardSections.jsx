@@ -76,6 +76,7 @@ import SavingsContributionForm from "./SavingsContributionForm.jsx";
 import {
   updateMemberProfile,
   requestMemberOptOut,
+  sendMemberOptOutOtp,
   searchOptOutTransferees,
   applyForLoan,
   emailMemberReport,
@@ -1343,15 +1344,13 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
 
   function validate() {
     const nextErrors = {};
-    if (!form.fullName.trim()) nextErrors.fullName = "Full name is required.";
-    if (!/^\S+@\S+\.\S+$/.test(form.email))
+    if (!lockedProfileFields.fullName && !form.fullName.trim()) nextErrors.fullName = "Full name is required.";
+    if (!lockedProfileFields.email && form.email && !/^\S+@\S+\.\S+$/.test(form.email))
       nextErrors.email = "Enter a valid email address.";
-    if (form.phone.replace(/\D/g, "").length < 10)
+    if (!lockedProfileFields.phone && form.phone && form.phone.replace(/\D/g, "").length < 10)
       nextErrors.phone = "Enter a valid phone number.";
-    if (!form.nationalId.trim())
+    if (!lockedProfileFields.nationalId && !form.nationalId.trim())
       nextErrors.nationalId = "National ID is required.";
-    if (nominees.length && Math.abs(nominees.reduce((sum, nominee) => sum + Number(nominee.allocationPercentage || 0), 0) - 100) > 0.001)
-      nextErrors.nominees = "Nominee allocations must total 100%.";
     return nextErrors;
   }
 
@@ -1393,15 +1392,20 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
         employer: form.employer,
       };
       if (changedPassportPhotoUrl) profilePayload.passportPhotoUrl = changedPassportPhotoUrl;
-      const completeNominees = nominees.filter((nominee) => (
+      const nomineeDrafts = nominees.filter((nominee) => (
         nominee.fullName?.trim() ||
         nominee.relationship?.trim() ||
         nominee.phone?.trim() ||
         nominee.nationalId?.trim() ||
         nominee.allocationPercentage
-      ));
-      if (completeNominees.length) profilePayload.nominees = completeNominees;
-      else profilePayload.nominees = [];
+      )).map((nominee) => ({
+        fullName: nominee.fullName || "",
+        relationship: nominee.relationship || "",
+        phone: nominee.phone || "",
+        nationalId: nominee.nationalId || "",
+        allocationPercentage: nominee.allocationPercentage === "" || nominee.allocationPercentage === undefined ? "" : Number(nominee.allocationPercentage),
+      }));
+      profilePayload.nominees = nomineeDrafts;
       if (!lockedProfileFields.fullName) profilePayload.name = form.fullName;
       if (!lockedProfileFields.email) profilePayload.email = form.email;
       if (!lockedProfileFields.phone) profilePayload.phone = form.phone;
@@ -1696,19 +1700,19 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
 
         <Surface className="p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <div><h5 className="font-semibold text-slate-950">Nominees</h5><p className="text-sm text-slate-500">Add up to 3 nominees. Allocations must total 100%.</p></div>
+            <div><h5 className="font-semibold text-slate-950">Nominees</h5><p className="text-sm text-slate-500">Add up to 3 nominees. Drafts and partial allocations can be saved anytime.</p></div>
             <button type="button" disabled={nominees.length >= 3} onClick={() => setNominees((items) => [...items, { fullName: "", relationship: "", phone: "", nationalId: "", allocationPercentage: "" }])} className="rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-40"><Plus size={15} className="mr-1 inline" />Add nominee</button>
           </div>
           <div className="space-y-3">
             {nominees.map((nominee, index) => (
               <div key={index} className="grid gap-3 rounded-lg border bg-slate-50 p-4 md:grid-cols-2">
-                {[['fullName','Full name'],['relationship','Relationship'],['phone','Phone'],['nationalId','National ID']].map(([name,label]) => <label key={name} className="text-sm font-semibold text-slate-700">{label}<input required={name !== 'nationalId'} value={nominee[name] || ''} onChange={(e) => setNominees((items) => items.map((item, i) => i === index ? { ...item, [name]: e.target.value } : item))} className="mt-1 w-full rounded-lg border px-3 py-2" /></label>)}
-                <label className="text-sm font-semibold text-slate-700">Allocation (%)<input required type="number" min="0.01" max="100" step="0.01" value={nominee.allocationPercentage} onChange={(e) => setNominees((items) => items.map((item, i) => i === index ? { ...item, allocationPercentage: e.target.value } : item))} className="mt-1 w-full rounded-lg border px-3 py-2" /></label>
+                {[['fullName','Full name'],['relationship','Relationship'],['phone','Phone'],['nationalId','National ID']].map(([name,label]) => <label key={name} className="text-sm font-semibold text-slate-700">{label}<input value={nominee[name] || ''} onChange={(e) => setNominees((items) => items.map((item, i) => i === index ? { ...item, [name]: e.target.value } : item))} className="mt-1 w-full rounded-lg border px-3 py-2" /></label>)}
+                <label className="text-sm font-semibold text-slate-700">Allocation (%)<input type="number" min="0" max="100" step="0.01" value={nominee.allocationPercentage} onChange={(e) => setNominees((items) => items.map((item, i) => i === index ? { ...item, allocationPercentage: e.target.value } : item))} className="mt-1 w-full rounded-lg border px-3 py-2" /></label>
                 <button type="button" onClick={() => setNominees((items) => items.filter((_, i) => i !== index))} className="self-end justify-self-start text-sm font-semibold text-rose-600">Remove nominee</button>
               </div>
             ))}
           </div>
-          <p className={`mt-3 text-sm font-semibold ${errors.nominees ? 'text-rose-600' : 'text-slate-600'}`}>Allocated: {nominees.reduce((sum, nominee) => sum + Number(nominee.allocationPercentage || 0), 0)}%</p>
+          <p className="mt-3 text-sm font-semibold text-slate-600">Allocated so far: {nominees.reduce((sum, nominee) => sum + Number(nominee.allocationPercentage || 0), 0)}%</p>
         </Surface>
 <div className="flex justify-end">
           <button
@@ -1764,6 +1768,8 @@ function SecuritySection({
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [message, setMessage] = useState(null);
+  const [savingSecurity, setSavingSecurity] = useState(false);
+  const [lastPasswordUpdate, setLastPasswordUpdate] = useState(null);
 
   function updatePassword(event) {
     setPasswordForm((current) => ({
@@ -1774,6 +1780,14 @@ function SecuritySection({
 
   async function handlePasswordSubmit(event) {
     event.preventDefault();
+    setMessage(null);
+    if (!passwordForm.currentPassword.trim()) {
+      setMessage({
+        type: "error",
+        text: "Enter your current password to save changes.",
+      });
+      return;
+    }
     if (passwordForm.newPassword.length < 8) {
       setMessage({
         type: "error",
@@ -1788,6 +1802,7 @@ function SecuritySection({
       });
       return;
     }
+    setSavingSecurity(true);
     try {
       const response = await changePassword(
         {
@@ -1796,7 +1811,15 @@ function SecuritySection({
         },
         accessToken,
       );
-      setMessage({ type: "success", text: response?.message || "Password changed successfully. Full portal access is now enabled." });
+      const successText = response?.message || "Password changed successfully. Full portal access is now enabled.";
+      const updatedAt = new Date();
+      setMessage({ type: "success", text: successText });
+      setLastPasswordUpdate({
+        updatedAt,
+        label: updatedAt.toLocaleString(),
+        status: "Saved",
+      });
+      window.alert(successText);
       setPasswordForm({
         currentPassword: "",
         newPassword: "",
@@ -1808,6 +1831,8 @@ function SecuritySection({
         type: "error",
         text: error?.message || "Failed to change password.",
       });
+    } finally {
+      setSavingSecurity(false);
     }
   }
 
@@ -1982,6 +2007,12 @@ function SecuritySection({
           </div>
 
           <form className="space-y-4" onSubmit={handlePasswordSubmit}>
+            {lastPasswordUpdate ? (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                <strong>Password changes saved.</strong>
+                <span className="block text-emerald-800">Last updated: {lastPasswordUpdate.label}</span>
+              </div>
+            ) : null}
             <Field
               label="Current password"
               name="currentPassword"
@@ -2030,9 +2061,9 @@ function SecuritySection({
                 </button>
               }
             />
-            <button className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
-              <LockKeyhole size={17} />
-              Update password
+            <button disabled={savingSecurity} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70">
+              {savingSecurity ? <RefreshCw className="animate-spin text-[#8cc63f]" size={17} /> : <LockKeyhole size={17} />}
+              {savingSecurity ? "Saving changes" : "Save changes"}
             </button>
           </form>
         </Surface>
@@ -3622,12 +3653,14 @@ function OptOutSection({ accessToken, user, shareCapitalAmount = 0, stats = {}, 
     transferRecipientMemberNumber: "",
     transferRecipientPhone: "",
     transferAmount: "",
-    confirm: "",
+    otp: "",
   });
   const [signedForm, setSignedForm] = useState(null);
   const [selectedTransferee, setSelectedTransferee] = useState(null);
   const [transfereeMatches, setTransfereeMatches] = useState([]);
   const [lookupStatus, setLookupStatus] = useState("");
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
   const [step, setStep] = useState("initial"); // initial | details | final | success
@@ -3725,7 +3758,7 @@ function OptOutSection({ accessToken, user, shareCapitalAmount = 0, stats = {}, 
     e.preventDefault();
     if (!form.reason.trim()) { setMsg({ type: "error", text: "Reason for leaving is required." }); return; }
     if (!signedForm?.dataUrl) { setMsg({ type: "error", text: "Upload the signed opt-out form before confirming." }); return; }
-    if (form.confirm.trim().toUpperCase() !== "CONFIRM") { setMsg({ type: "error", text: 'Type "CONFIRM" to proceed.' }); return; }
+    if (!/^\d{6,8}$/.test(form.otp.trim())) { setMsg({ type: "error", text: "Enter the OTP sent to your registered email and phone." }); return; }
     setSaving(true); setMsg(null);
     try {
       const result = await requestMemberOptOut({
@@ -3735,7 +3768,7 @@ function OptOutSection({ accessToken, user, shareCapitalAmount = 0, stats = {}, 
         transferAmount: transferAmount > 0 ? transferAmount : undefined,
         uploadedFormName: signedForm.name,
         uploadedFormDataUrl: signedForm.dataUrl,
-        confirmText: form.confirm,
+        otp: form.otp,
         acknowledgedTerms: true,
       }, accessToken);
       setOptOutResult(result);
@@ -3743,6 +3776,23 @@ function OptOutSection({ accessToken, user, shareCapitalAmount = 0, stats = {}, 
     }
     catch (err) { setMsg({ type: "error", text: err?.message || "Failed to submit." }); }
     finally { setSaving(false); }
+  }
+
+  async function handleSendOptOutOtp() {
+    if (!signedForm?.dataUrl) {
+      setMsg({ type: "error", text: "Upload the signed opt-out form before requesting an OTP." });
+      return;
+    }
+    setOtpSending(true); setMsg(null);
+    try {
+      const result = await sendMemberOptOutOtp(accessToken);
+      setOtpSent(true);
+      setMsg({ type: "success", text: result?.message || "OTP sent to your registered email and phone number." });
+    } catch (err) {
+      setMsg({ type: "error", text: err?.message || "Failed to send OTP." });
+    } finally {
+      setOtpSending(false);
+    }
   }
 
   function advanceToFinal(skipTransfer = false) {
@@ -3884,7 +3934,16 @@ function OptOutSection({ accessToken, user, shareCapitalAmount = 0, stats = {}, 
                 </div>
               </div>
               <form onSubmit={handleOptOut} className="space-y-4">
-                <label className="block text-sm font-semibold text-rose-900 dark:text-rose-200">Type CONFIRM to proceed<input value={form.confirm} onChange={e=>setForm(f=>({...f,confirm:e.target.value}))} className="mt-1 w-full rounded-lg border border-rose-200 px-3.5 py-3 text-sm dark:border-rose-800" placeholder='Type "CONFIRM" to verify'/></label>
+                <div className="rounded-lg border border-rose-200 bg-white p-4 dark:border-rose-800 dark:bg-slate-900">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                    <label className="block flex-1 text-sm font-semibold text-rose-900 dark:text-rose-200">OTP verification<input value={form.otp} onChange={e=>setForm(f=>({...f,otp:e.target.value.replace(/\D/g,"").slice(0,8)}))} inputMode="numeric" className="mt-1 w-full rounded-lg border border-rose-200 px-3.5 py-3 text-sm tracking-[0.3em] dark:border-rose-800" placeholder="Enter OTP"/></label>
+                    <button type="button" onClick={handleSendOptOutOtp} disabled={otpSending || !signedForm?.dataUrl} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-white">
+                      {otpSending ? <RefreshCw className="animate-spin" size={16} /> : <MailCheck size={16} />}
+                      {otpSent ? "Resend OTP" : "Send OTP"}
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">The OTP is sent to your registered email address and phone number after the signed form is uploaded.</p>
+                </div>
                 <div className="flex flex-wrap items-center gap-3">
                   <button type="submit" disabled={saving} className="inline-flex min-h-12 items-center gap-2 rounded-lg bg-red-600 px-5 py-3 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60">
                     {saving?<RefreshCw className="animate-spin" size={17}/>:<LogOut size={17}/>}

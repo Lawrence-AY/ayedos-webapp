@@ -39,6 +39,20 @@ export async function requestMemberOptOut(data, accessToken) {
   return unwrapEnvelopeData(res.json)
 }
 
+export async function sendMemberOptOutOtp(accessToken) {
+  const res = await apiRequest('/api/member/opt-out/otp', {
+    method: 'POST',
+    accessToken,
+    body: {},
+    cache: false,
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to send opt-out OTP')
+  return {
+    ...unwrapEnvelopeData(res.json),
+    message: res.json?.message,
+  }
+}
+
 export async function transferShareCapital(data, accessToken) {
   const res = await apiRequest('/api/member/share-capital/transfers', {
     method: 'POST', accessToken, body: data, cache: false,
