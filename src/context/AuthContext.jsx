@@ -243,6 +243,10 @@ export function AuthProvider({ children }) {
     const tokenForRefresh = overrideRefreshToken || refreshToken || localStorage.getItem(STORAGE_KEYS.refreshToken)
     const activeSessionId = sessionId || localStorage.getItem(STORAGE_KEYS.sessionId)
 
+    if (!tokenForRefresh) {
+      throw new Error('Refresh token is missing')
+    }
+
     refreshPromiseRef.current = (async () => {
       const res = await apiRequest('/api/auth/refresh', {
         method: 'POST',
@@ -601,7 +605,9 @@ const login = useCallback(
       } catch {
         // If current token is invalid/expired, try refresh
         try {
-          await refresh(localStorage.getItem(STORAGE_KEYS.refreshToken))
+          const storedRefreshToken = localStorage.getItem(STORAGE_KEYS.refreshToken)
+          if (!storedRefreshToken) throw new Error('Refresh token is missing')
+          await refresh(storedRefreshToken)
           if (!cancelled) setIsLoading(false)
         } catch (e) {
           if (!cancelled) {

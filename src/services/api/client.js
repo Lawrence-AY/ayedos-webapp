@@ -186,13 +186,16 @@ function persistTokens(tokens = {}) {
 }
 
 function clearStoredAuth() {
+  const hadStoredAuth = Boolean(getStoredAuth().accessToken || getStoredAuth().refreshToken || getStoredAuth().sessionId)
   try {
     Object.values(TOKEN_STORAGE_KEYS).forEach((key) => localStorage.removeItem(key))
     localStorage.removeItem('ayedos_user')
   } catch {
     // Ignore storage errors.
   }
-  window.dispatchEvent(new CustomEvent('ayedos:auth-expired'))
+  if (hadStoredAuth) {
+    window.dispatchEvent(new CustomEvent('ayedos:auth-expired'))
+  }
 }
 
 function isPublicAuthPath(path) {
