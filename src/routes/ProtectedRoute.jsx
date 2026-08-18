@@ -6,6 +6,11 @@ import { getDashboardPath, isMemberOnboardingComplete } from '../utils/dashboard
 export default function ProtectedRoute({ element, allowedRoles }) {
   const { user, accessToken, isLoading } = useContext(AuthContext)
   const location = useLocation()
+  const redirect = (to, state) => (
+    location.pathname === to
+      ? element
+      : <Navigate to={to} replace state={state} />
+  )
 
   if (isLoading) {
     return (
@@ -38,18 +43,18 @@ export default function ProtectedRoute({ element, allowedRoles }) {
   }
 
   if (!accessToken || !user) {
-    return <Navigate to="/login" replace />
+    return redirect('/login')
   }
 
   if (allowedRoles?.length && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/dashboard" replace />
+    return redirect('/dashboard')
   }
 
   if (
     user.mustChangePassword &&
     location.pathname !== getDashboardPath(user.role, 'security')
   ) {
-    return <Navigate to={getDashboardPath(user.role, 'security')} replace state={{ forcePasswordChange: true }} />
+    return redirect(getDashboardPath(user.role, 'security'), { forcePasswordChange: true })
   }
 
   if (
@@ -57,7 +62,7 @@ export default function ProtectedRoute({ element, allowedRoles }) {
     !isMemberOnboardingComplete(user) &&
     location.pathname !== '/onboarding'
   ) {
-    return <Navigate to="/onboarding" replace />
+    return redirect('/onboarding')
   }
 
   return element
