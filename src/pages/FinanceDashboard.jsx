@@ -7,6 +7,7 @@ import {
   Banknote,
   Bell,
   Building2,
+  CalendarDays,
   Camera,
   CheckCircle2,
   Clock3,
@@ -15,6 +16,7 @@ import {
   FileText,
   Landmark,
   LockKeyhole,
+  PieChart,
   Plus,
   ReceiptText,
   RefreshCw,
@@ -2911,7 +2913,7 @@ function FinanceFinancialCsvImport({ accessToken, onImported }) {
     setBusy(true);
     try {
       const result = await commitFinancialCsvImport(csv, accessToken);
-      toast.success(`Imported ${result.imported?.length || 0} financial record${result.imported?.length === 1 ? "" : "s"}.`);
+      toast.success(`Imported ${result.imported?.length || 0} financial record${result.imported?.length === 1 ? "" : "s"} and published ${result.dividends?.imported?.length || 0} dividend allocation${result.dividends?.imported?.length === 1 ? "" : "s"}.`);
       setCsv("");
       setFileName("");
       setPreview(null);
@@ -2928,8 +2930,8 @@ function FinanceFinancialCsvImport({ accessToken, onImported }) {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h3 className="text-base font-semibold text-slate-950">Bulk financial records import</h3>
-          <p className="text-sm text-slate-500">Post periodic financial transactions, payroll deductions, and employer contributions to existing member accounts.</p>
-          <p className="text-xs text-slate-500">Supports CSV, XLS, and XLSX files. Multi-sheet workbooks are imported sheet by sheet and mapped by memberNumber, email, or staffId.</p>
+          <p className="text-sm text-slate-500">Post periodic financial transactions, payroll deductions, employer contributions, and annual member dividend allocations.</p>
+          <p className="text-xs text-slate-500">Supports CSV, XLS, and XLSX files. Multi-sheet workbooks are imported sheet by sheet; Dividends sheets or dividend columns are published to member portfolios.</p>
           {fileName ? <p className="mt-1 text-xs font-semibold text-emerald-700">{fileName}</p> : null}
         </div>
         <div className="flex flex-wrap gap-2">
@@ -2944,7 +2946,7 @@ function FinanceFinancialCsvImport({ accessToken, onImported }) {
       </div>
       {preview ? (
         <div className="mt-4 overflow-x-auto rounded-lg border">
-          <div className="border-b bg-slate-50 px-4 py-2 text-sm font-semibold">{preview.readyCount} ready, {preview.errorCount} need fixes</div>
+           <div className="border-b bg-slate-50 px-4 py-2 text-sm font-semibold">{preview.readyCount} ready, {preview.errorCount} need fixes · {preview.dividendReadyCount || 0} dividend rows ready</div>
           <table className="min-w-full">
             <thead>
               <tr className="bg-slate-50">
@@ -2966,6 +2968,33 @@ function FinanceFinancialCsvImport({ accessToken, onImported }) {
                   <td className="px-3 py-2 text-sm">{formatCurrency(row.data.loanRepayment || 0)}</td>
                   <td className="px-3 py-2 text-sm">{formatCurrency(row.data.interest || 0)}</td>
                   <td className="px-3 py-2 text-sm">{formatCurrency(row.data.employerContribution || 0)}</td>
+                  <td className="px-3 py-2 text-sm"><StatusBadge status={row.ready ? "Ready" : `Missing ${row.missing.join(", ")}`} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+      {preview?.dividendRows?.length ? (
+        <div className="mt-4 overflow-x-auto rounded-lg border border-emerald-200">
+          <div className="border-b bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-900">Dividend allocations preview</div>
+          <table className="min-w-full">
+            <thead>
+              <tr className="bg-emerald-50">
+                {["Row", "Sheet", "Member", "Year", "Shares", "Dividend", "Readiness"].map((h) => (
+                  <th key={h} className="px-3 py-2 text-left text-xs uppercase text-emerald-900">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {preview.dividendRows.map((row) => (
+                <tr key={`dividend-${row.rowNumber}`}>
+                  <td className="px-3 py-2 text-sm">{row.rowNumber}</td>
+                  <td className="px-3 py-2 text-sm">{row.data.sheetName || "-"}</td>
+                  <td className="px-3 py-2 text-sm">{row.data.memberNumber || row.data.email || row.data.staffId || "-"}</td>
+                  <td className="px-3 py-2 text-sm">{row.data.financialYear || "Previous year"}</td>
+                  <td className="px-3 py-2 text-sm">{Number(row.data.totalShares || row.data.shareCapital || 0).toLocaleString()}</td>
+                  <td className="px-3 py-2 text-sm">{formatCurrency(row.data.dividendPaid || 0)}</td>
                   <td className="px-3 py-2 text-sm"><StatusBadge status={row.ready ? "Ready" : `Missing ${row.missing.join(", ")}`} /></td>
                 </tr>
               ))}
@@ -3301,6 +3330,7 @@ function FinancialReportsPage({ data, currentUser }) {
 // DIVIDENDS
 // ============================================================
 function DividendsPage({ dividends }) {
+  const totalPublished = dividends.reduce((sum, dividend) => sum + Number(dividend.amount || dividend.totalDistributed || 0), 0);
   return (
     <div className="space-y-6">
       <SectionHeader
@@ -3309,22 +3339,30 @@ function DividendsPage({ dividends }) {
         description="Yearly dividend tracking."
       />
       <div className="grid gap-4 md:grid-cols-3">
+        <KpiCard label="Published allocations" value={dividends.length} icon={PieChart} tone="emerald" />
+        <KpiCard label="Total dividends" value={formatCurrency(totalPublished)} icon={Banknote} tone="emerald" />
+        <KpiCard label="Latest year" value={dividends[0]?.year || "-"} icon={CalendarDays} tone="blue" />
+      </div>
+      <div className="grid gap-4 md:grid-cols-3">
         {dividends.map((d, i) => (
           <div key={i} className="rounded-lg border bg-white p-5">
             <div className="flex items-center justify-between">
-              <h5 className="text-lg font-semibold">{d.year}</h5>
+              <h5 className="text-lg font-semibold">{d.year || "Dividend"}</h5>
               <StatusBadge status={d.status} />
             </div>
             <div className="mt-4 space-y-2 text-sm">
               <p>
-                <strong>Rate:</strong> {d.rate}
+                <strong>Member:</strong> {d.memberName || d.memberNumber || d.memberId || "-"}
+              </p>
+              <p>
+                <strong>Shares:</strong> {Number(d.totalShares || 0).toLocaleString()}
               </p>
               <p>
                 <strong>Distributed:</strong>{" "}
-                {formatCurrency(d.totalDistributed)}
+                {formatCurrency(d.totalDistributed || d.amount || 0)}
               </p>
               <p>
-                <strong>Members:</strong> {d.membersCount}
+                <strong>Source:</strong> {d.sourceSheet || "Manual declaration"}
               </p>
               <p>
                 <strong>Declared:</strong> {formatDateSafe(d.declaredDate)}
@@ -3332,6 +3370,7 @@ function DividendsPage({ dividends }) {
             </div>
           </div>
         ))}
+        {!dividends.length ? <div className="rounded-lg border bg-white p-8 text-sm text-slate-500 md:col-span-3">No dividend allocations have been published yet.</div> : null}
       </div>
     </div>
   );
