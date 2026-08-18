@@ -60,7 +60,9 @@ import {
   getAllDividends,
   getAllDeductions,
   getFinancialReports,
+  getGroupBorrowingOverview,
 } from "../features/finance/financeService.js";
+import GroupBorrowingOverview from "../components/staff-dashboard/GroupBorrowingOverview.jsx";
 import {
   AnalyticsPanel,
   DataTable,
@@ -167,6 +169,7 @@ export default function AdminDashboard() {
     deductions: [],
     auditLogs: [],
     reports: {},
+    groupBorrowing: { items: [], summary: {} },
   });
 
   async function loadData({ showLoading = true } = {}) {
@@ -188,6 +191,7 @@ export default function AdminDashboard() {
       getAuditLogs(accessToken),
       getAdminNotifications(accessToken),
       getFinancialReports(accessToken),
+      getGroupBorrowingOverview(accessToken),
     ]);
     setData({
       users:
@@ -231,6 +235,7 @@ export default function AdminDashboard() {
           ? r[9].value
           : [],
       reports: r[11]?.status === "fulfilled" ? r[11].value : {},
+      groupBorrowing: r[12]?.status === "fulfilled" ? r[12].value : { items: [], summary: {} },
     });
     if (r[10].status === "fulfilled" && Array.isArray(r[10].value)) {
       setNotifications(r[10].value.map(normalizeAdminNotification));
@@ -241,7 +246,7 @@ export default function AdminDashboard() {
     loadData();
   }, [accessToken]);
   useEffect(() => {
-    const iv = setInterval(() => loadData({ showLoading: false }), 30000);
+    const iv = setInterval(() => loadData({ showLoading: false }), 15000);
     return () => clearInterval(iv);
   }, [accessToken]);
 
@@ -290,6 +295,7 @@ export default function AdminDashboard() {
         );
       case "loans":
         return (
+          <div className="space-y-6">
           <AdminReadOnlyTable
             title="Loan Management"
             data={data.loans}
@@ -319,6 +325,8 @@ export default function AdminDashboard() {
             ]}
             fileName="admin-loans.csv"
           />
+          <GroupBorrowingOverview data={data.groupBorrowing} onRefresh={() => loadData({ showLoading: false })} title="Group Borrowing Oversight" />
+          </div>
         );
       case "transactions":
         return (

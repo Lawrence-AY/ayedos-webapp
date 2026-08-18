@@ -281,6 +281,24 @@ export async function getFinancialReports(accessToken, filters = {}) {
   return unwrapEnvelopeData(res.json)
 }
 
+export async function getActiveGroupLoans(accessToken) {
+  const res = await apiRequest('/api/finance/group-loans/active', { method: 'GET', accessToken })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to load active group loans')
+  return unwrapEnvelopeData(res.json)
+}
+
+export async function getGroupBorrowingOverview(accessToken) {
+  const res = await apiRequest('/api/finance/group-borrowing', { method: 'GET', accessToken, cache: false })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to load group borrowing overview')
+  return unwrapEnvelopeData(res.json)
+}
+
+export async function dismantleBorrowingGroup(groupId, accessToken) {
+  const res = await apiRequest(`/api/finance/group-borrowing/${groupId}`, { method: 'DELETE', accessToken, cache: false, idempotencyKey: `dismantle-group:${groupId}` })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to dismantle borrowing group')
+  return unwrapEnvelopeData(res.json)
+}
+
 export async function getFinancialAnalytics(accessToken, filters = {}) {
   const queryParams = new URLSearchParams({ ...filters, type: 'analytics' }).toString()
   const url = `/api/finance/reports/analytics?${queryParams}`

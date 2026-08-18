@@ -14,4 +14,10 @@ export const respondGroupInvitation = (groupId, membershipId, accept, accessToke
 export const removeGroupMember = (groupId, membershipId, accessToken) => request(`/${groupId}/members/${membershipId}`, { method: 'DELETE', accessToken }, 'Failed to remove member')
 export const leaveGroup = (groupId, accessToken) => request(`/${groupId}/leave`, { method: 'POST', accessToken }, 'Failed to leave group')
 export const borrowForGroup = (groupId, data, accessToken) => request(`/${groupId}/loans`, { method: 'POST', accessToken, body: data }, 'Failed to record group loan')
+export const createGroupLoanProposal = (groupId, data, accessToken) => request(`/${groupId}/proposals`, { method: 'POST', accessToken, body: data }, 'Failed to send proposal')
+export const voteGroupLoanProposal = (groupId, proposalId, accept, accessToken) => request(`/${groupId}/proposals/${proposalId}/vote`, {
+  method: 'POST', accessToken, body: { accept }, timeoutMs: 60000,
+  idempotencyKey: `group-proposal-vote:${proposalId}:${accept ? 'accept' : 'reject'}`,
+}, 'Failed to submit vote')
+export const disburseGroupLoanProposal = (groupId, proposalId, accessToken) => request(`/${groupId}/proposals/${proposalId}/disburse`, { method: 'POST', accessToken }, 'Failed to disburse proposal')
 export const repayGroupLoan = (groupId, loanId, amount, accessToken) => request(`/${groupId}/loans/${loanId}/repay`, { method: 'POST', accessToken, body: { amount } }, 'Failed to record repayment')

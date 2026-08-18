@@ -1,0 +1,48 @@
+import { useEffect, useMemo, useState } from 'react'
+import { ArrowLeft, ChevronLeft, ChevronRight, RefreshCw, Search, UsersRound } from 'lucide-react'
+import { formatCurrency, formatDate, StatusBadge } from '../dashboard/EnterpriseDashboard.jsx'
+
+const stateLabel = (group) => group.status === 'CLOSED' ? 'DISMANTLED · INACTIVE' : 'ACTIVE'
+const stateClass = (group) => group.status === 'CLOSED' ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
+
+export default function GroupBorrowingOverview({ data, loading = false, onRefresh, onDismantle, title = 'Group Borrowing' }) {
+  const [selectedId, setSelectedId] = useState(null)
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState('ALL')
+  const [page, setPage] = useState(1)
+  const groups = data?.items || []
+  const selected = groups.find((group) => group.id === selectedId)
+  const filtered = useMemo(() => groups.filter((group) => {
+    const statusMatch = filter === 'ALL' || (filter === 'DISMANTLED' ? group.status === 'CLOSED' : group.status === 'ACTIVE')
+    const needle = query.trim().toLowerCase()
+    return statusMatch && (!needle || group.name.toLowerCase().includes(needle) || group.members.some((member) => `${member.name} ${member.memberNumber}`.toLowerCase().includes(needle)))
+  }), [groups, query, filter])
+  const totalPages = Math.max(1, Math.ceil(filtered.length / 6))
+  const visible = filtered.slice((page - 1) * 6, page * 6)
+  useEffect(() => { if (selectedId && !selected) setSelectedId(null) }, [selectedId, selected])
+  useEffect(() => { setPage(1) }, [query, filter])
+  useEffect(() => { setPage((value) => Math.min(value, totalPages)) }, [totalPages])
+  if (selected) return <GroupDetail group={selected} onBack={() => setSelectedId(null)} onDismantle={onDismantle} />
+  const summary = data?.summary || {}
+  return <section className="space-y-4 rounded-xl border bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold dark:text-white">{title}</h2><p className="text-sm text-slate-500">Synchronized membership, borrowing history, repayments, and interest.</p></div><button type="button" onClick={onRefresh} disabled={loading} className="rounded-lg border p-2.5" aria-label="Refresh groups"><RefreshCw size={17} className={loading ? 'animate-spin' : ''}/></button></div>
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">{[['Groups', summary.groups || 0], ['Active groups', summary.activeGroups || 0], ['Borrowed', formatCurrency(summary.totalBorrowed)], ['Outstanding', formatCurrency(summary.totalOutstanding)], ['Interest earned', formatCurrency(summary.totalInterestEarned)]].map(([label, value]) => <div key={label} className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800"><p className="text-xs font-semibold uppercase text-slate-500">{label}</p><p className="mt-1 font-bold dark:text-white">{value}</p></div>)}</div>
+    <div className="flex flex-col gap-3 sm:flex-row"><label className="relative flex-1"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search group or member" className="w-full rounded-lg border py-2.5 pl-9 pr-3 text-sm dark:border-slate-700 dark:bg-slate-800"/></label><select value={filter} onChange={(event) => setFilter(event.target.value)} className="rounded-lg border px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800"><option value="ALL">All groups</option><option value="ACTIVE">Active</option><option value="DISMANTLED">Dismantled</option></select></div>
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{visible.map((group) => <button key={group.id} type="button" onClick={() => setSelectedId(group.id)} className={`rounded-lg border p-4 text-left transition hover:shadow-sm dark:border-slate-700 ${group.status === 'CLOSED' ? 'bg-slate-50 opacity-80 dark:bg-slate-800/60' : 'hover:border-emerald-500'}`}><div className="flex justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><h3 className="font-bold dark:text-white">{group.name}</h3><span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${stateClass(group)}`}>{stateLabel(group)}</span></div><p className="mt-1 text-xs text-slate-500">{group.members.filter((member) => member.status === 'ACTIVE').length} active members · {group.loans.length} funded loans</p></div><UsersRound size={20} className={group.status === 'CLOSED' ? 'text-slate-400' : 'text-emerald-600'}/></div><div className="mt-4 grid grid-cols-2 gap-2 text-xs"><span>Borrowed<br/><strong>{formatCurrency(group.totals.borrowed)}</strong></span><span>Interest earned<br/><strong className="text-emerald-700">{formatCurrency(group.totals.interestEarned)}</strong></span></div></button>)}</div>
+    {!visible.length && <p className="py-8 text-center text-sm text-slate-500">No groups match this search or status.</p>}
+    {totalPages > 1 && <div className="flex items-center justify-between border-t pt-4 text-sm dark:border-slate-700"><span>Page {page} of {totalPages} · {filtered.length} groups</span><div className="flex gap-2"><button type="button" disabled={page === 1} onClick={() => setPage((value) => value - 1)} className="rounded-lg border p-2 disabled:opacity-40"><ChevronLeft size={16}/></button><button type="button" disabled={page === totalPages} onClick={() => setPage((value) => value + 1)} className="rounded-lg border p-2 disabled:opacity-40"><ChevronRight size={16}/></button></div></div>}
+  </section>
+}
+
+function GroupDetail({ group, onBack, onDismantle }) {
+  const cannotDismantle = group.status === 'CLOSED' || group.loans.length > 0 || group.proposals.some((proposal) => ['APPROVED', 'DISBURSED'].includes(proposal.status))
+  return <section className="space-y-5 rounded-xl border bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <button type="button" onClick={onBack} className="inline-flex items-center gap-2 text-sm font-semibold"><ArrowLeft size={16}/>All groups</button>
+    <div className="flex flex-wrap justify-between gap-4"><div><div className="flex flex-wrap items-center gap-2"><h2 className="text-xl font-bold dark:text-white">{group.name}</h2><span className={`rounded-full px-2 py-1 text-xs font-bold ${stateClass(group)}`}>{stateLabel(group)}</span></div><p className="text-sm text-slate-500">{group.description || 'No description provided.'}</p>{onDismantle && <button type="button" onClick={() => onDismantle(group)} disabled={cannotDismantle} className="mt-3 rounded-lg border border-rose-300 px-3 py-2 text-sm font-bold text-rose-700 disabled:cursor-not-allowed disabled:opacity-45">{group.status === 'CLOSED' ? 'Group dismantled' : 'Dismantle group'}</button>}</div><div className="text-right"><p className="text-xs uppercase text-slate-500">Total interest earned</p><p className="text-2xl font-bold text-emerald-700">{formatCurrency(group.totals.interestEarned)}</p><p className="text-xs text-slate-500">of {formatCurrency(group.totals.scheduledInterest)} scheduled</p></div></div>
+    <DataSection title="Group members"><table className="min-w-full text-sm"><thead><tr className="border-b text-left"><th className="py-2 pr-4">Member</th><th className="py-2 pr-4">Number</th><th className="py-2 pr-4">Role</th><th className="py-2">Status</th></tr></thead><tbody>{group.members.map((member) => <tr key={member.membershipId} className="border-b last:border-0 dark:border-slate-700"><td className="py-3 pr-4 font-semibold">{member.name}</td><td className="py-3 pr-4">{member.memberNumber}</td><td className="py-3 pr-4">{member.role}</td><td className="py-3"><StatusBadge status={member.status}/></td></tr>)}</tbody></table></DataSection>
+    <DataSection title="Borrowing history"><table className="min-w-[850px] w-full text-sm"><thead><tr className="border-b text-left"><th className="py-2 pr-4">Date</th><th className="py-2 pr-4">Principal</th><th className="py-2 pr-4">Paid</th><th className="py-2 pr-4">Outstanding</th><th className="py-2 pr-4">Interest earned</th><th className="py-2">Status</th></tr></thead><tbody>{group.loans.map((loan) => <tr key={loan.id} className="border-b last:border-0 dark:border-slate-700"><td className="py-3 pr-4">{formatDate(loan.createdAt)}</td><td className="py-3 pr-4">{formatCurrency(loan.amount)}</td><td className="py-3 pr-4">{formatCurrency(loan.amountPaid)}</td><td className="py-3 pr-4">{formatCurrency(loan.balance)}</td><td className="py-3 pr-4 font-semibold text-emerald-700">{formatCurrency(loan.interestEarned)}</td><td className="py-3"><StatusBadge status={loan.status}/></td></tr>)}{!group.loans.length && <tr><td colSpan="6" className="py-8 text-center text-slate-500">No funded loans yet.</td></tr>}</tbody></table></DataSection>
+    <div><h3 className="mb-2 font-bold">Proposal history</h3><div className="grid gap-2 md:grid-cols-2">{group.proposals.map((proposal) => <div key={proposal.id} className="rounded-lg border p-3 dark:border-slate-700"><div className="flex justify-between gap-2"><strong>{formatCurrency(proposal.totalAmount)}</strong><StatusBadge status={proposal.status}/></div><p className="mt-1 text-xs text-slate-500">{proposal.durationMonths} months · {proposal.allocationCount} allocations · {formatCurrency(proposal.scheduledInterest)} interest</p></div>)}</div></div>
+  </section>
+}
+
+function DataSection({ title, children }) { return <div><h3 className="mb-2 font-bold">{title}</h3><div className="overflow-x-auto">{children}</div></div> }

@@ -486,6 +486,7 @@ export async function apiRequest(
           skipAuthRefresh: true,
           cache,
           cacheTtlMs,
+          idempotencyKey,
         })
       }
     }

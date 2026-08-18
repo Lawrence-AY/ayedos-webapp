@@ -523,6 +523,7 @@ function NotificationsPanel({
 }) {
   const [activeTab, setActiveTab] = useState("all");
   const [page, setPage] = useState(1);
+  const [selectedNotice, setSelectedNotice] = useState(null);
   const unreadCount = items.filter(
     (notice) => !notice.readAt && !notice.isRead,
   ).length;
@@ -672,12 +673,9 @@ function NotificationsPanel({
                       </button>
                     )}
                     {notice.actionUrl && (
-                      <Link
-                        to={notice.actionUrl}
-                        className="text-xs font-medium text-slate-500 hover:text-slate-700 transition"
-                      >
+                      <button type="button" onClick={() => { setSelectedNotice(notice); if (!isRead) onMarkRead?.(notice.id); }} className="text-xs font-medium text-slate-500 hover:text-slate-700 transition">
                         View details →
-                      </Link>
+                      </button>
                     )}
                   </div>
                 </div>
@@ -718,6 +716,7 @@ function NotificationsPanel({
           </div>
         </div>
       ) : null}
+      {selectedNotice && <div className="fixed inset-0 z-[100] grid place-items-center bg-slate-950/60 p-4" role="dialog" aria-modal="true"><div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-wider text-emerald-700">Notification details</p><h3 className="mt-1 text-lg font-bold text-slate-950">{selectedNotice.title}</h3></div><button type="button" onClick={() => setSelectedNotice(null)} className="rounded-lg border px-3 py-1.5 text-sm font-semibold">Close</button></div><p className="mt-4 rounded-lg bg-slate-50 p-4 text-sm leading-6 text-slate-700">{selectedNotice.body}</p>{selectedNotice.metadata?.reason && <p className="mt-3 text-sm font-bold text-rose-700">{selectedNotice.metadata.reason}</p>}<p className="mt-4 text-xs text-slate-500">{selectedNotice.time ? new Date(selectedNotice.time).toLocaleString() : ''}</p></div></div>}
     </Surface>
   );
 }
