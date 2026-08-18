@@ -11,6 +11,7 @@ const date = (value) => {
   return new Intl.DateTimeFormat('en-KE', { timeZone: 'Africa/Nairobi', dateStyle: 'medium', timeStyle: 'medium' }).format(parsed) + ' EAT'
 }
 const badge = (status) => ({ ACTIVE: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200', INVITED: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200', PENDING: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200', REPAID: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200' }[status] || 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200')
+const groupsMemoryCache = new Map()
 
 export default function GroupsPage({ accessToken, onRefresh }) {
   const cached = groupsMemoryCache.get(accessToken)
