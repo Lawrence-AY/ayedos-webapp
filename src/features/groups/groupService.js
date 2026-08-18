@@ -21,3 +21,8 @@ export const voteGroupLoanProposal = (groupId, proposalId, accept, accessToken) 
 }, 'Failed to submit vote')
 export const disburseGroupLoanProposal = (groupId, proposalId, accessToken) => request(`/${groupId}/proposals/${proposalId}/disburse`, { method: 'POST', accessToken }, 'Failed to disburse proposal')
 export const repayGroupLoan = (groupId, loanId, amount, accessToken) => request(`/${groupId}/loans/${loanId}/repay`, { method: 'POST', accessToken, body: { amount } }, 'Failed to record repayment')
+export const proposeGroupGovernanceAction = (groupId, data, accessToken) => request(`/${groupId}/governance/actions`, { method: 'POST', accessToken, body: data }, 'Failed to propose governance update')
+export const voteGroupGovernanceAction = (groupId, actionId, accept, accessToken) => request(`/${groupId}/governance/actions/${actionId}/vote`, {
+  method: 'POST', accessToken, body: { accept }, timeoutMs: 60000,
+  idempotencyKey: `group-governance-vote:${actionId}:${accept ? 'accept' : 'reject'}`,
+}, 'Failed to submit governance vote')
