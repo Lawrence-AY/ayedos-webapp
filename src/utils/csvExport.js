@@ -132,7 +132,7 @@ export function exportRichCSV(rows, columns = [], filename = "export.csv", optio
     body { font-family: Arial, sans-serif; color: #111827; }
     table { border-collapse: collapse; width: 100%; }
     td, th { border: 1px solid #b7dca2; padding: 8px; mso-number-format:"\\@"; }
-    th, .title { background-color: #d9f0c9; color: #14532d; font-weight: 700; text-transform: uppercase; }
+    th, .title { background-color: #8cc63f; color: #14532d; font-weight: 700; text-transform: uppercase; }
     .label { background-color: #eaf7df; font-weight: 700; color: #14532d; width: 160px; }
     .meta td { border-color: #b7dca2; }
   </style>
@@ -146,7 +146,7 @@ export function exportRichCSV(rows, columns = [], filename = "export.csv", optio
   </table>
   <br />
   <table>
-    <thead><tr>${header.map((column) => `<th bgcolor="#d9f0c9" style="background-color:#d9f0c9;color:#14532d;font-weight:700;text-transform:uppercase;">${escapeHtml(column)}</th>`).join("")}</tr></thead>
+    <thead><tr>${header.map((column) => `<th bgcolor="#8cc63f" style="background-color:#8cc63f;color:#14532d;font-weight:700;text-transform:uppercase;">${escapeHtml(column)}</th>`).join("")}</tr></thead>
     <tbody>
       ${body.map((row) => `<tr>${row.map((value) => `<td>${escapeHtml(value)}</td>`).join("")}</tr>`).join("")}
     </tbody>

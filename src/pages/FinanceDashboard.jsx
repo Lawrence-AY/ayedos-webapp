@@ -233,7 +233,7 @@ function exportToCSV(rows, columns, filename = "export.csv", options = {}) {
     body { font-family: Arial, sans-serif; }
     table { border-collapse: collapse; width: 100%; }
     td, th { border: 1px solid #b7dca2; padding: 8px; mso-number-format:"\\@"; }
-    th, .title { background-color: #d9f0c9; color: #14532d; font-weight: 700; text-transform: uppercase; }
+    th, .title { background-color: #8cc63f; color: #14532d; font-weight: 700; text-transform: uppercase; }
     .label { background-color: #eaf7df; color: #14532d; font-weight: 700; width: 160px; }
     .meta td { border-color: #b7dca2; padding: 8px; }
   </style>
@@ -247,7 +247,7 @@ function exportToCSV(rows, columns, filename = "export.csv", options = {}) {
   </table>
   <br />
   <table>
-    <thead><tr>${exportColumns.map((column) => `<th bgcolor="#d9f0c9" style="background-color:#d9f0c9;color:#14532d;font-weight:700;text-transform:uppercase;">${escapeHtml(column.label || column.key)}</th>`).join("")}</tr></thead>
+    <thead><tr>${exportColumns.map((column) => `<th bgcolor="#8cc63f" style="background-color:#8cc63f;color:#14532d;font-weight:700;text-transform:uppercase;">${escapeHtml(column.label || column.key)}</th>`).join("")}</tr></thead>
     <tbody>
       ${exportRows.map((row) => `<tr>${exportColumns.map((column) => {
         const rawValue = row?.[column.key];
