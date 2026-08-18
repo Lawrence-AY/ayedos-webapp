@@ -215,6 +215,11 @@ function getExporterName(user) {
   return user?.name || user?.fullName || user?.email || "Unknown User";
 }
 
+const REPORT_EXPORT_HEADER_COLOR = "#8cc63f";
+const REPORT_EXPORT_TEXT_COLOR = "#14532d";
+const REPORT_EXPORT_LABEL_COLOR = "#eaf7df";
+const REPORT_EXPORT_BORDER_COLOR = "#b7dca2";
+
 function exportToCSV(rows, columns, filename = "export.csv", options = {}) {
   const exportRows = Array.isArray(rows) ? rows : [];
   const exportColumns = columns.map((column) =>
@@ -232,10 +237,10 @@ function exportToCSV(rows, columns, filename = "export.csv", options = {}) {
   <style>
     body { font-family: Arial, sans-serif; }
     table { border-collapse: collapse; width: 100%; }
-    td, th { border: 1px solid #b7dca2; padding: 8px; mso-number-format:"\\@"; }
-    th, .title { background-color: #8cc63f; color: #14532d; font-weight: 700; text-transform: uppercase; }
-    .label { background-color: #eaf7df; color: #14532d; font-weight: 700; width: 160px; }
-    .meta td { border-color: #b7dca2; padding: 8px; }
+    td, th { border: 1px solid ${REPORT_EXPORT_BORDER_COLOR}; padding: 8px; mso-number-format:"\\@"; }
+    th, .title { background-color: ${REPORT_EXPORT_HEADER_COLOR}; color: ${REPORT_EXPORT_TEXT_COLOR}; font-weight: 700; text-transform: uppercase; }
+    .label { background-color: ${REPORT_EXPORT_LABEL_COLOR}; color: ${REPORT_EXPORT_TEXT_COLOR}; font-weight: 700; width: 160px; }
+    .meta td { border-color: ${REPORT_EXPORT_BORDER_COLOR}; padding: 8px; }
   </style>
 </head>
 <body>
@@ -247,7 +252,7 @@ function exportToCSV(rows, columns, filename = "export.csv", options = {}) {
   </table>
   <br />
   <table>
-    <thead><tr>${exportColumns.map((column) => `<th bgcolor="#8cc63f" style="background-color:#8cc63f;color:#14532d;font-weight:700;text-transform:uppercase;">${escapeHtml(column.label || column.key)}</th>`).join("")}</tr></thead>
+    <thead><tr>${exportColumns.map((column) => `<th bgcolor="${REPORT_EXPORT_HEADER_COLOR}" style="background-color:${REPORT_EXPORT_HEADER_COLOR};color:${REPORT_EXPORT_TEXT_COLOR};font-weight:700;text-transform:uppercase;">${escapeHtml(column.label || column.key)}</th>`).join("")}</tr></thead>
     <tbody>
       ${exportRows.map((row) => `<tr>${exportColumns.map((column) => {
         const rawValue = row?.[column.key];
@@ -307,7 +312,7 @@ function exportMasterWorkbook(data, currentUser) {
 <?mso-application progid="Excel.Sheet"?>
 <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
   <Styles>
-    <Style ss:ID="Header"><Interior ss:Color="#8CC63F" ss:Pattern="Solid"/><Font ss:Bold="1" ss:Color="#12320F"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>
+    <Style ss:ID="Header"><Interior ss:Color="${REPORT_EXPORT_HEADER_COLOR}" ss:Pattern="Solid"/><Font ss:Bold="1" ss:Color="${REPORT_EXPORT_TEXT_COLOR}"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>
   </Styles>
   ${sheets.map(([sheetName, rows]) => worksheetXml(sheetName, rows)).join("")}
 </Workbook>`;
