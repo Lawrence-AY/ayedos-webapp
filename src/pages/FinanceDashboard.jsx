@@ -232,21 +232,22 @@ function exportToCSV(rows, columns, filename = "export.csv", options = {}) {
   <style>
     body { font-family: Arial, sans-serif; }
     table { border-collapse: collapse; width: 100%; }
-    td, th { border: 1px solid #d9ead3; padding: 8px; mso-number-format:"\\@"; }
-    th { background-color: #8cc63f; color: #12320f; font-weight: 700; }
-    .meta td { border: 0; padding: 4px 0; font-weight: 600; }
+    td, th { border: 1px solid #b7dca2; padding: 8px; mso-number-format:"\\@"; }
+    th, .title { background-color: #d9f0c9; color: #14532d; font-weight: 700; text-transform: uppercase; }
+    .label { background-color: #eaf7df; color: #14532d; font-weight: 700; width: 160px; }
+    .meta td { border-color: #b7dca2; padding: 8px; }
   </style>
 </head>
 <body>
   <table class="meta">
-    <tr><td>Ayedos SACCO Management System</td></tr>
-    <tr><td>Export Title: ${escapeHtml(title)}</td></tr>
-    <tr><td>Generated: ${escapeHtml(generatedLabel)}</td></tr>
-    <tr><td>Exported By: ${escapeHtml(exportedBy)}</td></tr>
+    <tr><td class="title" colspan="2">Ayedos SACCO Management System</td></tr>
+    <tr><td class="label">Export Title</td><td>${escapeHtml(title)}</td></tr>
+    <tr><td class="label">Generated</td><td>${escapeHtml(generatedLabel)}</td></tr>
+    <tr><td class="label">Exported By</td><td>${escapeHtml(exportedBy)}</td></tr>
   </table>
   <br />
   <table>
-    <thead><tr>${exportColumns.map((column) => `<th bgcolor="#8cc63f" style="background-color:#8cc63f;color:#12320f;font-weight:700;">${escapeHtml(column.label || column.key)}</th>`).join("")}</tr></thead>
+    <thead><tr>${exportColumns.map((column) => `<th bgcolor="#d9f0c9" style="background-color:#d9f0c9;color:#14532d;font-weight:700;text-transform:uppercase;">${escapeHtml(column.label || column.key)}</th>`).join("")}</tr></thead>
     <tbody>
       ${exportRows.map((row) => `<tr>${exportColumns.map((column) => {
         const rawValue = row?.[column.key];
