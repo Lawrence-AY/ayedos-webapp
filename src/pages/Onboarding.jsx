@@ -1,5 +1,5 @@
 // Onboarding.jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Toaster, toast } from 'sonner';
 import { decryptData } from '../lib/storageCrypto';
@@ -16,6 +16,7 @@ import { DocumentsForm } from '../components/onboarding/DocumentsForm';
 import { PaymentForm } from '../components/onboarding/PaymentForm';
 import { ConfirmationStep } from '../components/onboarding/ConfirmationStep';
 import { getDashboardPath } from '../utils/dashboardRoutes';
+import { AuthContext } from '../context/AuthContext.jsx';
 import { CiUser } from 'react-icons/ci';
 import { CiMail } from 'react-icons/ci';
 import {
@@ -31,6 +32,7 @@ import {
 
 function Onboarding() {
   const navigate = useNavigate();
+  const { user, logout } = useContext(AuthContext);
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [mpesaReference, setMpesaReference] = useState(null);
@@ -58,6 +60,22 @@ function Onboarding() {
   });
   const [errors, setErrors] = useState({});
   const [showResetDialog, setShowResetDialog] = useState(false);
+  const progressKey = `ayedos_onboarding_progress:${user?.id || user?.email || formData.email || 'anonymous'}`;
+
+  const saveOnboardingProgress = (step, nextFormData = formData) => {
+    try {
+      localStorage.setItem(progressKey, JSON.stringify({
+        step,
+        formData: {
+          ...nextFormData,
+          idDocument: null,
+        },
+        updatedAt: Date.now(),
+      }));
+    } catch {
+      // Ignore storage errors.
+    }
+  };
 
   useEffect(() => {
     const prefillSavedDetails = async () => {
@@ -103,8 +121,37 @@ function Onboarding() {
     prefillSavedDetails();
   }, []);
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(progressKey);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      const savedStep = Math.min(Math.max(Number(saved.step || 1), 1), 4);
+      if (saved.formData && typeof saved.formData === 'object') {
+        setFormData((prev) => ({
+          ...prev,
+          ...saved.formData,
+          idDocument: null,
+        }));
+      }
+      setCurrentStep(savedStep);
+    } catch {
+      // Ignore malformed saved onboarding progress.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progressKey]);
+
+  useEffect(() => {
+    saveOnboardingProgress(currentStep);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep]);
+
   const updateFormData = (field, value) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFormData((prev) => {
+      const next = { ...prev, [field]: value };
+      saveOnboardingProgress(currentStep, next);
+      return next;
+    });
     if (errors.step1) setErrors({});
   };
 
@@ -165,18 +212,27 @@ function Onboarding() {
 
   const handleStep1Submit = (e) => {
     e.preventDefault();
-    if (validateStep1()) { setCurrentStep(2); toast.success('Personal details saved.'); }
+    if (validateStep1()) { saveOnboardingProgress(2); setCurrentStep(2); toast.success('Personal details saved.'); }
   };
 
   const handleStep2Submit = (e) => {
     e.preventDefault();
-    if (validateStep2()) { setCurrentStep(3); toast.success('Documents uploaded.'); }
+    if (validateStep2()) { saveOnboardingProgress(3); setCurrentStep(3); toast.success('Documents uploaded.'); }
   };
 
   const handlePaymentSuccess = ({ reference, user } = {}) => {
     if (reference) setMpesaReference(reference);
     setIsLoading(false);
+    try { localStorage.removeItem(progressKey); } catch { /* ignore */ }
     navigate(getDashboardPath(user?.role || 'MEMBER'), { replace: true });
+  };
+
+  const handleBackToLogin = async () => {
+    try {
+      await logout?.();
+    } finally {
+      navigate('/login', { replace: true });
+    }
   };
 
   const handleReset = () => {
@@ -188,6 +244,7 @@ function Onboarding() {
     setDocuments({ idFile: null, photoFile: null });
     setMpesaReference(null);
     setCurrentStep(1);
+    try { localStorage.removeItem(progressKey); } catch { /* ignore */ }
     setErrors({});
     toast.info('Form has been reset. You can start a new registration.');
     setShowResetDialog(false);
@@ -218,7 +275,7 @@ function Onboarding() {
                     errors={errors}
                     isLoading={isLoading}
                     onSubmit={handleStep1Submit}
-                    onBack={() => navigate('/login')}
+                    onBack={handleBackToLogin}
                   />
                 )}
                 {currentStep === 2 && (
