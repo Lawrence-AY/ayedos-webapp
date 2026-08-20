@@ -7,6 +7,7 @@ import {
   Banknote,
   Bell,
   Building2,
+  CalendarDays,
   Camera,
   CheckCircle2,
   Clock3,
@@ -15,6 +16,7 @@ import {
   FileText,
   Landmark,
   LockKeyhole,
+  PieChart,
   Plus,
   ReceiptText,
   RefreshCw,
@@ -215,6 +217,11 @@ function getExporterName(user) {
   return user?.name || user?.fullName || user?.email || "Unknown User";
 }
 
+const REPORT_EXPORT_HEADER_COLOR = "#8cc63f";
+const REPORT_EXPORT_TEXT_COLOR = "#14532d";
+const REPORT_EXPORT_LABEL_COLOR = "#eaf7df";
+const REPORT_EXPORT_BORDER_COLOR = "#b7dca2";
+
 function exportToCSV(rows, columns, filename = "export.csv", options = {}) {
   const exportRows = Array.isArray(rows) ? rows : [];
   const exportColumns = columns.map((column) =>
@@ -232,21 +239,22 @@ function exportToCSV(rows, columns, filename = "export.csv", options = {}) {
   <style>
     body { font-family: Arial, sans-serif; }
     table { border-collapse: collapse; width: 100%; }
-    td, th { border: 1px solid #d9ead3; padding: 8px; mso-number-format:"\\@"; }
-    th { background-color: #8cc63f; color: #12320f; font-weight: 700; }
-    .meta td { border: 0; padding: 4px 0; font-weight: 600; }
+    td, th { border: 1px solid ${REPORT_EXPORT_BORDER_COLOR}; padding: 8px; mso-number-format:"\\@"; }
+    th, .title { background-color: ${REPORT_EXPORT_HEADER_COLOR}; color: ${REPORT_EXPORT_TEXT_COLOR}; font-weight: 700; text-transform: uppercase; }
+    .label { background-color: ${REPORT_EXPORT_LABEL_COLOR}; color: ${REPORT_EXPORT_TEXT_COLOR}; font-weight: 700; width: 160px; }
+    .meta td { border-color: ${REPORT_EXPORT_BORDER_COLOR}; padding: 8px; }
   </style>
 </head>
 <body>
   <table class="meta">
-    <tr><td>Ayedos SACCO Management System</td></tr>
-    <tr><td>Export Title: ${escapeHtml(title)}</td></tr>
-    <tr><td>Generated: ${escapeHtml(generatedLabel)}</td></tr>
-    <tr><td>Exported By: ${escapeHtml(exportedBy)}</td></tr>
+    <tr><td class="title" colspan="2">Ayedos SACCO Management System</td></tr>
+    <tr><td class="label">Export Title</td><td>${escapeHtml(title)}</td></tr>
+    <tr><td class="label">Generated</td><td>${escapeHtml(generatedLabel)}</td></tr>
+    <tr><td class="label">Exported By</td><td>${escapeHtml(exportedBy)}</td></tr>
   </table>
   <br />
   <table>
-    <thead><tr>${exportColumns.map((column) => `<th bgcolor="#8cc63f" style="background-color:#8cc63f;color:#12320f;font-weight:700;">${escapeHtml(column.label || column.key)}</th>`).join("")}</tr></thead>
+    <thead><tr>${exportColumns.map((column) => `<th bgcolor="${REPORT_EXPORT_HEADER_COLOR}" style="background-color:${REPORT_EXPORT_HEADER_COLOR};color:${REPORT_EXPORT_TEXT_COLOR};font-weight:700;text-transform:uppercase;">${escapeHtml(column.label || column.key)}</th>`).join("")}</tr></thead>
     <tbody>
       ${exportRows.map((row) => `<tr>${exportColumns.map((column) => {
         const rawValue = row?.[column.key];
@@ -306,7 +314,7 @@ function exportMasterWorkbook(data, currentUser) {
 <?mso-application progid="Excel.Sheet"?>
 <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
   <Styles>
-    <Style ss:ID="Header"><Interior ss:Color="#8CC63F" ss:Pattern="Solid"/><Font ss:Bold="1" ss:Color="#12320F"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>
+    <Style ss:ID="Header"><Interior ss:Color="${REPORT_EXPORT_HEADER_COLOR}" ss:Pattern="Solid"/><Font ss:Bold="1" ss:Color="${REPORT_EXPORT_TEXT_COLOR}"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>
   </Styles>
   ${sheets.map(([sheetName, rows]) => worksheetXml(sheetName, rows)).join("")}
 </Workbook>`;
@@ -594,7 +602,7 @@ export default function FinanceDashboard() {
           />
         );
       case "dividends":
-        return <DividendsPage dividends={data.dividends} />;
+        return <DividendsPage dividends={data.dividends} accessToken={accessToken} onRefresh={() => loadAllData({ showLoading: false })} />;
       case "reports":
         return <FinancialReportsPage data={data} currentUser={user} />;
       case "settings":
@@ -2862,7 +2870,7 @@ function workbookRowsToCsv(workbook) {
   ].join("\n");
 }
 
-function FinanceFinancialCsvImport({ accessToken, onImported }) {
+function FinanceFinancialCsvImport({ accessToken, onImported, mode = "financial" }) {
   const [csv, setCsv] = useState("");
   const [fileName, setFileName] = useState("");
   const [preview, setPreview] = useState(null);
@@ -2905,7 +2913,11 @@ function FinanceFinancialCsvImport({ accessToken, onImported }) {
     setBusy(true);
     try {
       const result = await commitFinancialCsvImport(csv, accessToken);
-      toast.success(`Imported ${result.imported?.length || 0} financial record${result.imported?.length === 1 ? "" : "s"}.`);
+      if (mode === "dividends") {
+        toast.success(`Published ${result.dividends?.imported?.length || 0} dividend allocation${result.dividends?.imported?.length === 1 ? "" : "s"}.`);
+      } else {
+        toast.success(`Imported ${result.imported?.length || 0} financial record${result.imported?.length === 1 ? "" : "s"} and published ${result.dividends?.imported?.length || 0} dividend allocation${result.dividends?.imported?.length === 1 ? "" : "s"}.`);
+      }
       setCsv("");
       setFileName("");
       setPreview(null);
@@ -2921,24 +2933,24 @@ function FinanceFinancialCsvImport({ accessToken, onImported }) {
     <div className="rounded-lg border bg-white p-5">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h3 className="text-base font-semibold text-slate-950">Bulk financial records import</h3>
-          <p className="text-sm text-slate-500">Post periodic financial transactions, payroll deductions, and employer contributions to existing member accounts.</p>
-          <p className="text-xs text-slate-500">Supports CSV, XLS, and XLSX files. Multi-sheet workbooks are imported sheet by sheet and mapped by memberNumber, email, or staffId.</p>
+          <h3 className="text-base font-semibold text-slate-950">{mode === "dividends" ? "Annual dividend CSV import" : "Bulk financial records import"}</h3>
+          <p className="text-sm text-slate-500">{mode === "dividends" ? "Upload, preview, and publish the post-financial year dividend allocation file to member portfolios." : "Post periodic financial transactions, payroll deductions, employer contributions, and annual member dividend allocations."}</p>
+          <p className="text-xs text-slate-500">Supports CSV, XLS, and XLSX files. Multi-sheet workbooks are imported sheet by sheet; Dividends sheets or dividend columns are published to member portfolios.</p>
           {fileName ? <p className="mt-1 text-xs font-semibold text-emerald-700">{fileName}</p> : null}
         </div>
         <div className="flex flex-wrap gap-2">
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold">
             <FileText size={14} />
-            Choose file
+            {mode === "dividends" ? "Choose dividend CSV" : "Choose file"}
             <input type="file" accept=".csv,text/csv,.xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="sr-only" onChange={handleFile} />
           </label>
           <button disabled={!csv || busy} onClick={previewImport} className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Working..." : "Preview"}</button>
-          <button disabled={!preview?.readyCount || busy} onClick={commitImport} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Import ready rows</button>
+          <button disabled={!preview?.readyCount || busy} onClick={commitImport} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{mode === "dividends" ? "Publish dividends" : "Import ready rows"}</button>
         </div>
       </div>
       {preview ? (
         <div className="mt-4 overflow-x-auto rounded-lg border">
-          <div className="border-b bg-slate-50 px-4 py-2 text-sm font-semibold">{preview.readyCount} ready, {preview.errorCount} need fixes</div>
+           <div className="border-b bg-slate-50 px-4 py-2 text-sm font-semibold">{preview.readyCount} ready, {preview.errorCount} need fixes · {preview.dividendReadyCount || 0} dividend rows ready</div>
           <table className="min-w-full">
             <thead>
               <tr className="bg-slate-50">
@@ -2960,6 +2972,33 @@ function FinanceFinancialCsvImport({ accessToken, onImported }) {
                   <td className="px-3 py-2 text-sm">{formatCurrency(row.data.loanRepayment || 0)}</td>
                   <td className="px-3 py-2 text-sm">{formatCurrency(row.data.interest || 0)}</td>
                   <td className="px-3 py-2 text-sm">{formatCurrency(row.data.employerContribution || 0)}</td>
+                  <td className="px-3 py-2 text-sm"><StatusBadge status={row.ready ? "Ready" : `Missing ${row.missing.join(", ")}`} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+      {preview?.dividendRows?.length ? (
+        <div className="mt-4 overflow-x-auto rounded-lg border border-emerald-200">
+          <div className="border-b bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-900">Dividend allocations preview</div>
+          <table className="min-w-full">
+            <thead>
+              <tr className="bg-emerald-50">
+                {["Row", "Sheet", "Member", "Year", "Shares", "Dividend", "Readiness"].map((h) => (
+                  <th key={h} className="px-3 py-2 text-left text-xs uppercase text-emerald-900">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {preview.dividendRows.map((row) => (
+                <tr key={`dividend-${row.rowNumber}`}>
+                  <td className="px-3 py-2 text-sm">{row.rowNumber}</td>
+                  <td className="px-3 py-2 text-sm">{row.data.sheetName || "-"}</td>
+                  <td className="px-3 py-2 text-sm">{row.data.memberNumber || row.data.email || row.data.staffId || "-"}</td>
+                  <td className="px-3 py-2 text-sm">{row.data.financialYear || "Previous year"}</td>
+                  <td className="px-3 py-2 text-sm">{Number(row.data.totalShares || row.data.shareCapital || 0).toLocaleString()}</td>
+                  <td className="px-3 py-2 text-sm">{formatCurrency(row.data.dividendPaid || 0)}</td>
                   <td className="px-3 py-2 text-sm"><StatusBadge status={row.ready ? "Ready" : `Missing ${row.missing.join(", ")}`} /></td>
                 </tr>
               ))}
@@ -3294,7 +3333,8 @@ function FinancialReportsPage({ data, currentUser }) {
 // ============================================================
 // DIVIDENDS
 // ============================================================
-function DividendsPage({ dividends }) {
+function DividendsPage({ dividends, accessToken, onRefresh }) {
+  const totalPublished = dividends.reduce((sum, dividend) => sum + Number(dividend.amount || dividend.totalDistributed || 0), 0);
   return (
     <div className="space-y-6">
       <SectionHeader
@@ -3302,23 +3342,32 @@ function DividendsPage({ dividends }) {
         title="Historical distributions"
         description="Yearly dividend tracking."
       />
+      <FinanceFinancialCsvImport accessToken={accessToken} onImported={onRefresh} mode="dividends" />
+      <div className="grid gap-4 md:grid-cols-3">
+        <KpiCard label="Published allocations" value={dividends.length} icon={PieChart} tone="emerald" />
+        <KpiCard label="Total dividends" value={formatCurrency(totalPublished)} icon={Banknote} tone="emerald" />
+        <KpiCard label="Latest year" value={dividends[0]?.year || "-"} icon={CalendarDays} tone="blue" />
+      </div>
       <div className="grid gap-4 md:grid-cols-3">
         {dividends.map((d, i) => (
           <div key={i} className="rounded-lg border bg-white p-5">
             <div className="flex items-center justify-between">
-              <h5 className="text-lg font-semibold">{d.year}</h5>
+              <h5 className="text-lg font-semibold">{d.year || "Dividend"}</h5>
               <StatusBadge status={d.status} />
             </div>
             <div className="mt-4 space-y-2 text-sm">
               <p>
-                <strong>Rate:</strong> {d.rate}
+                <strong>Member:</strong> {d.memberName || d.memberNumber || d.memberId || "-"}
+              </p>
+              <p>
+                <strong>Shares:</strong> {Number(d.totalShares || 0).toLocaleString()}
               </p>
               <p>
                 <strong>Distributed:</strong>{" "}
-                {formatCurrency(d.totalDistributed)}
+                {formatCurrency(d.totalDistributed || d.amount || 0)}
               </p>
               <p>
-                <strong>Members:</strong> {d.membersCount}
+                <strong>Source:</strong> {d.sourceSheet || "Manual declaration"}
               </p>
               <p>
                 <strong>Declared:</strong> {formatDateSafe(d.declaredDate)}
@@ -3326,6 +3375,7 @@ function DividendsPage({ dividends }) {
             </div>
           </div>
         ))}
+        {!dividends.length ? <div className="rounded-lg border bg-white p-8 text-sm text-slate-500 md:col-span-3">No dividend allocations have been published yet.</div> : null}
       </div>
     </div>
   );

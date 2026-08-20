@@ -49,6 +49,14 @@ function escapeCsv(value) {
   return `"${text.replace(/"/g, '""')}"`;
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function formatValue(key, value) {
   if (value == null || value === "") return "";
   if (typeof value === "boolean") return value ? "Yes" : "No";
@@ -110,26 +118,46 @@ export function exportRichCSV(rows, columns = [], filename = "export.csv", optio
       .replace(/[-_]+/g, " ")
       .replace(/\w\S*/g, (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
 
-  const metadata = [
-    [ORGANIZATION_NAME],
-    [`Export Title: ${title}`],
-    [`Generated: ${generatedAt.toLocaleString()}`, `Exported By: ${exportedBy}`],
-    [],
-  ];
   const header = exportColumns.map((column) => column.label);
   const body = exportRows.map((row) => {
     const flat = flattenRow(row);
     return exportColumns.map((column) => formatValue(column.key, flat[column.key]));
   });
 
-  const csv = [...metadata, header, ...body]
-    .map((line) => line.map(escapeCsv).join(","))
-    .join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body { font-family: Arial, sans-serif; color: #111827; }
+    table { border-collapse: collapse; width: 100%; }
+    td, th { border: 1px solid #b7dca2; padding: 8px; mso-number-format:"\\@"; }
+    th, .title { background-color: #8cc63f; color: #14532d; font-weight: 700; text-transform: uppercase; }
+    .label { background-color: #eaf7df; font-weight: 700; color: #14532d; width: 160px; }
+    .meta td { border-color: #b7dca2; }
+  </style>
+</head>
+<body>
+  <table class="meta">
+    <tr><td class="title" colspan="2">${escapeHtml(ORGANIZATION_NAME)}</td></tr>
+    <tr><td class="label">Export Title</td><td>${escapeHtml(title)}</td></tr>
+    <tr><td class="label">Generated</td><td>${escapeHtml(generatedAt.toLocaleString())}</td></tr>
+    <tr><td class="label">Exported By</td><td>${escapeHtml(exportedBy)}</td></tr>
+  </table>
+  <br />
+  <table>
+    <thead><tr>${header.map((column) => `<th bgcolor="#8cc63f" style="background-color:#8cc63f;color:#14532d;font-weight:700;text-transform:uppercase;">${escapeHtml(column)}</th>`).join("")}</tr></thead>
+    <tbody>
+      ${body.map((row) => `<tr>${row.map((value) => `<td>${escapeHtml(value)}</td>`).join("")}</tr>`).join("")}
+    </tbody>
+  </table>
+</body>
+</html>`;
+  const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = filename;
+  a.download = filename.replace(/\.csv$/i, ".xls");
   a.click();
   URL.revokeObjectURL(url);
 }
