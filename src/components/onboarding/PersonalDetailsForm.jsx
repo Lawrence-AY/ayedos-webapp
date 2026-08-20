@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/select';
 import { GrLinkNext } from "react-icons/gr";
 import { useEffect, useMemo } from 'react';
+import { ArrowLeft } from 'lucide-react';
 
 // Kenyan counties and sub-counties data
 export const kenyaCounties = {
@@ -71,6 +72,7 @@ export const PersonalDetailsForm = ({
   errors,
   isLoading,
   onSubmit,
+  onBack,
 }) => {
   const {
     firstName,
@@ -344,17 +346,32 @@ export const PersonalDetailsForm = ({
       </div>
 
       {/* Submit */}
-      <Button
-        type="submit"
-        className="p-2 h-13 w-full sm:w-auto bg-[#8cc63f] text-white rounded-md flex items-center justify-center gap-2"
-        disabled={isLoading || !termsAccepted}
-      >
-        <div className="flex flex-col text-left">
-          <span className="text-xs font-light">Next</span>
-          <span className="font-semibold leading-tight">Upload Documents</span>
-        </div>
-        <GrLinkNext />
-      </Button>
+      <div className="flex flex-col sm:flex-row justify-between gap-4">
+        <Button
+          type="button"
+          className="p-2 h-13 bg-[#003a16] text-white rounded-md flex items-center justify-center gap-2"
+          size="lg"
+          onClick={onBack}
+          disabled={isLoading}
+        >
+          <ArrowLeft className="w-4 h-4 mr-1" />
+          <div className="flex flex-col text-left">
+            <span className="text-xs font-light">Back</span>
+            <span className="font-semibold">Login</span>
+          </div>
+        </Button>
+        <Button
+          type="submit"
+          className="p-2 h-13 w-full sm:w-auto bg-[#8cc63f] text-white rounded-md flex items-center justify-center gap-2"
+          disabled={isLoading || !termsAccepted}
+        >
+          <div className="flex flex-col text-left">
+            <span className="text-xs font-light">Next</span>
+            <span className="font-semibold leading-tight">Upload Documents</span>
+          </div>
+          <GrLinkNext />
+        </Button>
+      </div>
     </form>
   );
 };

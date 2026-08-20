@@ -218,6 +218,7 @@ function Onboarding() {
                     errors={errors}
                     isLoading={isLoading}
                     onSubmit={handleStep1Submit}
+                    onBack={() => navigate('/login')}
                   />
                 )}
                 {currentStep === 2 && (

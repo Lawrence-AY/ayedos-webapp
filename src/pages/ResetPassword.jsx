@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Eye, EyeOff } from 'lucide-react'
 import logo from '../assets/logo-light.png'
 import DotSwarmCanvas from '../components/landing/DotTextCanvas.jsx'
 import { resetPassword as resetPasswordApi } from '../services/authService'
@@ -11,6 +12,8 @@ export default function ResetPassword() {
 
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
   const [successMessage, setSuccessMessage] = useState('')
@@ -85,30 +88,50 @@ export default function ResetPassword() {
         <form onSubmit={onSubmit}>
           <div style={{ marginBottom: 20 }}>
             <label htmlFor="password" style={labelStyle}>New Password</label>
-            <input
-              id="password"
-              type="password"
-              autoComplete="new-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              style={inputStyle}
-              placeholder="Create a strong password"
-              required
-            />
+            <div style={passwordFieldStyle}>
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="new-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                style={passwordInputStyle}
+                placeholder="Create a strong password"
+                required
+              />
+              <button
+                type="button"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                onClick={() => setShowPassword((value) => !value)}
+                style={visibilityButtonStyle}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
 
           <div style={{ marginBottom: 16 }}>
             <label htmlFor="confirmPassword" style={labelStyle}>Confirm Password</label>
-            <input
-              id="confirmPassword"
-              type="password"
-              autoComplete="new-password"
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              style={inputStyle}
-              placeholder="Repeat your new password"
-              required
-            />
+            <div style={passwordFieldStyle}>
+              <input
+                id="confirmPassword"
+                type={showConfirmPassword ? 'text' : 'password'}
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                style={passwordInputStyle}
+                placeholder="Repeat your new password"
+                required
+              />
+              <button
+                type="button"
+                aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                onClick={() => setShowConfirmPassword((value) => !value)}
+                style={visibilityButtonStyle}
+              >
+                {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
 
           {error && (
@@ -235,6 +258,35 @@ const inputStyle = {
   background: '#f8fafc',
   color: '#1e293b',
   boxSizing: 'border-box',
+}
+
+const passwordFieldStyle = {
+  ...inputStyle,
+  display: 'flex',
+  alignItems: 'center',
+  padding: '0 12px 0 0',
+}
+
+const passwordInputStyle = {
+  flex: 1,
+  minWidth: 0,
+  border: 0,
+  outline: 'none',
+  background: 'transparent',
+  padding: '14px 16px',
+  fontSize: 15,
+  color: '#1e293b',
+}
+
+const visibilityButtonStyle = {
+  border: 0,
+  background: 'transparent',
+  color: '#64748b',
+  cursor: 'pointer',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: 6,
 }
 
 const buttonStyle = {
