@@ -122,6 +122,25 @@ const loanOutstandingBalance = (loan) => {
   return principal + interest;
 };
 
+const calculateLoanNextDueAmount = (loan) => {
+  if (!loan) return 0;
+  const outstanding = Math.max(loanOutstandingBalance(loan), 0);
+  if (!outstanding) return 0;
+
+  const principal = Math.max(Number(loan.principalBalance ?? loan.principal ?? loan.amount ?? 0), 0);
+  const accruedInterest = Math.max(Number(loan.currentAccruedInterest ?? loan.accruedInterest ?? 0), 0);
+  const remainingInstallments = Math.max(Number(loan.remainingInstallments || 0), 1);
+  const monthlyRate = Math.max(Number(loan.interestRate ?? 1), 0) / 100;
+  const scheduledPrincipalAndFutureInterest = monthlyRate > 0
+    ? (principal * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -remainingInstallments))
+    : principal / remainingInstallments;
+  const scheduledDue = scheduledPrincipalAndFutureInterest + accruedInterest;
+  const fallbackDue = Number(loan.scheduledPaymentAmount || loan.nextPaymentAmount || 0);
+  const calculated = Number.isFinite(scheduledDue) && scheduledDue > 0 ? scheduledDue : fallbackDue;
+
+  return Math.round(Math.min(Math.max(calculated, fallbackDue, 0), outstanding) * 100) / 100;
+};
+
 const MIN_SHARE_CAPITAL = 25000;
 const MAX_PROFILE_PHOTO_BYTES = 1.5 * 1024 * 1024;
 
@@ -2221,7 +2240,7 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
   const remainingAfterPayment = Math.round((remainingPrincipal + remainingInterest) * 100) / 100;
   const scheduledLoans = [...activeLoans].filter((loan) => loan.nextPaymentDueAt).sort((a, b) => new Date(a.nextPaymentDueAt) - new Date(b.nextPaymentDueAt));
   const nextLoan = scheduledLoans[0];
-  const nextAmount = nextLoan ? Number(nextLoan.scheduledPaymentAmount || 0) : 0;
+  const nextAmount = calculateLoanNextDueAmount(nextLoan);
   const loanMoney = (value) => loanValuesVisible ? formatCurrency(value) : "KES ****";
 
   const savingsBalance = Number(stats.savings || stats.savingsBalance || 0);
@@ -2438,7 +2457,7 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
       <LoanCalculator product={selectedProduct} amount={requestedAmount} duration={requestedDuration} totalInterest={totalInterest} monthlyRepayment={monthlyRepayment} />
       <LoansTable loans={rows} showValues={loanValuesVisible} />
       {confirmation ? <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-slate-950/60 p-0 backdrop-blur-sm sm:items-center sm:p-4"><div role="dialog" aria-modal="true" className="max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl sm:max-w-md sm:rounded-2xl sm:p-6 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"><h3 className="text-lg font-semibold">Confirm {confirmation.type === "BORROW" ? "loan application" : "M-Pesa repayment"}</h3><div className="mt-4 space-y-3 rounded-lg border border-slate-100 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-800">{confirmation.type === "REPAY" ? <div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-slate-400">Account</span><strong className="text-right">Your SACCO member number</strong></div> : null}<div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-slate-400">Action</span><strong>{confirmation.type === "BORROW" ? "Borrow" : "Repay"}</strong></div><div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-slate-400">Total amount</span><strong className="text-right">{formatCurrency(confirmation.amount)}</strong></div>{confirmation.type === "REPAY" ? <div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-slate-400">M-Pesa phone</span><strong className="text-right">{confirmation.phone}</strong></div> : <div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-slate-400">Calculated interest</span><strong className="text-right">{formatCurrency(confirmation.charges)}</strong></div>}</div>{confirmation.type === "REPAY" ? <p className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 p-3 text-sm leading-6 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200">An M-Pesa prompt will be sent to your phone {confirmation.phone}Please verify the details and enter your M-Pesa PIN to complete the repayment.</p> : null}<div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><button type="button" onClick={() => setConfirmation(null)} className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 font-semibold dark:border-slate-600 dark:text-slate-200">Cancel</button><button type="button" onClick={(event) => confirmation.type === "BORROW" ? requestLoan(event, true) : submitRepayment(event, true)} className="min-h-11 rounded-lg bg-slate-950 px-4 py-2 font-semibold text-white dark:bg-emerald-700">{confirmation.type === "REPAY" ? "Send PIN Prompt" : "Confirm & Proceed"}</button></div></div></div> : null}
-      {showSchedule ? <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-slate-950/60 p-0 backdrop-blur-sm sm:items-center sm:p-4"><div role="dialog" aria-modal="true" className="max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl sm:max-w-xl sm:rounded-2xl sm:p-6 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"><div className="flex items-start justify-between gap-4"><h3 className="text-lg font-semibold">Active loan repayment schedule</h3><button onClick={() => setShowSchedule(false)} aria-label="Close" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-200 text-xl dark:border-slate-700">×</button></div><div className="mt-4 space-y-3">{scheduledLoans.map((loan) => <div key={loan.id} className="rounded-lg border border-slate-200 p-4 dark:border-slate-700 dark:bg-slate-800/60"><div className="flex flex-col gap-1 font-semibold sm:flex-row sm:justify-between"><span>{loan.type}</span><span>{new Date(loan.nextPaymentDueAt).toLocaleDateString()}</span></div><p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">Scheduled installment: {loanMoney(loan.scheduledPaymentAmount || 0)} · Principal: {loanMoney(loan.principalBalance)} · Accrued interest: {loanMoney(loan.currentAccruedInterest || 0)} · Balance: {loanMoney(loan.outstandingBalance)}</p></div>)}</div></div></div> : null}
+      {showSchedule ? <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-slate-950/60 p-0 backdrop-blur-sm sm:items-center sm:p-4"><div role="dialog" aria-modal="true" className="max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl sm:max-w-xl sm:rounded-2xl sm:p-6 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"><div className="flex items-start justify-between gap-4"><h3 className="text-lg font-semibold">Active loan repayment schedule</h3><button onClick={() => setShowSchedule(false)} aria-label="Close" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-200 text-xl dark:border-slate-700">×</button></div><div className="mt-4 space-y-3">{scheduledLoans.map((loan) => <div key={loan.id} className="rounded-lg border border-slate-200 p-4 dark:border-slate-700 dark:bg-slate-800/60"><div className="flex flex-col gap-1 font-semibold sm:flex-row sm:justify-between"><span>{loan.type}</span><span>{new Date(loan.nextPaymentDueAt).toLocaleDateString()}</span></div><p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">Next due amount: {loanMoney(calculateLoanNextDueAmount(loan))} · Principal remaining: {loanMoney(loan.principalBalance)} · Interest accrued: {loanMoney(loan.currentAccruedInterest ?? loan.accruedInterest ?? 0)} · Balance: {loanMoney(loanOutstandingBalance(loan))}</p></div>)}</div></div></div> : null}
     </div>
   );
 }
