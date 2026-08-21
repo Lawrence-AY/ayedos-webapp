@@ -79,6 +79,8 @@ export async function applyForLoan(data, accessToken) {
     method: 'POST',
     accessToken,
     body: data,
+    cache: false,
+    timeoutMs: 60000,
   })
   if (!res.ok) throw new Error(res.json?.message || 'Failed to apply for loan')
   return unwrapEnvelopeData(res.json)

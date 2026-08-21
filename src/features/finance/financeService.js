@@ -65,7 +65,9 @@ export async function approveLoan(id, accessToken) {
   const res = await apiRequest(`/api/finance/loans/${id}/approve`, {
     method: 'POST',
     accessToken,
+    body: {},
     cache: false,
+    timeoutMs: 60000,
   })
   if (!res.ok) throw new Error(res.json?.message || 'Failed to approve loan')
   return unwrapEnvelopeData(res.json)
@@ -92,13 +94,13 @@ export async function commitFinancialCsvImport(csv, accessToken) {
 }
 
 export async function rejectLoan(id, reason, accessToken) {
-  const res = await apiRequest(`/api/finance/loans/${id}/reject`, { method: 'POST', accessToken, body: { reason } })
+  const res = await apiRequest(`/api/finance/loans/${id}/reject`, { method: 'POST', accessToken, body: { reason }, cache: false, timeoutMs: 60000 })
   if (!res.ok) throw new Error(res.json?.message || 'Failed to reject loan')
   return unwrapEnvelopeData(res.json)
 }
 
 export async function disburseLoan(id, accessToken) {
-  const res = await apiRequest(`/api/finance/loans/${id}/disburse`, { method: 'POST', accessToken })
+  const res = await apiRequest(`/api/finance/loans/${id}/disburse`, { method: 'POST', accessToken, cache: false, timeoutMs: 60000 })
   if (!res.ok) throw new Error(res.json?.message || 'Failed to disburse loan')
   return unwrapEnvelopeData(res.json)
 }

@@ -196,17 +196,23 @@ function getCellExportValue(row, column) {
 
 export function exportRowsToCsv({ columns = [], rows = [], filename = "records.csv" }) {
   const exportableColumns = columns.filter((column) => column.export !== false && !/^(action|actions|decision)$/i.test(column.label || ""));
-  const escapeCell = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
-  const csv = [
-    exportableColumns.map((column) => escapeCell(column.label || column.key)).join(","),
-    ...rows.map((row) => exportableColumns.map((column) => escapeCell(getCellExportValue(row, column))).join(",")),
-  ].join("\r\n");
+  const escapeHtml = (value) => String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+  const headerColor = "#8cc63f";
+  const textColor = "#14532d";
+  const html = `<!doctype html><html><head><meta charset="utf-8" /><style>
+    table{border-collapse:collapse;width:100%}td,th{border:1px solid #b7dca2;padding:8px;mso-number-format:"\\@"}
+    th{background-color:${headerColor};color:${textColor};font-weight:700;text-transform:uppercase}
+  </style></head><body><table><thead><tr>${exportableColumns.map((column) => `<th bgcolor="${headerColor}" style="background-color:${headerColor};color:${textColor};font-weight:700;text-transform:uppercase;">${escapeHtml(column.label || column.key)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${exportableColumns.map((column) => `<td>${escapeHtml(getCellExportValue(row, column))}</td>`).join("")}</tr>`).join("")}</tbody></table></body></html>`;
 
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = filename.endsWith(".csv") ? filename : `${filename}.csv`;
+  link.download = filename.replace(/\.(csv|xlsx)$/i, ".xls").endsWith(".xls") ? filename.replace(/\.(csv|xlsx)$/i, ".xls") : `${filename}.xls`;
   document.body.appendChild(link);
   link.click();
   link.remove();

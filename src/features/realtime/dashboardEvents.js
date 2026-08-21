@@ -12,24 +12,67 @@ const getStoredToken = () => {
 export function useDashboardEvents(accessToken, handlers = {}) {
   useEffect(() => {
     const token = accessToken || getStoredToken();
-    if (!token || typeof EventSource === "undefined") return undefined;
+    if (!token || typeof fetch === "undefined") return undefined;
 
+    const controller = new AbortController();
     const url = new URL(buildApiUrl("/api/v1/events"), window.location.origin);
-    url.searchParams.set("access_token", token);
-    const source = new EventSource(url.toString(), { withCredentials: true });
 
-    source.addEventListener("LOAN_PAYMENT_PROCESSED", (event) => {
+    const dispatchEvent = (event) => {
+      if (event.type !== "LOAN_PAYMENT_PROCESSED") return;
       try {
-        handlers.onLoanPaymentProcessed?.(JSON.parse(event.data));
+        handlers.onLoanPaymentProcessed?.(JSON.parse(event.data || "{}"));
       } catch {
         handlers.onRecoveryNeeded?.();
       }
-    });
-    source.onerror = () => {
-      handlers.onConnectionInterrupted?.();
     };
 
-    return () => source.close();
+    const readStream = async () => {
+      try {
+        const response = await fetch(url.toString(), {
+          method: "GET",
+          credentials: "include",
+          signal: controller.signal,
+          headers: {
+            Accept: "text/event-stream",
+            Authorization: `Bearer ${token}`,
+            "Ngrok-Skip-Browser-Warning": "true",
+          },
+        });
+
+        if (!response.ok || !response.body) {
+          handlers.onConnectionInterrupted?.();
+          return;
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (!controller.signal.aborted) {
+          const { value, done } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const messages = buffer.split(/\n\n|\r\n\r\n/);
+          buffer = messages.pop() || "";
+
+          messages.forEach((message) => {
+            const event = { type: "message", data: "" };
+            message.split(/\r?\n/).forEach((line) => {
+              if (line.startsWith("event:")) event.type = line.slice(6).trim();
+              if (line.startsWith("data:")) event.data += line.slice(5).trim();
+            });
+            dispatchEvent(event);
+          });
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) handlers.onConnectionInterrupted?.();
+      }
+    };
+
+    readStream();
+
+    return () => controller.abort();
   }, [accessToken, handlers]);
 }
 
