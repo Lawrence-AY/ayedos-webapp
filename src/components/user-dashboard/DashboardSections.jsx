@@ -205,6 +205,19 @@ function formatCurrency(value, options = {}) {
   })}`;
 }
 
+function normalizeMpesaPhone(value) {
+  let digits = String(value || "").replace(/\D/g, "");
+  if (digits.startsWith("2540") && digits.length === 13) digits = `254${digits.slice(4)}`;
+  if (/^0[17]\d{8}$/.test(digits)) return `254${digits.slice(1)}`;
+  if (/^[17]\d{8}$/.test(digits)) return `254${digits}`;
+  if (/^254[17]\d{8}$/.test(digits)) return digits;
+  return digits;
+}
+
+function isValidMpesaPhone(value) {
+  return /^254[17]\d{8}$/.test(normalizeMpesaPhone(value));
+}
+
 function formatTransactionTimestamp(value) {
   if (!value) return "-";
   const date = new Date(value);
@@ -2243,7 +2256,7 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
   const nextAmount = calculateLoanNextDueAmount(nextLoan);
   const loanMoney = (value) => loanValuesVisible ? formatCurrency(value) : "KES ****";
 
-  const savingsBalance = Number(stats.savings || stats.savingsBalance || 0);
+  const savingsBalance = Number(stats.totalSavings ?? stats.savings ?? stats.savingsBalance ?? 0);
   const requiresGuarantors = loanForm.type !== "EMERGENCY" && !loanForm.selfGuarantee;
   const selectedMemberNames = selectedGuarantors.map((member) => member.name || member.memberNumber).join(", ");
 
@@ -2303,8 +2316,9 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
 
   async function submitRepayment(event, confirmed = false) {
     event.preventDefault();
+    const normalizedMpesaPhone = normalizeMpesaPhone(mpesaPhone);
     if (!Number.isInteger(repayValue) || repayValue <= 0 || repayValue > maximumWholeShillingPayment) { toast.error(!Number.isInteger(repayValue) || repayValue <= 0 ? "Enter a whole-shilling repayment amount greater than zero" : "Payment exceeds the total outstanding loan balance", { duration: 4000 }); return; }
-    if (!/^(?:254|0)?7\d{8}$/.test(mpesaPhone.replace(/\s+/g, ""))) { toast.error("Enter a valid M-Pesa phone number", { duration: 4000 }); return; }
+    if (!isValidMpesaPhone(mpesaPhone)) { toast.error("Enter a valid M-Pesa phone number", { duration: 4000 }); return; }
     if (!confirmed) {
       setConfirmation({
         type: "REPAY",
@@ -2324,7 +2338,7 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
     }
     try {
       setBusyAction("repay"); setConfirmation(null);
-      const request = await initiateLoanRepaymentStk(selectedRepayLoanId, repayValue, mpesaPhone, accessToken);
+      const request = await initiateLoanRepaymentStk(selectedRepayLoanId, repayValue, normalizedMpesaPhone, accessToken);
       toast.success("STK Push Sent!", { description: "Check your phone and input your M-Pesa PIN. Waiting for confirmation...", duration: 4000 });
       let payment = null;
       for (let attempt = 0; attempt < 40; attempt += 1) {

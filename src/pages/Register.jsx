@@ -13,7 +13,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Eye, EyeOff } from "lucide-react";
+import { Check, Circle, Eye, EyeOff } from "lucide-react";
 import {
   InputOTP,
   InputOTPGroup,
@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/input-otp";
 
 const OTP_COOLDOWN_SECONDS = 60;
+const PASSWORD_RULE_TEXT = "Password must be at least 8 characters long and include at least one uppercase letter, one lowercase letter, one number, and one special character (e.g., @, #, $, %).";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -43,7 +44,20 @@ export default function Register() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordHintOpen, setPasswordHintOpen] = useState(false);
   const [formError, setFormError] = useState(null);
+  const passwordRequirements = [
+    { id: "length", label: "At least 8 characters", met: password.length >= 8 },
+    { id: "uppercase", label: "At least one uppercase letter", met: /[A-Z]/.test(password) },
+    { id: "lowercase", label: "At least one lowercase letter", met: /[a-z]/.test(password) },
+    { id: "number", label: "At least one number", met: /\d/.test(password) },
+    { id: "special", label: "At least one special character (e.g., @, #, $, %)", met: /[^A-Za-z0-9]/.test(password) },
+  ];
+  const passwordMeetsPolicy = passwordRequirements.every((requirement) => requirement.met);
+
+  useEffect(() => {
+    if (!passwordMeetsPolicy && confirmPassword) setConfirmPassword("");
+  }, [confirmPassword, passwordMeetsPolicy]);
 
   async function onSubmit(e) {
     e.preventDefault();
@@ -55,8 +69,8 @@ export default function Register() {
     if (!lastName.trim()) return setFormError("Last name is required");
     if (!email.trim()) return setFormError("Email is required");
     if (!phone.trim()) return setFormError("Phone number is required");
-    if (password.length < 8)
-      return setFormError("Password must be at least 8 characters");
+    if (!passwordMeetsPolicy)
+      return setFormError(PASSWORD_RULE_TEXT);
     if (password !== confirmPassword)
       return setFormError("Passwords do not match");
 
@@ -300,20 +314,45 @@ export default function Register() {
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onFocus={() => setPasswordHintOpen(true)}
                 visible={showPassword}
                 onToggle={() => setShowPassword((visible) => !visible)}
               />
+              {passwordHintOpen && (
+                <div style={passwordChecklistStyle}>
+                  <p style={passwordGuidanceStyle}>{PASSWORD_RULE_TEXT}</p>
+                  <ul style={passwordChecklistListStyle}>
+                    {passwordRequirements.map((requirement) => {
+                      const Icon = requirement.met ? Check : Circle;
+                      return (
+                        <li
+                          key={requirement.id}
+                          style={{
+                            ...passwordChecklistItemStyle,
+                            color: requirement.met ? "#166534" : "var(--auth-muted)",
+                          }}
+                        >
+                          <Icon size={15} strokeWidth={requirement.met ? 3 : 2} />
+                          <span>{requirement.label}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
             </div>
 
-            <div style={{ marginBottom: 15 }}>
-              <PasswordField
-                placeholder="Confirm password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                visible={showConfirmPassword}
-                onToggle={() => setShowConfirmPassword((visible) => !visible)}
-              />
-            </div>
+            {passwordMeetsPolicy && (
+              <div style={{ marginBottom: 15 }}>
+                <PasswordField
+                  placeholder="Confirm password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  visible={showConfirmPassword}
+                  onToggle={() => setShowConfirmPassword((visible) => !visible)}
+                />
+              </div>
+            )}
 
             {(formError || authError) && (
               <div role="alert" style={errorStyle}>
@@ -422,7 +461,7 @@ export default function Register() {
   );
 }
 
-function PasswordField({ placeholder, value, onChange, visible, onToggle }) {
+function PasswordField({ placeholder, value, onChange, onFocus, visible, onToggle }) {
   const Icon = visible ? EyeOff : Eye;
   return (
     <div style={passwordFieldWrapStyle}>
@@ -431,6 +470,7 @@ function PasswordField({ placeholder, value, onChange, visible, onToggle }) {
         placeholder={placeholder}
         value={value}
         onChange={onChange}
+        onFocus={onFocus}
         style={{ ...inputStyle, paddingRight: 48 }}
         minLength={8}
         required
@@ -460,6 +500,38 @@ const inputStyle = {
 
 const passwordFieldWrapStyle = {
   position: "relative",
+};
+
+const passwordGuidanceStyle = {
+  margin: 0,
+  color: "var(--auth-muted)",
+  fontSize: 12,
+  lineHeight: 1.45,
+};
+
+const passwordChecklistStyle = {
+  marginTop: 10,
+  padding: "12px 14px",
+  border: "1px solid rgba(140,198,63,0.35)",
+  borderRadius: 12,
+  background: "rgba(140,198,63,0.08)",
+};
+
+const passwordChecklistListStyle = {
+  listStyle: "none",
+  padding: 0,
+  margin: "10px 0 0",
+  display: "grid",
+  gap: 8,
+};
+
+const passwordChecklistItemStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  fontSize: 12,
+  fontWeight: 700,
+  lineHeight: 1.35,
 };
 
 const passwordToggleStyle = {

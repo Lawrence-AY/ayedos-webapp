@@ -1,7 +1,20 @@
-import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import {
   AlertTriangle,
   Banknote,
@@ -339,6 +352,8 @@ export default function FinanceDashboard() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");
   const [notifications, setNotifications] = useState([]);
+  const locallyReadNotificationIds = useRef(new Set());
+  const markAllReadAt = useRef(null);
   const [approvingLoanId, setApprovingLoanId] = useState(null);
   const unreadCount = notifications.filter((n) => !n.read && !n.isRead && !n.readAt).length;
 
@@ -420,7 +435,16 @@ export default function FinanceDashboard() {
       groupBorrowing: results[9].status === "fulfilled" ? results[9].value : { items: [], summary: {} },
     });
     if (results[8].status === "fulfilled" && Array.isArray(results[8].value)) {
-      setNotifications(results[8].value.map(normalizeNotification));
+      const markAllTime = markAllReadAt.current ? new Date(markAllReadAt.current).getTime() : 0;
+      setNotifications(results[8].value.map((notification) => {
+        const normalized = normalizeNotification(notification);
+        const notificationTime = new Date(normalized.createdAt || normalized.time || 0).getTime();
+        const preserveLocalRead = locallyReadNotificationIds.current.has(normalized.id)
+          || (markAllTime > 0 && notificationTime > 0 && notificationTime <= markAllTime);
+        return preserveLocalRead && !normalized.readAt
+          ? { ...normalized, read: true, isRead: true, readAt: markAllReadAt.current || new Date().toISOString() }
+          : normalized;
+      }));
     }
     setLoading(false);
   }, [accessToken]);
@@ -448,10 +472,12 @@ export default function FinanceDashboard() {
   const stats = useMemo(() => getFinanceStats(data), [data]);
   async function markAllNotificationsRead() {
     const readAt = new Date().toISOString();
+    markAllReadAt.current = readAt;
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true, isRead: true, readAt: n.readAt || readAt })));
     try {
       await markAllFinanceNotificationsRead(accessToken);
     } catch (error) {
+      markAllReadAt.current = null;
       loadAllData({ showLoading: false });
       alert(error.message);
     }
@@ -459,10 +485,12 @@ export default function FinanceDashboard() {
 
   async function handleNotificationRead(id) {
     const readAt = new Date().toISOString();
+    locallyReadNotificationIds.current.add(id);
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true, isRead: true, readAt: n.readAt || readAt } : n)));
     try {
       await markFinanceNotificationRead(id, accessToken);
     } catch (error) {
+      locallyReadNotificationIds.current.delete(id);
       loadAllData({ showLoading: false });
       alert(error.message);
     }
@@ -512,13 +540,19 @@ export default function FinanceDashboard() {
     const reason = prompt("Reason for rejection:");
     if (reason?.trim()) {
       try {
-        await rejectLoan(id, reason.trim(), accessToken);
+        const updated = await rejectLoan(id, reason.trim(), accessToken);
+        setData((current) => ({
+          ...current,
+          loans: current.loans.map((loan) => loan.id === id ? { ...loan, ...updated } : loan),
+        }));
         await loadAllData({ showLoading: false });
         toast.success("Loan rejected. The member has been notified.");
+        return updated;
       } catch (e) {
         toast.error(e.message || "Failed to reject loan");
       }
     }
+    return null;
   }
   async function handleDisburseLoan(id) {
     try {
@@ -1865,6 +1899,7 @@ function UnifiedLoansPage({
     return normalized || "PENDING_FINANCE";
   };
   const isActionableStatus = (status) => ["PENDING", "UNDER_REVIEW", "PENDING_FINANCE"].includes(String(status || "").toUpperCase());
+  const isDisbursableStatus = (status) => String(status || "").toUpperCase() === "APPROVED";
   const loanTypeLabel = (type) => `${String(type || "Loan").charAt(0)}${String(type || "Loan").slice(1).toLowerCase()} Loan`;
   const totalInterestForLoan = (loan) => {
     const amount = Number(loan?.principal || loan?.amount || 0);
@@ -2009,7 +2044,7 @@ function UnifiedLoansPage({
               const approving = approvingLoanId === v;
               return (
                 <div className="flex flex-wrap gap-1">
-                  {["PENDING", "UNDER_REVIEW"].includes(s) && (
+                  {isActionableStatus(s) && (
                     <>
                       <button
                         disabled={approving}
@@ -2027,13 +2062,16 @@ function UnifiedLoansPage({
                       </button>
                     </>
                   )}
-                  {s === "APPROVED" && (
+                  {isDisbursableStatus(s) && (
                     <button
                       onClick={() => onDisburseLoan?.(v)}
                       className="text-xs font-semibold text-sky-700"
                     >
                       Disburse
                     </button>
+                  )}
+                  {s === "REJECTED" && (
+                    <span className="text-xs font-semibold text-slate-500">Decision recorded</span>
                   )}
                   {(s === "ACTIVE" || s === "DISBURSED") && (
                     <button
@@ -2111,29 +2149,49 @@ function UnifiedLoansPage({
                   <div><dt className="text-slate-500">Current status</dt><dd className="mt-1"><StatusBadge status={selectedLoanRequest.financeStatus || displayLoanStatus(selectedLoanRequest.status)} /></dd></div>
                 </dl>
               </div>
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  disabled={approvingLoanId === selectedLoanRequest.id || !isActionableStatus(selectedLoanRequest.status)}
-                  onClick={async () => {
-                    const updated = await onApproveLoan?.(selectedLoanRequest.id);
-                    if (updated) setSelectedLoanRequest((current) => ({ ...current, ...updated }));
-                  }}
-                  className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                >
-                  {approvingLoanId === selectedLoanRequest.id ? <RefreshCw className="animate-spin" size={16} /> : <CheckCircle2 size={16} />}
-                  Approve
-                </button>
-                <button
-                  type="button"
-                  disabled={!isActionableStatus(selectedLoanRequest.status)}
-                  onClick={() => onRejectLoan?.(selectedLoanRequest.id)}
-                  className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                >
-                  <XCircle size={16} />
-                  Reject
-                </button>
-              </div>
+              {isActionableStatus(selectedLoanRequest.status) ? (
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    disabled={approvingLoanId === selectedLoanRequest.id}
+                    onClick={async () => {
+                      const updated = await onApproveLoan?.(selectedLoanRequest.id);
+                      if (updated) setSelectedLoanRequest((current) => ({ ...current, ...updated }));
+                    }}
+                    className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    {approvingLoanId === selectedLoanRequest.id ? <RefreshCw className="animate-spin" size={16} /> : <CheckCircle2 size={16} />}
+                    Approve
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const updated = await onRejectLoan?.(selectedLoanRequest.id);
+                      if (updated) setSelectedLoanRequest((current) => ({ ...current, ...updated }));
+                    }}
+                    className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white"
+                  >
+                    <XCircle size={16} />
+                    Reject
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-3">
+                  <div className="flex min-h-11 flex-1 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700">
+                    {displayLoanStatus(selectedLoanRequest.status).replace(/_/g, " ")}
+                  </div>
+                  {isDisbursableStatus(selectedLoanRequest.status) ? (
+                    <button
+                      type="button"
+                      onClick={() => onDisburseLoan?.(selectedLoanRequest.id)}
+                      className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white"
+                    >
+                      <Send size={16} />
+                      Disburse
+                    </button>
+                  ) : null}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -3032,300 +3090,443 @@ function FinanceMemberFinancialDetail({ member, accessToken, onBack }) {
 // REPORTS
 // ============================================================
 function FinancialReportsPage({ data, currentUser }) {
-  const [timeFilter, setTimeFilter] = useState("monthly");
-  const [breakdown, setBreakdown] = useState(null);
-  const report = data.reports || {};
+  const today = new Date().toISOString().slice(0, 10);
+  const [activeTab, setActiveTab] = useState("fund");
+  const [fromDate, setFromDate] = useState(today);
+  const [toDate, setToDate] = useState(today);
+  const [drilldown, setDrilldown] = useState(null);
+  const transactions = data.transactions || [];
   const loans = data.loans || [];
   const members = data.members || [];
-  const portfolio = getLoanPortfolioMetrics(loans);
-  const timeSeries = (report.timeSeries?.[timeFilter] || []).slice(-30);
-
-  const reportRows = timeSeries;
-
-  const accountRows = (field) => members
-    .map((member) => ({
-      memberId: member.memberId || member.id,
-      memberNumber: member.memberNumber,
-      memberName: member.name || member.memberName || "Unknown member",
-      amount: Number(member[field] || 0),
-    }))
-    .filter((row) => row.amount > 0)
-    .sort((left, right) => right.amount - left.amount);
-  const shareCapitalRows = accountRows("shares");
-  const savingsRows = accountRows("savings");
-  const shareCapitalDeposits = shareCapitalRows.reduce((sum, row) => sum + row.amount, 0);
-  const savingsDeposits = savingsRows.reduce((sum, row) => sum + row.amount, 0);
-  const totalDeposits = shareCapitalDeposits + savingsDeposits;
-
-  const loanProducts = ["EMERGENCY", "EDUCATION", "DEVELOPMENT", "WELFARE"];
-  const repayByProduct = {};
-  const disburseByProduct = {};
-  loanProducts.forEach((p) => {
-    const productLoans = loans.filter(
-      (loan) => String(loan.type || loan.loanType || "").toUpperCase() === p,
-    );
-    repayByProduct[p] = productLoans.reduce(
-      (sum, loan) => sum + Number(loan.paid ?? loan.repaid ?? 0),
-      0,
-    );
-    disburseByProduct[p] = getLoanPortfolioMetrics(productLoans).totalDisbursed;
-  });
-  const totalRepayments = portfolio.totalRepaid;
-  const totalDisbursed = portfolio.totalDisbursed;
-  const loanRows = (product, metric) => loans
-    .filter((loan) => !product || String(loan.type || loan.loanType || "").toUpperCase() === product)
-    .map((loan) => {
-      const status = String(loan.status || "").toUpperCase();
-      const amount = metric === "repayments"
-        ? Number(loan.paid ?? loan.repaid ?? 0)
-        : ["DISBURSED", "ACTIVE", "OVERDUE", "COMPLETED", "DEFAULTED", "WRITTEN_OFF"].includes(status)
-          ? Number(loan.principal || loan.amount || 0)
-          : 0;
-      return {
-        memberId: loan.memberId,
-        memberNumber: loan.memberNumber,
-        memberName: loan.member || loan.memberName || "Unknown member",
-        amount,
-      };
-    })
-    .filter((row) => row.amount > 0)
-    .reduce((rows, row) => {
-      const existing = rows.find((item) => item.memberId === row.memberId);
-      if (existing) existing.amount += row.amount;
-      else rows.push(row);
-      return rows;
-    }, [])
-    .sort((left, right) => right.amount - left.amount);
-  const localBreakdowns = {
-    ...(report.memberBreakdowns || {}),
-    deposits: [...shareCapitalRows, ...savingsRows].reduce((rows, row) => {
-      const existing = rows.find((item) => item.memberId === row.memberId);
-      if (existing) existing.amount += row.amount;
-      else rows.push({ ...row });
-      return rows;
-    }, []).sort((left, right) => right.amount - left.amount),
-    shareCapitalDeposits: shareCapitalRows,
-    savingsDeposits: savingsRows,
-    repayments: loanRows(null, "repayments"),
-    disbursements: loanRows(null, "disbursements"),
+  const deductions = data.deductions || [];
+  const dividends = data.dividends || [];
+  const exporter = getExporterName(currentUser);
+  const period = { fromDate, toDate };
+  const startDate = fromDate ? new Date(fromDate) : null;
+  const endDate = toDate ? new Date(toDate) : null;
+  if (endDate) endDate.setHours(23, 59, 59, 999);
+  const inPeriod = (value) => {
+    const date = value ? new Date(value) : null;
+    if (!date || Number.isNaN(date.getTime())) return true;
+    if (startDate && date < startDate) return false;
+    if (endDate && date > endDate) return false;
+    return true;
   };
-  loanProducts.forEach((product) => {
-    localBreakdowns[`repayments_${product}`] = loanRows(product, "repayments");
-    localBreakdowns[`disbursements_${product}`] = loanRows(product, "disbursements");
+  const txDate = (row) => row.createdAt || row.date || row.updatedAt || row.paidAt;
+  const loanDate = (loan) => loan.disbursedAt || loan.disbursedDate || loan.decidedAt || loan.approvedAt || loan.createdAt;
+  const txText = (row) => String([row.type, row.category, row.paymentCategory, row.destination, row.description].filter(Boolean).join(" ")).toLowerCase();
+  const successfulTransactions = transactions.filter((row) => ["SUCCESS", "PAID", "COMPLETED", "VERIFIED"].includes(String(row.status || "").toUpperCase()) && inPeriod(txDate(row)));
+  const depositRows = successfulTransactions.filter((row) => {
+    const text = txText(row);
+    return text.includes("deposit") || text.includes("savings") || text.includes("share_capital") || text.includes("share capital") || String(row.category || "").toUpperCase() === "SAVINGS" || String(row.category || "").toUpperCase() === "SHARE_CAPITAL";
   });
-  const openBreakdown = (key, title, total) =>
-    setBreakdown({ key, title, total, rows: localBreakdowns[key] || [] });
-
+  const repaymentRows = successfulTransactions.filter((row) => txText(row).includes("repayment"));
+  const disbursedStatuses = ["APPROVED", "ACTIVE", "DISBURSED", "OVERDUE", "COMPLETED", "DEFAULTED", "WRITTEN_OFF"];
+  const disbursementRows = loans.filter((loan) => disbursedStatuses.includes(String(loan.status || "").toUpperCase()) && inPeriod(loanDate(loan)));
+  const sum = (rows, picker = (row) => row.amount) => rows.reduce((total, row) => total + Number(picker(row) || 0), 0);
+  const loanAmount = (loan) => Number(loan.principal || loan.amount || loan.approvedAmount || 0);
+  const depositMethod = (row) => {
+    const method = String(row.method || row.paymentMethod || row.channel || row.source || "").toLowerCase();
+    const text = txText(row);
+    if (method.includes("mpesa") || method.includes("m-pesa") || text.includes("mpesa") || text.includes("m-pesa")) return "M-Pesa";
+    if (method.includes("bank") || text.includes("bank")) return "Bank Transfer";
+    if (method.includes("payroll") || method.includes("checkoff") || text.includes("payroll") || text.includes("checkoff")) return "Payroll Checkoff";
+    return "Manual/Other";
+  };
+  const loanProduct = (loan) => String(loan.type || loan.loanType || "UNCLASSIFIED").toUpperCase();
+  const daysInRange = startDate && endDate ? Math.max(1, Math.ceil((endDate - startDate) / 86400000) + 1) : 0;
+  const rangePreset = (() => {
+    const now = new Date();
+    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+    const lastMonthStartDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastMonthEndDate = new Date(now.getFullYear(), now.getMonth(), 0);
+    if (fromDate === today && toDate === today) return "today";
+    if (fromDate === thisMonthStart && toDate === today) return "thisMonth";
+    if (fromDate === lastMonthStartDate.toISOString().slice(0, 10) && toDate === lastMonthEndDate.toISOString().slice(0, 10)) return "lastMonth";
+    return "";
+  })();
+  const interval = rangePreset === "today" ? "hour" : daysInRange <= 7 ? "day" : daysInRange > 90 ? "month" : daysInRange > 31 ? "week" : "day";
+  const bucketKey = (value) => {
+    const date = value ? new Date(value) : null;
+    if (!date || Number.isNaN(date.getTime())) return "Undated";
+    if (interval === "hour") return `${date.toISOString().slice(0, 10)} ${String(date.getHours()).padStart(2, "0")}:00`;
+    if (interval === "month") return date.toISOString().slice(0, 7);
+    if (interval === "week") {
+      const week = new Date(date);
+      const day = week.getDay() || 7;
+      week.setDate(week.getDate() - day + 1);
+      return `Week of ${week.toISOString().slice(0, 10)}`;
+    }
+    return date.toISOString().slice(0, 10);
+  };
+  const currencyColumns = [
+    { key: "reference", label: "Reference" },
+    { key: "date", label: "Date" },
+    { key: "memberNumber", label: "Member Number" },
+    { key: "memberName", label: "Member" },
+    { key: "type", label: "Type" },
+    { key: "method", label: "Method" },
+    { key: "amount", label: "Amount", render: (value) => formatCurrency(value), csv: (value) => formatCurrency(value) },
+    { key: "status", label: "Status", render: (value) => <StatusBadge status={value || "Recorded"} />, csv: (value) => value || "Recorded" },
+  ];
+  const loanColumns = [
+    { key: "reference", label: "Loan ID" },
+    { key: "date", label: "Date" },
+    { key: "memberNumber", label: "Member Number" },
+    { key: "memberName", label: "Member" },
+    { key: "type", label: "Loan Product" },
+    { key: "grossAmount", label: "Total Amount Borrowed", render: (value) => formatCurrency(value), csv: (value) => formatCurrency(value) },
+    { key: "processingFees", label: "Processing Fees Incurred", render: (value) => formatCurrency(value), csv: (value) => formatCurrency(value) },
+    { key: "netDisbursed", label: "Net Amount Disbursed", render: (value) => formatCurrency(value), csv: (value) => formatCurrency(value) },
+    { key: "count", label: "Count" },
+    { key: "status", label: "Status", render: (value) => <StatusBadge status={value || "Recorded"} />, csv: (value) => value || "Recorded" },
+  ];
+  const txLog = (row, overrides = {}) => ({
+    reference: row.reference || row.id || row.transactionId || "-",
+    date: formatDate(txDate(row)),
+    rawDate: txDate(row),
+    memberNumber: row.memberNumber || row.memberId || "-",
+    memberName: row.memberName || row.member || "-",
+    type: row.type || row.category || row.paymentCategory || "Transaction",
+    method: row.method || row.paymentMethod || row.channel || depositMethod(row),
+    amount: Number(row.amount || 0),
+    status: row.status || "Recorded",
+    ...overrides,
+  });
+  const loanLog = (loan) => {
+    const grossAmount = loanAmount(loan);
+    const processingFees = Number(loan.processingFee || loan.processingFees || loan.feeAmount || loan.applicationFee || loan.adminFee || 0);
+    const netDisbursed = Math.max(grossAmount - processingFees, 0);
+    return {
+      reference: loan.id || loan.loanId || "-",
+      date: formatDate(loanDate(loan)),
+      rawDate: loanDate(loan),
+      memberNumber: loan.memberNumber || loan.memberId || "-",
+      memberName: loan.member || loan.memberName || "-",
+      type: loanProduct(loan),
+      method: "Finance approval",
+      amount: grossAmount,
+      grossAmount,
+      processingFees,
+      netDisbursed,
+      count: 1,
+      status: loan.status || "Recorded",
+    };
+  };
+  const depositLogs = depositRows.map((row) => txLog(row));
+  const repaymentLogs = repaymentRows.map((row) => txLog(row, {
+    principal: Number(row.principalAmount || row.principal || 0),
+    interest: Number(row.interestAmount || row.interest || row.interestPaid || 0),
+  }));
+  const disbursementLogs = disbursementRows.map(loanLog);
+  const fundLogs = [
+    ...depositLogs.map((row) => ({ ...row, category: "Deposit", netAmount: row.amount })),
+    ...repaymentLogs.map((row) => ({ ...row, category: "Repayment", netAmount: row.amount })),
+    ...disbursementLogs.map((row) => ({ ...row, category: "Disbursement", netAmount: -row.amount })),
+  ].sort((left, right) => new Date(left.rawDate || 0) - new Date(right.rawDate || 0));
+  const fundColumns = [
+    { key: "date", label: "Date" },
+    { key: "reference", label: "Reference" },
+    { key: "memberNumber", label: "Member Number" },
+    { key: "memberName", label: "Member" },
+    { key: "category", label: "Category" },
+    { key: "type", label: "Type" },
+    { key: "amount", label: "Gross Amount", render: (value) => formatCurrency(value), csv: (value) => formatCurrency(value) },
+    { key: "netAmount", label: "Net Fund Impact", render: (value) => formatCurrency(value), csv: (value) => formatCurrency(value) },
+  ];
+  const repaymentColumns = [
+    ...currencyColumns.slice(0, 7),
+    { key: "principal", label: "Principal", render: (value) => formatCurrency(value), csv: (value) => formatCurrency(value) },
+    { key: "interest", label: "Interest", render: (value) => formatCurrency(value), csv: (value) => formatCurrency(value) },
+    currencyColumns[7],
+  ];
+  const groupRows = (rows, datePicker, seed = {}) => {
+    const map = new Map();
+    rows.forEach((row) => {
+      const label = bucketKey(datePicker(row));
+      if (!map.has(label)) map.set(label, { label, ...seed });
+      const current = map.get(label);
+      current.count = Number(current.count || 0) + 1;
+      current.amount = Number(current.amount || 0) + Number(row.amount || 0);
+    });
+    return Array.from(map.values()).sort((a, b) => String(a.label).localeCompare(String(b.label)));
+  };
+  const fundChart = (() => {
+    let cumulative = 0;
+    return groupRows(fundLogs, (row) => row.rawDate, { amount: 0, count: 0 }).map((row) => {
+      const net = fundLogs.filter((item) => bucketKey(item.rawDate) === row.label).reduce((total, item) => total + Number(item.netAmount || 0), 0);
+      cumulative += net;
+      return { label: row.label, value: cumulative };
+    });
+  })();
+  const disbursementChart = groupRows(disbursementLogs, (row) => row.rawDate, { amount: 0, count: 0 }).map((row) => ({ ...row, volume: row.amount }));
+  const repaymentChart = groupRows(repaymentLogs, (row) => row.rawDate, { principal: 0, interest: 0, amount: 0, count: 0 }).map((row) => {
+    const rows = repaymentLogs.filter((item) => bucketKey(item.rawDate) === row.label);
+    return {
+      ...row,
+      principal: rows.reduce((total, item) => total + Number(item.principal || 0), 0),
+      interest: rows.reduce((total, item) => total + Number(item.interest || 0), 0),
+    };
+  });
+  const depositChart = groupRows(depositLogs, (row) => row.rawDate, { mpesa: 0, bank: 0, payroll: 0, other: 0 }).map((row) => {
+    const rows = depositLogs.filter((item) => bucketKey(item.rawDate) === row.label);
+    return rows.reduce((current, item) => {
+      const method = depositMethod(item);
+      const key = method === "M-Pesa" ? "mpesa" : method === "Bank Transfer" ? "bank" : method === "Payroll Checkoff" ? "payroll" : "other";
+      current[key] += Number(item.amount || 0);
+      return current;
+    }, { ...row });
+  });
+  const totals = {
+    fund: fundLogs.reduce((total, row) => total + Number(row.netAmount || 0), 0),
+    deposits: sum(depositLogs),
+    repayments: sum(repaymentLogs),
+    disbursements: sum(disbursementLogs),
+    grossBorrowed: sum(disbursementLogs, (row) => row.grossAmount),
+    processingFees: sum(disbursementLogs, (row) => row.processingFees),
+    netDisbursed: sum(disbursementLogs, (row) => row.netDisbursed),
+  };
+  const productTotals = disbursementLogs.reduce((acc, row) => ({ ...acc, [row.type]: (acc[row.type] || 0) + Number(row.amount || 0) }), {});
+  const methodTotals = depositLogs.reduce((acc, row) => {
+    const method = depositMethod(row);
+    acc[method] = (acc[method] || 0) + Number(row.amount || 0);
+    return acc;
+  }, {});
+  const memberProfileLogs = members.map((member) => ({
+    MemberNumber: member.memberNumber || member.id || "-",
+    Member: member.name || member.memberName || "-",
+    Status: member.status || "-",
+    Savings: Number(member.savings || member.savingsBalance || 0),
+    ShareCapital: Number(member.shares || member.shareCapital || 0),
+    LoanBalance: Number(member.loanBalance || member.loans || 0),
+    Salary: Number(member.salary || member.monthlyIncome || 0),
+    Company: member.company || member.employer || "-",
+  }));
+  const deductionLogs = deductions.map((deduction) => ({
+    Reference: deduction.id || deduction.reference || "-",
+    Date: formatDate(deduction.createdAt || deduction.date),
+    MemberNumber: deduction.memberNumber || deduction.memberId || "-",
+    Member: deduction.memberName || deduction.name || "-",
+    Company: deduction.company || deduction.employer || "-",
+    Salary: Number(deduction.salary || deduction.monthlySalary || 0),
+    Deduction: Number(deduction.deduction || deduction.amount || deduction.contribution || 0),
+    Status: deduction.status || "-",
+  }));
+  const dividendLogs = dividends.map((dividend) => ({
+    Reference: dividend.id || dividend.reference || "-",
+    Year: dividend.year || "-",
+    MemberNumber: dividend.memberNumber || dividend.memberId || "-",
+    Member: dividend.memberName || dividend.name || "-",
+    Shares: Number(dividend.totalShares || dividend.shares || 0),
+    Amount: Number(dividend.totalDistributed || dividend.amount || 0),
+    Status: dividend.status || "-",
+    Declared: formatDate(dividend.declaredDate || dividend.createdAt),
+  }));
+  const masterSummaryRows = [
+    { Category: "Total Members Fund", Records: fundLogs.length, Amount: totals.fund },
+    { Category: "Loan Disbursements - Gross Borrowed", Records: disbursementLogs.length, Amount: totals.grossBorrowed },
+    { Category: "Loan Disbursements - Processing Fees", Records: disbursementLogs.length, Amount: totals.processingFees },
+    { Category: "Loan Disbursements - Net Disbursed", Records: disbursementLogs.length, Amount: totals.netDisbursed },
+    { Category: "Loan Repayments", Records: repaymentLogs.length, Amount: totals.repayments },
+    { Category: "Deposits", Records: depositLogs.length, Amount: totals.deposits },
+    { Category: "Member Profile Reports", Records: memberProfileLogs.length, Amount: memberProfileLogs.reduce((total, row) => total + Number(row.Savings || 0) + Number(row.ShareCapital || 0), 0) },
+    { Category: "Salary Deductions", Records: deductionLogs.length, Amount: deductionLogs.reduce((total, row) => total + Number(row.Deduction || 0), 0) },
+    { Category: "Dividends", Records: dividendLogs.length, Amount: dividendLogs.reduce((total, row) => total + Number(row.Amount || 0), 0) },
+  ];
+  const masterSheets = {
+    "Master Summary": masterSummaryRows,
+    "Total Members Fund": fundLogs.map(({ rawDate, ...row }) => row),
+    "Loan Disbursements": disbursementLogs.map(({ rawDate, ...row }) => row),
+    "Loan Repayments": repaymentLogs.map(({ rawDate, ...row }) => row),
+    Deposits: depositLogs.map(({ rawDate, ...row }) => row),
+    "Member Profiles": memberProfileLogs,
+    "Salary Deductions": deductionLogs,
+    Dividends: dividendLogs,
+  };
+  const exportReportWorkbook = () => {
+    const sheets = [
+      ["Export Details", [
+        { Field: "Organization", Value: "Ayedos SACCO Management System" },
+        { Field: "Export Title", Value: "Finance Reports Master Report" },
+        { Field: "Period", Value: `${fromDate || "All"} to ${toDate || "All"}` },
+        { Field: "Generated", Value: new Date().toLocaleString() },
+        { Field: "Exported By", Value: exporter },
+      ]],
+      ...Object.entries(masterSheets),
+    ];
+    const xml = `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Styles><Style ss:ID="Header"><Interior ss:Color="${REPORT_EXPORT_HEADER_COLOR}" ss:Pattern="Solid"/><Font ss:Bold="1" ss:Color="${REPORT_EXPORT_TEXT_COLOR}"/></Style></Styles>${sheets.map(([name, rows]) => worksheetXml(name, rows)).join("")}</Workbook>`;
+    const blob = new Blob([xml], { type: "application/vnd.ms-excel;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `finance-master-report-${fromDate || "all"}-${toDate || "all"}.xls`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  const tabs = [
+    { key: "master", label: "Master Report", icon: PieChart },
+    { key: "fund", label: "Total Members Fund", icon: TrendingUp },
+    { key: "disbursements", label: "Loan Disbursements", icon: Banknote },
+    { key: "repayments", label: "Loan Repayments", icon: CreditCard },
+    { key: "deposits", label: "Deposits", icon: WalletCards },
+  ];
+  const masterColumns = [
+    { key: "Category", label: "Category" },
+    { key: "Records", label: "Records" },
+    { key: "Amount", label: "Amount", render: (value) => formatCurrency(value), csv: (value) => formatCurrency(value) },
+  ];
+  const openLog = (title, rows, columns, total) => setDrilldown({ title, rows, columns, total });
+  const activeReport = () => {
+    if (activeTab === "master") return { title: "Master Report", rows: masterSummaryRows, columns: masterColumns };
+    if (activeTab === "fund") return { title: "Total Members Fund", rows: fundLogs, columns: fundColumns };
+    if (activeTab === "disbursements") return { title: "Loan Disbursements", rows: disbursementLogs, columns: loanColumns };
+    if (activeTab === "repayments") return { title: "Loan Repayments", rows: repaymentLogs, columns: repaymentColumns };
+    return { title: "Deposits", rows: depositLogs, columns: currencyColumns };
+  };
+  const exportActiveReport = () => {
+    const report = activeReport();
+    exportToCSV(report.rows, report.columns, `${report.title}-${fromDate || "all"}-${toDate || "all"}.xls`, { exportedBy: exporter, title: report.title });
+  };
+  const card = ({ title, value, helper, rows, columns, total }) => (
+    <button type="button" onClick={() => openLog(title, rows, columns, total ?? value)} className="rounded-lg border border-slate-200 bg-white p-4 text-left transition hover:border-emerald-300 hover:bg-emerald-50">
+      <p className="text-xs font-semibold uppercase text-slate-500">{title}</p>
+      <p className="mt-2 text-xl font-semibold text-slate-950">{typeof value === "number" ? formatCurrency(value) : value}</p>
+      <p className="mt-1 text-xs text-slate-500">{helper}</p>
+      <span className="mt-3 block text-xs font-semibold text-emerald-700">Open detailed log</span>
+    </button>
+  );
+  const renderChart = () => {
+    if (activeTab === "master") return (
+      <ReportChart title="Master Activity Summary" subtitle="Consolidated activity across finance, loans, member profiles, deductions, and dividends">
+        <BarChart data={masterSummaryRows}><CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="Category" tick={{ fontSize: 10 }} interval={0} angle={-20} height={80} /><YAxis tick={{ fontSize: 12 }} /><Tooltip formatter={(value, name) => name === "Records" ? value : formatCurrency(value)} /><Bar dataKey="Amount" fill="#8cc63f" radius={[6, 6, 0, 0]} /></BarChart>
+      </ReportChart>
+    );
+    if (activeTab === "fund") return (
+      <ReportChart title="Cumulative Net Fund Growth" subtitle={`Grouped by ${interval}`}>
+        <AreaChart data={fundChart}><CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="label" tick={{ fontSize: 12 }} /><YAxis tick={{ fontSize: 12 }} /><Tooltip formatter={(value) => formatCurrency(value)} /><Area type="monotone" dataKey="value" stroke="#8cc63f" fill="#8cc63f" fillOpacity={0.18} strokeWidth={2} /></AreaChart>
+      </ReportChart>
+    );
+    if (activeTab === "disbursements") return (
+      <ReportChart title="Loan Volume and Count Issued" subtitle={`Grouped by ${interval}`}>
+        <BarChart data={disbursementChart}><CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="label" tick={{ fontSize: 12 }} /><YAxis yAxisId="left" tick={{ fontSize: 12 }} /><YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} /><Tooltip formatter={(value, name) => name === "count" ? value : formatCurrency(value)} /><Bar yAxisId="left" dataKey="volume" fill="#8cc63f" radius={[6, 6, 0, 0]} /><Bar yAxisId="right" dataKey="count" fill="#14532d" radius={[6, 6, 0, 0]} /></BarChart>
+      </ReportChart>
+    );
+    if (activeTab === "repayments") return (
+      <ReportChart title="Principal vs Interest Repayment Trends" subtitle={`Grouped by ${interval}`}>
+        <LineChart data={repaymentChart}><CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="label" tick={{ fontSize: 12 }} /><YAxis tick={{ fontSize: 12 }} /><Tooltip formatter={(value) => formatCurrency(value)} /><Line type="monotone" dataKey="principal" stroke="#0ea5e9" strokeWidth={2} /><Line type="monotone" dataKey="interest" stroke="#8cc63f" strokeWidth={2} /></LineChart>
+      </ReportChart>
+    );
+    return (
+      <ReportChart title="Deposit Methods" subtitle={`Grouped by ${interval}`}>
+        <BarChart data={depositChart}><CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="label" tick={{ fontSize: 12 }} /><YAxis tick={{ fontSize: 12 }} /><Tooltip formatter={(value) => formatCurrency(value)} /><Bar stackId="a" dataKey="mpesa" fill="#8cc63f" /><Bar stackId="a" dataKey="bank" fill="#0ea5e9" /><Bar stackId="a" dataKey="payroll" fill="#f59e0b" /><Bar stackId="a" dataKey="other" fill="#64748b" /></BarChart>
+      </ReportChart>
+    );
+  };
+  const renderCards = () => {
+    if (activeTab === "master") return [
+      card({ title: "All report categories", value: String(masterSummaryRows.length), helper: "Unified finance summary rows", rows: masterSummaryRows, columns: masterColumns }),
+      card({ title: "Member profile reports", value: String(memberProfileLogs.length), helper: "Members included in profile worksheet", rows: memberProfileLogs, columns: Object.keys(memberProfileLogs[0] || { MemberNumber: "", Member: "", Savings: "" }).map((key) => ({ key, label: key })) }),
+      card({ title: "Salary deductions", value: deductionLogs.reduce((total, row) => total + Number(row.Deduction || 0), 0), helper: `${deductionLogs.length} deduction records`, rows: deductionLogs, columns: Object.keys(deductionLogs[0] || { Reference: "", Member: "", Deduction: "" }).map((key) => ({ key, label: key })) }),
+      card({ title: "Dividends", value: dividendLogs.reduce((total, row) => total + Number(row.Amount || 0), 0), helper: `${dividendLogs.length} dividend records`, rows: dividendLogs, columns: Object.keys(dividendLogs[0] || { Reference: "", Member: "", Amount: "" }).map((key) => ({ key, label: key })) }),
+    ];
+    if (activeTab === "fund") return [
+      card({ title: "Net fund growth", value: totals.fund, helper: "Deposits + repayments - disbursements", rows: fundLogs, columns: fundColumns }),
+      card({ title: "Gross inflows", value: totals.deposits + totals.repayments, helper: "Deposits and repayments in the period", rows: [...depositLogs, ...repaymentLogs], columns: currencyColumns }),
+      card({ title: "Loan outflows", value: totals.disbursements, helper: "Loans issued in the period", rows: disbursementLogs, columns: loanColumns }),
+    ];
+    if (activeTab === "disbursements") return [
+      card({ title: "Total amount borrowed", value: totals.grossBorrowed, helper: "Gross loan amount before fees", rows: disbursementLogs, columns: loanColumns }),
+      card({ title: "Processing fees incurred", value: totals.processingFees, helper: "Fees recorded against issued loans", rows: disbursementLogs.filter((row) => Number(row.processingFees || 0) > 0), columns: loanColumns }),
+      card({ title: "Net amount disbursed", value: totals.netDisbursed, helper: "Gross loan amount minus processing fees", rows: disbursementLogs, columns: loanColumns }),
+      card({ title: "Loan count issued", value: String(disbursementLogs.length), helper: "Approved/disbursed loan records", rows: disbursementLogs, columns: loanColumns }),
+      ...Object.entries(productTotals).map(([product, amount]) => card({ title: `${product} loans`, value: amount, helper: "Product disbursement total", rows: disbursementLogs.filter((row) => row.type === product), columns: loanColumns })),
+    ];
+    if (activeTab === "repayments") return [
+      card({ title: "Total repayments", value: totals.repayments, helper: `${repaymentLogs.length} repayment records`, rows: repaymentLogs, columns: repaymentColumns }),
+      card({ title: "Principal repaid", value: sum(repaymentLogs, (row) => row.principal), helper: "Recorded principal portions", rows: repaymentLogs.filter((row) => Number(row.principal || 0) > 0), columns: repaymentColumns }),
+      card({ title: "Interest repaid", value: sum(repaymentLogs, (row) => row.interest), helper: "Recorded interest portions", rows: repaymentLogs.filter((row) => Number(row.interest || 0) > 0), columns: repaymentColumns }),
+    ];
+    return [
+      card({ title: "Total deposits", value: totals.deposits, helper: `${depositLogs.length} deposit records`, rows: depositLogs, columns: currencyColumns }),
+      ...Object.entries(methodTotals).map(([method, amount]) => card({ title: method, value: amount, helper: "Deposit method total", rows: depositLogs.filter((row) => depositMethod(row) === method), columns: currencyColumns })),
+    ];
+  };
   return (
     <div className="space-y-6">
       <SectionHeader
-        //eyebrow="Reports"
         title="Reports & analytics"
-        description="Live daily, monthly, and yearly transactions."
-        action={
-          <button
-            onClick={() =>
-              exportToCSV(
-                reportRows,
-                [
-                  { key: "label", label: "Period" },
-                  { key: "deposits" },
-                  { key: "withdrawals" },
-                  { key: "repayments" },
-                  { key: "disbursements" },
-                  { key: "count" },
-                ],
-                "financial-reports.csv",
-                { exportedBy: getExporterName(currentUser), title: "Financial Reports" },
-              )
-            }
-            className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold"
-          >
-            <Download size={14} />
-            Export CSV
-          </button>
-        }
+        description="Period-aware finance reports with itemized logs and workbook exports."
+        action={<button onClick={exportReportWorkbook} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold"><Download size={14} />Master Workbook</button>}
       />
-
-      {/* Time filter */}
-      <div className="flex items-center gap-3">
-        {["daily", "monthly", "yearly"].map((tf) => (
-          <button
-            key={tf}
-            onClick={() => setTimeFilter(tf)}
-            className={`rounded-full px-4 py-2 text-sm font-semibold capitalize ${timeFilter === tf ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-700"}`}
-          >
-            {tf}
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-4">
+        <span className="text-sm font-semibold text-slate-700">Period Filter</span>
+        <input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} className="rounded border px-2 py-1 text-sm" />
+        <span className="text-sm text-slate-500">to</span>
+        <input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} className="rounded border px-2 py-1 text-sm" />
+        <button type="button" onClick={() => { setFromDate(today); setToDate(today); }} className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">Today</button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {tabs.map((tab) => (
+          <button key={tab.key} type="button" onClick={() => setActiveTab(tab.key)} className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition ${activeTab === tab.key ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>
+            <tab.icon size={15} />{tab.label}
           </button>
         ))}
       </div>
-
-      {/* DEPOSITS GROUP */}
-      <div className="rounded-lg border border-slate-200 bg-white p-5">
-        <div className="mb-4 flex items-center gap-2">
-          <TrendingUp size={20} className="text-emerald-600" />
-          <h5 className="text-base font-semibold text-slate-950">
-            Total Member Funds
-          </h5>
-          <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700">
-            {formatCurrency(totalDeposits)}
-          </span>
-          <button type="button" onClick={() => openBreakdown("deposits", "Total member funds", totalDeposits)} className="ml-auto text-xs font-semibold text-emerald-700 hover:underline">View members</button>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          <button type="button" onClick={() => openBreakdown("shareCapitalDeposits", "Share capital deposits", shareCapitalDeposits)} className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-sky-300 hover:bg-sky-50">
-            <p className="text-xs font-semibold text-slate-500">
-              Share Capital Balance
-            </p>
-            <p className="mt-1 text-xl font-semibold text-sky-700">
-              {formatCurrency(shareCapitalDeposits)}
-            </p>
-            <p className="mt-1 text-xs text-slate-500">
-              Current capital held across member accounts
-            </p>
-            <span className="mt-2 block text-xs font-semibold text-sky-700">View member summary</span>
-          </button>
-          <button type="button" onClick={() => openBreakdown("savingsDeposits", "Savings pool deposits", savingsDeposits)} className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-emerald-300 hover:bg-emerald-50">
-            <p className="text-xs font-semibold text-slate-500">
-              Savings Pool Balance
-            </p>
-            <p className="mt-1 text-xl font-semibold text-emerald-700">
-              {formatCurrency(savingsDeposits)}
-            </p>
-            <p className="mt-1 text-xs text-slate-500">
-              Current savings held across member accounts
-            </p>
-            <span className="mt-2 block text-xs font-semibold text-emerald-700">View member summary</span>
-          </button>
-        </div>
+      <div className="flex justify-end">
+        <button type="button" onClick={exportActiveReport} className="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-sm font-semibold text-white">
+          <Download size={14} />
+          Export Report
+        </button>
       </div>
+      {renderChart()}
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">{renderCards()}</div>
+      <DataTable
+        title={`${tabs.find((tab) => tab.key === activeTab)?.label || "Report"} log preview`}
+        description="Filtered records used by the summary cards and exports."
+        columns={activeReport().columns}
+        data={activeReport().rows}
+        emptyTitle="No records for this period"
+        exportFilename={`${activeTab}-report.xls`}
+      />
+      {drilldown ? <ReportLogDialog report={drilldown} onClose={() => setDrilldown(null)} exportedBy={exporter} /> : null}
+    </div>
+  );
+}
 
-      {/* LOAN REPAYMENTS GROUP */}
-      <div className="rounded-lg border border-slate-200 bg-white p-5">
-        <div className="mb-4 flex items-center gap-2">
-          <CreditCard size={20} className="text-sky-600" />
-          <h5 className="text-base font-semibold text-slate-950">
-            Loan Repayments
-          </h5>
-          <span className="rounded-full bg-sky-50 px-3 py-1 text-sm font-semibold text-sky-700">
-            {formatCurrency(totalRepayments)}
-          </span>
-          <button type="button" onClick={() => openBreakdown("repayments", "Loan repayments", totalRepayments)} className="ml-auto text-xs font-semibold text-sky-700 hover:underline">View members</button>
-        </div>
-        <div className="grid gap-3 md:grid-cols-4">
-          {loanProducts.map((p) => (
-            <button type="button"
-              key={p}
-              onClick={() => openBreakdown(`repayments_${p}`, `${p.charAt(0) + p.slice(1).toLowerCase()} loan repayments`, repayByProduct[p])}
-              className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-sky-300 hover:bg-sky-50"
-            >
-              <p className="text-xs font-semibold text-slate-500">
-                {p.charAt(0) + p.slice(1).toLowerCase()} Loans
-              </p>
-              <p className="mt-1 text-lg font-semibold text-sky-700">
-                {formatCurrency(repayByProduct[p])}
-              </p>
-              <span className="mt-2 block text-xs font-semibold text-sky-700">View members</span>
-            </button>
-          ))}
-        </div>
+function ReportChart({ title, subtitle, children }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div><h3 className="text-base font-semibold text-slate-950">{title}</h3><p className="text-sm text-slate-500">{subtitle}</p></div>
+        <PieChart size={20} className="text-slate-400" />
       </div>
+      <div className="h-72"><ResponsiveContainer width="100%" height="100%">{children}</ResponsiveContainer></div>
+    </div>
+  );
+}
 
-      {/* LOAN DISBURSEMENTS GROUP */}
-      <div className="rounded-lg border border-slate-200 bg-white p-5">
-        <div className="mb-4 flex items-center gap-2">
-          <Banknote size={20} className="text-amber-600" />
-          <h5 className="text-base font-semibold text-slate-950">
-            Loan Disbursements
-          </h5>
-          <span className="rounded-full bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-700">
-            {formatCurrency(totalDisbursed)}
-          </span>
-          <button type="button" onClick={() => openBreakdown("disbursements", "Loan disbursements", totalDisbursed)} className="ml-auto text-xs font-semibold text-amber-700 hover:underline">View members</button>
+function ReportLogDialog({ report, onClose, exportedBy }) {
+  const [search, setSearch] = useState("");
+  const query = search.trim().toLowerCase();
+  const rows = query ? report.rows.filter((row) => Object.values(row).some((value) => String(value || "").toLowerCase().includes(query))) : report.rows;
+  return (
+    <div className="fixed inset-0 z-[90] overflow-y-auto bg-slate-50">
+      <header className="sticky top-0 z-10 border-b bg-white/95 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4">
+          <div><p className="text-xs font-bold uppercase text-emerald-700">Drill-down report</p><h1 className="text-xl font-bold text-slate-950">{report.title}</h1></div>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => exportToCSV(rows, report.columns, `${report.title}.xls`, { exportedBy, title: report.title })} className="rounded-lg border px-3 py-2 text-sm font-semibold"><Download size={14} className="inline" /> Export</button>
+            <button type="button" onClick={onClose} className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white">Back</button>
+          </div>
         </div>
-        <div className="grid gap-3 md:grid-cols-4">
-          {loanProducts.map((p) => (
-            <button type="button"
-              key={p}
-              onClick={() => openBreakdown(`disbursements_${p}`, `${p.charAt(0) + p.slice(1).toLowerCase()} loan disbursements`, disburseByProduct[p])}
-              className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-amber-300 hover:bg-amber-50"
-            >
-              <p className="text-xs font-semibold text-slate-500">
-                {p.charAt(0) + p.slice(1).toLowerCase()} Loans
-              </p>
-              <p className="mt-1 text-lg font-semibold text-amber-700">
-                {formatCurrency(disburseByProduct[p])}
-              </p>
-              <span className="mt-2 block text-xs font-semibold text-amber-700">View members</span>
-            </button>
-          ))}
+      </header>
+      <main className="mx-auto max-w-7xl space-y-4 px-4 py-6">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="rounded-lg border bg-white p-5"><p className="text-xs font-semibold uppercase text-slate-500">Records</p><p className="mt-2 text-2xl font-bold">{report.rows.length}</p></div>
+          <div className="rounded-lg border bg-white p-5"><p className="text-xs font-semibold uppercase text-slate-500">Total</p><p className="mt-2 text-2xl font-bold text-emerald-700">{typeof report.total === "number" ? formatCurrency(report.total) : report.total}</p></div>
         </div>
-      </div>
-
-      {/* CHARTS */}
-      <div className="grid gap-5 xl:grid-cols-2">
-        <AnalyticsPanel
-          title={`Deposits (${timeFilter})`}
-          data={timeSeries.map((s) => ({ label: s.label, value: s.deposits }))}
-          type="bar"
-          color="#8cc63f"
-        />
-        <AnalyticsPanel
-          title={`Repayments (${timeFilter})`}
-          data={timeSeries.map((s) => ({
-            label: s.label,
-            value: s.repayments,
-          }))}
-          type="bar"
-          color="#0369a1"
-        />
-      </div>
-
-      {/* TABLE */}
-      <div className="overflow-x-auto rounded-lg border">
-        <table className="min-w-full">
-          <thead>
-            <tr className="bg-slate-50">
-              {[
-                "Period",
-                "Deposits",
-                "Withdrawals",
-                "Repayments",
-                "Disbursements",
-                "Count",
-              ].map((h) => (
-                <th
-                  key={h}
-                  className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500"
-                >
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {timeSeries.map((row, i) => (
-              <tr key={i}>
-                <td className="px-4 py-3 text-sm font-semibold">{row.label}</td>
-                <td className="px-4 py-3 text-sm text-emerald-700">
-                  {formatCurrency(row.deposits)}
-                </td>
-                <td className="px-4 py-3 text-sm text-rose-700">
-                  {formatCurrency(row.withdrawals)}
-                </td>
-                <td className="px-4 py-3 text-sm text-sky-700">
-                  {formatCurrency(row.repayments)}
-                </td>
-                <td className="px-4 py-3 text-sm text-amber-700">
-                  {formatCurrency(row.disbursements)}
-                </td>
-                <td className="px-4 py-3 text-sm">{row.count}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <ReportBreakdownDialog breakdown={breakdown} onClose={() => setBreakdown(null)} />
+        <DataTable title="Itemized records" description="Every visible row is included in the drill-down export." search={search} onSearch={setSearch} columns={report.columns} data={rows} emptyTitle="No records" />
+      </main>
     </div>
   );
 }

@@ -7,6 +7,15 @@ const promptOptions = [
   { value: "sharecapital", label: "Share capital" },
 ];
 
+function normalizeMpesaPhone(value) {
+  let digits = String(value || "").replace(/\D/g, "");
+  if (digits.startsWith("2540") && digits.length === 13) digits = `254${digits.slice(4)}`;
+  if (/^0[17]\d{8}$/.test(digits)) return `254${digits.slice(1)}`;
+  if (/^[17]\d{8}$/.test(digits)) return `254${digits}`;
+  if (/^254[17]\d{8}$/.test(digits)) return digits;
+  return digits;
+}
+
 function FormField({ label, name, value, onChange, type = "text", min, step, inputMode, maxLength, pattern }) {
   return (
     <label className="block">
@@ -56,9 +65,9 @@ export default function SavingsContributionForm({ accessToken, user, onRefresh, 
   const [paymentResult, setPaymentResult] = useState(null);
   const [showPaybillDialog, setShowPaybillDialog] = useState(false);
   const amountValue = Number(amount || 0);
-  const phoneDigits = String(phone || "").replace(/\D/g, "").slice(0, 12);
+  const phoneDigits = normalizeMpesaPhone(phone);
   const amountIsValid = Number.isInteger(amountValue) && amountValue >= 1;
-  const phoneIsValid = paymentMode !== "STK" || phoneDigits.length >= 10;
+  const phoneIsValid = paymentMode !== "STK" || /^254[17]\d{8}$/.test(phoneDigits);
 
   async function pollContributionStatus(transactionId) {
     for (let attempt = 0; attempt < 12; attempt += 1) {
@@ -100,7 +109,7 @@ export default function SavingsContributionForm({ accessToken, user, onRefresh, 
       return;
     }
     if (!phoneIsValid) {
-      onMessage?.({ type: "error", text: "Enter a valid numeric MPESA phone number." });
+      onMessage?.({ type: "error", text: "Enter a valid Kenyan M-Pesa phone number." });
       return;
     }
     // For STK, show confirmation dialog first
@@ -121,7 +130,7 @@ export default function SavingsContributionForm({ accessToken, user, onRefresh, 
         return;
       }
       if (!phoneIsValid) {
-        onMessage?.({ type: "error", text: "Enter a valid numeric MPESA phone number." });
+        onMessage?.({ type: "error", text: "Enter a valid Kenyan M-Pesa phone number." });
         return;
       }
       // Determine which contribution type to use based on payment mode
@@ -165,10 +174,10 @@ export default function SavingsContributionForm({ accessToken, user, onRefresh, 
           name="phone"
           type="tel"
           inputMode="numeric"
-          maxLength={12}
-          pattern="[0-9]*"
+          maxLength={16}
+          pattern="[0-9+()\\s-]*"
           value={phoneDigits}
-          onChange={(event) => setPhone(event.target.value.replace(/\D/g, "").slice(0, 12))}
+          onChange={(event) => setPhone(event.target.value)}
         />
         
         <SelectField label="Payment" value={paymentMode} onChange={(event) => setPaymentMode(event.target.value)}>
