@@ -227,10 +227,20 @@ export default function UserDashboard() {
         : sum;
     }, 0);
 
-    const savings = categoryTotal(["savings"]);
+    const signedCategoryTotal = (tokens) => successfulTransactions.reduce((sum, transaction) => {
+      const category = getCategory(transaction);
+      if (!tokens.some((token) => category.includes(token))) return sum;
+      const outgoing = transaction.direction === "OUT"
+        || String(transaction.type || "").toUpperCase().includes("WITHDRAW")
+        || category.includes("withdraw") || category.includes("disbursement");
+      const amount = Number(outgoing ? (transaction.amount || 0) : (transaction.netAmount ?? transaction.amount ?? 0));
+      return sum + (outgoing ? -amount : amount);
+    }, 0);
+    const savings = Math.max(signedCategoryTotal(["savings"]), 0);
     const paidShareCapital = categoryTotal(["share_capital", "sharecapital", "share capital"]);
     const shareAccountCapital = data.shares.reduce((sum, share) => sum + Number(share.totalInvested || 0), 0);
-    const shareCapital = Math.max(paidShareCapital, shareAccountCapital);
+    const storedMemberShareCapital = Number(user?.shareCapital || user?.Member?.shareCapital || user?.member?.shareCapital || 0);
+    const shareCapital = Math.max(shareAccountCapital, storedMemberShareCapital, paidShareCapital, 0);
     const balance = successfulTransactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
     const loanBalance = data.loans
       .filter((loan) => ["ACTIVE", "APPROVED", "DISBURSED"].includes(String(loan.status || "").toUpperCase()))

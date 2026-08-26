@@ -90,7 +90,7 @@ function normalizeColumns(rows, columns = []) {
   const preferred = columns.map((column) =>
     typeof column === "string"
       ? { key: column, label: humanizeHeader(column) }
-      : { key: column.key, label: column.label || humanizeHeader(column.key) },
+      : { ...column, key: column.key, label: column.label || humanizeHeader(column.key) },
   );
   const keys = new Set(preferred.map((column) => column.key));
   rows.forEach((row) => {
@@ -103,7 +103,35 @@ function normalizeColumns(rows, columns = []) {
   return orderedKeys.map((key) => ({
     key,
     label: preferred.find((column) => column.key === key)?.label || humanizeHeader(key),
+    csv: preferred.find((column) => column.key === key)?.csv,
   }));
+}
+
+const COLUMN_ALIASES = {
+  id: ["reference", "internalReference"],
+  reference: ["mpesaReference", "internalReference", "id"],
+  memberName: ["name", "fullName", "User.name", "Member.User.name"],
+  name: ["memberName", "fullName", "User.name", "Member.User.name"],
+  memberNumber: ["Member.memberNumber", "member.memberNumber", "User.memberNumber"],
+  principal: ["amount", "loanAmount"],
+  amount: ["principal", "loanAmount"],
+  balance: ["outstandingBalance", "principalBalance", "remainingBalance"],
+  outstandingBalance: ["balance", "remainingBalance", "principalBalance"],
+  createdAt: ["date", "timestamp", "requestedAt"],
+  date: ["createdAt", "timestamp"],
+  company: ["employer", "employerName"],
+  salary: ["monthlyIncome", "grossSalary"],
+  deduction: ["deductionAmount", "monthlyDeduction"],
+};
+
+function resolveColumnValue(row, flat, column) {
+  const direct = flat[column.key];
+  if (direct !== undefined && direct !== null && direct !== "") return direct;
+  for (const alias of COLUMN_ALIASES[column.key] || []) {
+    const value = flat[alias];
+    if (value !== undefined && value !== null && value !== "") return value;
+  }
+  return column.csv ? column.csv(row?.[column.key], row) : direct;
 }
 
 export function exportRichCSV(rows, columns = [], filename = "export.csv", options = {}) {
@@ -121,7 +149,7 @@ export function exportRichCSV(rows, columns = [], filename = "export.csv", optio
   const header = exportColumns.map((column) => column.label);
   const body = exportRows.map((row) => {
     const flat = flattenRow(row);
-    return exportColumns.map((column) => formatValue(column.key, flat[column.key]));
+    return exportColumns.map((column) => formatValue(column.key, resolveColumnValue(row, flat, column)));
   });
 
   const html = `<!doctype html>

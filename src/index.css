@@ -14,6 +14,12 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Keep the login's custom visibility toggle as the single password eye. */
+.login-password-input::-ms-reveal,
+.login-password-input::-ms-clear {
+  display: none;
+}
+
 :root {
   /* AYEDOS SACCO website theme */
   --color-primary: #063f2a;

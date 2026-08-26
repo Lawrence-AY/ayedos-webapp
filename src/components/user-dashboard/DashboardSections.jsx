@@ -2228,7 +2228,7 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
   const [guarantorResults, setGuarantorResults] = useState([]);
   const [guarantorLoading, setGuarantorLoading] = useState(false);
   const activeLoans = loans.filter((loan) => ["ACTIVE", "APPROVED", "DISBURSED"].includes(String(loan.status || "").toUpperCase()));
-  const hasRestrictedLoan = loans.some((loan) => ["PENDING", "PENDING_GUARANTORS", "UNDER_REVIEW", "ACTIVE", "APPROVED", "DISBURSED"].includes(String(loan.status || "").toUpperCase()));
+  const hasPendingLoanApplication = loans.some((loan) => ["PENDING", "PENDING_GUARANTORS", "UNDER_REVIEW"].includes(String(loan.status || "").toUpperCase()));
   const [repayLoanId, setRepayLoanId] = useState("");
   const totalBalance = activeLoans.reduce((sum, loan) => sum + loanOutstandingBalance(loan), 0);
   const rows = loans.filter((loan) => matchesSearch(loan, search));
@@ -2295,7 +2295,7 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
 
   async function requestLoan(event, confirmed = false) {
     event.preventDefault();
-    if (hasRestrictedLoan) { toast.error("You already have an active or pending loan application", { duration: 4000 }); return; }
+    if (hasPendingLoanApplication) { toast.error("You already have a loan application awaiting a decision", { duration: 4000 }); return; }
     if (!isLoanEligible) { setMessage({ type: "error", text: loanEligibilityMessage }); return; }
     if (requestedAmount <= 0) { setMessage({ type: "error", text: "Enter a valid loan amount." }); return; }
     if (!selectedProduct) { setMessage({ type: "error", text: "Select a valid loan product." }); return; }
@@ -2388,7 +2388,7 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
           {loanEligibilityMessage}
         </div>
       ) : null}
-      <button onClick={scrollToApplication} disabled={!isLoanEligible || hasRestrictedLoan} className={`inline-flex w-full items-center justify-center gap-2 rounded-lg px-5 py-4 text-sm font-semibold text-white ${isLoanEligible && !hasRestrictedLoan ? "bg-slate-950" : "cursor-not-allowed bg-slate-400"}`}><Plus size={18} />{hasRestrictedLoan ? "Loan application unavailable while a loan is active" : "New application"}</button>
+      <button onClick={scrollToApplication} disabled={!isLoanEligible || hasPendingLoanApplication} className={`inline-flex w-full items-center justify-center gap-2 rounded-lg px-5 py-4 text-sm font-semibold text-white ${isLoanEligible && !hasPendingLoanApplication ? "bg-slate-950" : "cursor-not-allowed bg-slate-400"}`}><Plus size={18} />{hasPendingLoanApplication ? "Application awaiting a decision" : "New application"}</button>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard icon={FileText} label="Active loans" value={activeLoans.length} trend="Live" helper="Approved or currently active facilities" tone="blue" />
         <StatCard icon={CreditCard} label="Outstanding balance" value={loanMoney(totalBalance)} helper="Estimated from loan records" tone="amber" blur={!loanValuesVisible} />
@@ -2399,7 +2399,7 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
         <Surface className="p-4 sm:p-5">
           <h5 className="text-base font-semibold tracking-normal text-slate-950 dark:text-slate-100">Request a loan</h5>
           <form onSubmit={requestLoan} className="mt-4 grid gap-4">
-            <fieldset disabled={!isLoanEligible || hasRestrictedLoan || busyAction === "borrow"} className="contents">
+            <fieldset disabled={!isLoanEligible || hasPendingLoanApplication || busyAction === "borrow"} className="contents">
             <label className="text-sm font-semibold text-slate-700">Loan product
               <select id="loan-product-select" value={loanForm.type} onChange={(e) => { setLoanForm((c) => ({ ...c, type: e.target.value, selfGuarantee: false })); setSelectedGuarantors([]); setGuarantorQuery(""); setGuarantorResults([]); }} className="mt-2 w-full rounded-lg border px-3.5 py-3 text-sm">{LOAN_PRODUCTS.map((p) => (<option key={p.type} value={p.type}>{p.name}</option>))}</select>
             </label>
@@ -3510,6 +3510,7 @@ function SearchResultsPage({
 function ReportsPage({ accessToken, data = {} }) {
   const [reportType, setReportType] = useState("transactions");
   const [loanReportTab, setLoanReportTab] = useState("loans");
+  const [savingsReportTab, setSavingsReportTab] = useState("savings-records");
   const [duration, setDuration] = useState("all");
   const [message, setMessage] = useState(null);
   const [sending, setSending] = useState(false);
@@ -3538,7 +3539,10 @@ function ReportsPage({ accessToken, data = {} }) {
     if (savedInterest) return savedInterest;
     const rate = Number(loan.interestRate || loan.interest || 0);
     const durationValue = Number(loan.duration || loan.term || loan.loanDuration || 1);
-    return loanAmount(loan) && rate ? (loanAmount(loan) * rate * durationValue) / 100 : 0;
+    if (!loanAmount(loan) || !rate) return 0;
+    const monthlyRate = rate / 100;
+    const installment = (loanAmount(loan) * monthlyRate) / (1 - ((1 + monthlyRate) ** -durationValue));
+    return Math.max((installment * durationValue) - loanAmount(loan), 0);
   };
   const loanGuarantors = (loan) => Array.isArray(loan.guarantors) ? loan.guarantors : Array.isArray(loan.Guarantors) ? loan.Guarantors : [];
   const guarantorDisplayName = (guarantor) => guarantor.Member?.User?.name || guarantor.Member?.User?.fullName || guarantor.Member?.name || guarantor.Member?.fullName || guarantor.User?.name || guarantor.User?.fullName || guarantor.name || guarantor.guarantorName || guarantor.memberName || guarantor.fullName || guarantor.memberNumber || guarantor.Member?.memberNumber || "Guarantor";
@@ -3561,6 +3565,23 @@ function ReportsPage({ accessToken, data = {} }) {
     if (label.includes("deposit")) return "Deposit";
     return getTransactionPromptLabel(transaction);
   };
+  const rawCategory = (transaction) => String(transaction.paymentCategory || transaction.kcbEndpoint || transaction.description || transaction.type || "").toLowerCase();
+  const isSavingsRecord = (transaction) => rawCategory(transaction).includes("saving") && !rawCategory(transaction).includes("share");
+  const isShareCapitalRecord = (transaction) => {
+    const value = rawCategory(transaction);
+    return value.includes("share_capital") || value.includes("share capital") || value.includes("sharecapital");
+  };
+  const isMoneyOut = (transaction) => transaction.direction === "OUT"
+    || String(transaction.type || "").toUpperCase().includes("WITHDRAW")
+    || rawCategory(transaction).includes("withdraw")
+    || rawCategory(transaction).includes("disbursement");
+  const ledgerRow = (transaction) => {
+    const outgoing = isMoneyOut(transaction);
+    const amount = Number(outgoing ? (transaction.amount ?? transaction.grossAmount ?? 0) : (transaction.netAmount ?? transaction.amount ?? 0));
+    return { Date: dateTime(transaction.createdAt || transaction.date), Activity: getTransactionPromptLabel(transaction), Amount: formatCurrency(amount), Status: normalizeStatus(transaction.status || "Completed"), Reference: transaction.mpesaReference || transaction.reference || transaction.id || "-" };
+  };
+  const savingsRows = ft.filter(isSavingsRecord).map(ledgerRow);
+  const shareCapitalRows = ft.filter(isShareCapitalRecord).map(ledgerRow);
   const transactionDetails = (transaction) => {
     const label = getTransactionPromptLabel(transaction).toLowerCase();
     if (label.includes("withdraw")) return `Withdrawn from ${transaction.sourceAccount || transaction.accountName || transaction.walletName || "member account"}`;
@@ -3585,16 +3606,20 @@ function ReportsPage({ accessToken, data = {} }) {
       };
     });
   });
+  const repaymentRows = loans.flatMap((loan) => (loan.repayments || []).map((repayment) => ({ loan, repayment })))
+    .filter(({ repayment }) => duration === "all" || filterByDuration([repayment], "paidAt").length > 0)
+    .sort((a, b) => new Date(b.repayment.paidAt || 0) - new Date(a.repayment.paidAt || 0));
 
   const reportData = {
     transactions: { title: "Transaction Statement", headers: ["Date","Phone Number","Details","Reference","Amount"], rows: ft.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-","Phone Number":transactionPhone(t),Details:transactionDetails(t),Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0))})),summary:{"Share capital":formatCurrency(ft.filter(t=>transactionCategory(t)==="Share capital").reduce((s,t)=>s+Number(t.amount||0),0)),"Savings":formatCurrency(ft.filter(t=>transactionCategory(t)==="Savings").reduce((s,t)=>s+Number(t.amount||0),0))} },
-    savings: { title: "Share Capital Report", headers: ["Date","Record","Amount","Status"], rows: fs.map(s=>({Date:s.createdAt?new Date(s.createdAt).toLocaleDateString():"-",Record:s.type||"Share",Amount:formatCurrency(Number(s.totalInvested||s.amount||0)),Status:normalizeStatus(s.status||"Active")})),summary:{"Share Capital":formatCurrency(reportStats?.shareCapital||fs.reduce((s,sh)=>s+Number(sh.totalInvested||0),0)),Count:fs.length} },
+    "savings-records": { title: "Savings Records", headers: ["Date","Activity","Amount","Status","Reference"], rows: savingsRows, summary:{"Current Savings Balance":formatCurrency(Number(reportStats?.totalSavings||0)),Records:savingsRows.length} },
+    "share-capital-records": { title: "Share Capital Records", headers: ["Date","Activity","Amount","Status","Reference"], rows: shareCapitalRows, summary:{Records:shareCapitalRows.length} },
     dividend: { title: "Dividend Report", headers: ["Date","Reference","Amount","Status"], rows: fd.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-",Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Dividends":formatCurrency(fd.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fd.length} },
     ...(showPayrollReports ? { "payroll-deduction": { title: "Payroll Deduction Report", headers: ["Date","Reference","Amount","Status"], rows: fpd.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-",Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Deducted":formatCurrency(fpd.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fpd.length} } } : {}),
   };
   const loanReportData = {
     loans: { title: "Loans", headers: ["Date & Time","Type","Amount","Guarantor","Status","Loan Duration","Interest to be Paid","Reason"], rows: fl.map(l=>({"Date & Time":dateTime(l.createdAt||l.date),Type:l.type||l.loanType||"Loan",Amount:formatCurrency(loanAmount(l)),Guarantor:loanGuarantorLabel(l),Status:normalizeStatus(l.status||"Pending"),"Loan Duration":l.duration||l.loanDuration||l.term?`${l.duration||l.loanDuration||l.term} month${Number(l.duration||l.loanDuration||l.term)===1?"":"s"}`:"-","Interest to be Paid":formatCurrency(loanInterest(l)),Reason:l.reason||"-"})),summary:{"Active Balance":formatCurrency(fl.reduce((s,l)=>s+Number(l.balance||l.outstandingBalance||l.principal||l.amount||0),0)),Count:fl.length} },
-    "loan-repayment": { title: "Loan Repayment", headers: ["Date","Amount","Balance","Duration Remaining","Interest","Reference"], rows: fr.map(t=>({Date:dateTime(t.createdAt||t.date),Amount:formatCurrency(Number(t.amount||0)),Balance:formatCurrency(Number(t.balance||t.outstandingBalance||t.remainingBalance||0)),"Duration Remaining":t.durationRemaining||t.remainingDuration||"-",Interest:formatCurrency(Number(t.interest||t.interestAmount||0)),Reference:t.mpesaReference||t.reference||t.id||"-"})),summary:{"Total Repaid":formatCurrency(fr.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fr.length} },
+    "loan-repayment": { title: "Loan Repayment", headers: ["Date","Loan Type","Amount Paid","Principal Paid","Interest Paid","Remaining Principal","Remaining Interest","Total Remaining","Duration Remaining","Reference"], rows: repaymentRows.map(({loan,repayment})=>({Date:dateTime(repayment.paidAt||repayment.createdAt),"Loan Type":loan.type||loan.loanType||"Loan","Amount Paid":formatCurrency(Number(repayment.amountPaid||repayment.amount||0)),"Principal Paid":formatCurrency(Number(repayment.principalPaid||0)),"Interest Paid":formatCurrency(Number(repayment.interestPaid||0)),"Remaining Principal":formatCurrency(Number(repayment.remainingPrincipal||0)),"Remaining Interest":formatCurrency(Number(repayment.remainingInterest||0)),"Total Remaining":formatCurrency(Number(repayment.remainingAmount??repayment.remainingBalance??0)),"Duration Remaining":repayment.durationRemaining==null?"-":`${repayment.durationRemaining} instalment${Number(repayment.durationRemaining)===1?"":"s"}`,Reference:repayment.reference||repayment.ledgerTransactionId||repayment.id||"-"})),summary:{"Total Repaid":formatCurrency(repaymentRows.reduce((s,{repayment})=>s+Number(repayment.amountPaid||repayment.amount||0),0)),Count:repaymentRows.length} },
     guarantor: { title: "Guarantor", headers: ["Guarantor Name","Guaranteed Amount","Status","Guaranteed Loan Type"], rows: guarantorRows, summary:{"Guaranteed Amount":formatCurrency(guarantorRows.reduce((s,row)=>s+Number(row._amount||0),0)),Count:guarantorRows.length} },
     withdrawals: { title: "Withdrawals", headers: ["Date & Time","Destination Device","Reference","Amount","Type"], rows: fw.map(t=>({"Date & Time":dateTime(t.createdAt||t.date),"Destination Device":t.destinationDevice||t.phoneNumber||t.msisdn||"-",Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Type:getTransactionPromptLabel(t)})),summary:{"Total Withdrawn":formatCurrency(fw.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fw.length} },
   };
@@ -3604,7 +3629,7 @@ function ReportsPage({ accessToken, data = {} }) {
     { key: "guarantor", label: "Guarantor", reportType: "guarantor" },
     { key: "withdrawals", label: "Withdrawals", reportType: "withdrawals" },
   ];
-  const cr = reportType === "loans" ? loanReportData[loanReportTab] : (reportData[reportType] || reportData.transactions);
+  const cr = reportType === "loans" ? loanReportData[loanReportTab] : reportType === "savings" ? reportData[savingsReportTab] : (reportData[reportType] || reportData.transactions);
 
   async function sendReport(type, label, setBusy) {
     setBusy(true); setMessage(null);
@@ -3626,7 +3651,7 @@ function ReportsPage({ accessToken, data = {} }) {
         <button disabled={sending} className="inline-flex min-h-12 items-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"><MailCheck size={17}/>{sending?"Sending...":"Email report"}</button>
       </form>
     </Surface>
-    {showOnScreen?<Surface className="overflow-hidden"><div className="border-b p-5"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h4 className="text-base font-semibold">{cr.title}</h4><p className="mt-1 text-sm text-slate-500">{duration==="all"?"All records":`Last ${duration} month${Number(duration)>1?"s":""}`} · {cr.rows.length} row{cr.rows.length!==1?"s":""}</p></div><div className="flex flex-wrap gap-3">{Object.entries(cr.summary).map(([l,v])=>(<div key={l} className="rounded-lg bg-slate-50 px-4 py-2"><p className="text-xs font-semibold text-slate-500">{l}</p><p className="text-sm font-semibold">{v}</p></div>))}</div></div>{reportType==="loans"?<div className="mt-5 flex flex-wrap items-center gap-2">{loanTabs.map(tab=>(<button key={tab.key} type="button" onClick={()=>setLoanReportTab(tab.key)} className={`inline-flex min-h-10 items-center rounded-lg border px-4 py-2 text-sm font-semibold transition ${loanReportTab===tab.key?"border-slate-950 bg-slate-950 text-white":"border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}>{tab.label}</button>))}<button type="button" disabled={tabSending===loanReportTab} onClick={()=>{const tab=loanTabs.find(item=>item.key===loanReportTab);sendReport(tab.reportType, `${tab.label} report`, (busy)=>setTabSending(busy?loanReportTab:null));}} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 disabled:opacity-60"><Download size={16}/>{tabSending===loanReportTab?"Sending...":"Email tab PDF"}</button></div>:null}</div><div className="overflow-x-auto"><table className="min-w-full"><thead><tr className="bg-slate-50">{cr.headers.map((h,index)=>(<th key={h} className={`${index===0?"pl-12 pr-5":"px-5"} py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500`}>{h}</th>))}</tr></thead><tbody className="divide-y divide-slate-100">{cr.rows.length===0?<tr><td colSpan={cr.headers.length} className="px-5 py-12 text-center text-sm text-slate-500">No records found.</td></tr>:cr.rows.map((row,i)=>(<tr key={i} className="bg-white transition hover:bg-slate-50">{cr.headers.map((h,index)=>(<td key={h} className={`${index===0?"pl-12 pr-5":"px-5"} py-4 text-sm text-slate-700`}>{row[h]||"-"}</td>))}</tr>))}</tbody></table></div></Surface>:<Surface className="p-8"><EmptyState icon={FileText} title="Generate a report" description="Select report type and duration above, then click 'View on screen'." /></Surface>}
+    {showOnScreen?<Surface className="overflow-hidden"><div className="border-b p-5"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h4 className="text-base font-semibold">{cr.title}</h4><p className="mt-1 text-sm text-slate-500">{duration==="all"?"All records":`Last ${duration} month${Number(duration)>1?"s":""}`} · {cr.rows.length} row{cr.rows.length!==1?"s":""}</p></div><div className="flex flex-wrap gap-3">{Object.entries(cr.summary).map(([l,v])=>(<div key={l} className="rounded-lg bg-slate-50 px-4 py-2"><p className="text-xs font-semibold text-slate-500">{l}</p><p className="text-sm font-semibold">{v}</p></div>))}</div></div>{reportType==="savings"?<div className="mt-5 flex flex-wrap gap-2"><button type="button" onClick={()=>setSavingsReportTab("savings-records")} className={`min-h-10 rounded-lg border px-4 py-2 text-sm font-semibold ${savingsReportTab==="savings-records"?"border-slate-950 bg-slate-950 text-white":"border-slate-200 bg-white text-slate-700"}`}>Savings records</button><button type="button" onClick={()=>setSavingsReportTab("share-capital-records")} className={`min-h-10 rounded-lg border px-4 py-2 text-sm font-semibold ${savingsReportTab==="share-capital-records"?"border-slate-950 bg-slate-950 text-white":"border-slate-200 bg-white text-slate-700"}`}>Share capital records</button></div>:null}{reportType==="loans"?<div className="mt-5 flex flex-wrap items-center gap-2">{loanTabs.map(tab=>(<button key={tab.key} type="button" onClick={()=>setLoanReportTab(tab.key)} className={`inline-flex min-h-10 items-center rounded-lg border px-4 py-2 text-sm font-semibold transition ${loanReportTab===tab.key?"border-slate-950 bg-slate-950 text-white":"border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}>{tab.label}</button>))}<button type="button" disabled={tabSending===loanReportTab} onClick={()=>{const tab=loanTabs.find(item=>item.key===loanReportTab);sendReport(tab.reportType, `${tab.label} report`, (busy)=>setTabSending(busy?loanReportTab:null));}} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 disabled:opacity-60"><Download size={16}/>{tabSending===loanReportTab?"Sending...":"Email tab PDF"}</button></div>:null}</div><div className="overflow-x-auto"><table className="min-w-full"><thead><tr className="bg-slate-50">{cr.headers.map((h,index)=>(<th key={h} className={`${index===0?"pl-12 pr-5":"px-5"} py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500`}>{h}</th>))}</tr></thead><tbody className="divide-y divide-slate-100">{cr.rows.length===0?<tr><td colSpan={cr.headers.length} className="px-5 py-12 text-center text-sm text-slate-500">No records found for this period.</td></tr>:cr.rows.map((row,i)=>(<tr key={i} className="bg-white transition hover:bg-slate-50">{cr.headers.map((h,index)=>(<td key={h} className={`${index===0?"pl-12 pr-5":"px-5"} py-4 text-sm text-slate-700`}>{row[h]||"-"}</td>))}</tr>))}</tbody></table></div></Surface>:<Surface className="p-8"><EmptyState icon={FileText} title="Generate a report" description="Select report type and duration above, then click 'View on screen'." /></Surface>}
   </div>);
 }
 
