@@ -1,5 +1,9 @@
+export function normalizeDashboardRole(role) {
+  return String(role || "MEMBER").toUpperCase();
+}
+
 export function getDashboardPath(role, suffix = "") {
-  const normalizedRole = String(role || "MEMBER").toUpperCase();
+  const normalizedRole = normalizeDashboardRole(role);
   const base =
     normalizedRole === "ADMIN"
       ? "/dashboard/admin"
@@ -13,7 +17,7 @@ export function getDashboardPath(role, suffix = "") {
 
 export function isMemberOnboardingComplete(user) {
   if (!user) return false;
-  const role = String(user.role || "").toUpperCase();
+  const role = normalizeDashboardRole(user.role);
   if (role === "PENDING") return false;
   if (role !== "MEMBER") return true;
   if (

@@ -360,6 +360,10 @@ export default function Register() {
               </div>
             )}
 
+            <div style={supportCalloutStyle}>
+              Need help? If your details aren't validating, reach out to our Support Helpline: <strong>0733556617</strong>
+            </div>
+
             <button
               type="submit"
               disabled={isRegistering || isLoading || submitCooldown > 0}
@@ -583,6 +587,18 @@ const successStyle = {
   color: "#166534",
   fontWeight: 500,
   fontSize: 14,
+};
+
+const supportCalloutStyle = {
+  marginBottom: 20,
+  padding: 14,
+  borderRadius: 12,
+  background: "#ecfdf5",
+  border: "1px solid #86efac",
+  color: "#14532d",
+  fontWeight: 600,
+  fontSize: 14,
+  lineHeight: 1.45,
 };
 
 const timerTextStyle = {
