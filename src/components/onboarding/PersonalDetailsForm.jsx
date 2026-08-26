@@ -71,6 +71,7 @@ export const PersonalDetailsForm = ({
   onChange,
   errors,
   isLoading,
+  iprsEnabled = false,
   onSubmit,
   onBack,
 }) => {
@@ -331,6 +332,18 @@ export const PersonalDetailsForm = ({
       </div>
 
       {/* Terms */}
+      {errors?.step1 && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">
+          {errors.step1}
+        </div>
+      )}
+      {iprsEnabled && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900">
+          Your details will be checked against official IPRS records before payment.
+        </div>
+      )}
+
+      {/* Terms */}
       <div className="flex items-center gap-2">
         <Checkbox
           id="terms"
@@ -367,7 +380,7 @@ export const PersonalDetailsForm = ({
         >
           <div className="flex flex-col text-left">
             <span className="text-xs font-light">Next</span>
-            <span className="font-semibold leading-tight">Upload Documents</span>
+            <span className="font-semibold leading-tight">{iprsEnabled ? 'Verify Identity' : 'Upload Documents'}</span>
           </div>
           <GrLinkNext />
         </Button>

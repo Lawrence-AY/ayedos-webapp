@@ -121,6 +121,18 @@ export async function getAuditLogs(accessToken, filters = {}) {
   return unwrapEnvelopeData(res.json)
 }
 
+export async function getBlockedIdentityAttempts(accessToken) {
+  const res = await apiRequest('/api/admin/identity-verification/blocked', { method: 'GET', accessToken })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to fetch blocked identity attempts')
+  return unwrapEnvelopeData(res.json)
+}
+
+export async function unblockIdentityAttempt(id, accessToken) {
+  const res = await apiRequest(`/api/admin/identity-verification/blocked/${id}/unblock`, { method: 'POST', accessToken, cache: false })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to reset identity block')
+  return unwrapEnvelopeData(res.json)
+}
+
 // Export
 export async function exportTableCSV(tableName, filters, accessToken) {
   const queryParams = new URLSearchParams({ ...filters, format: 'csv' }).toString()

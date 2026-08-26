@@ -1,11 +1,13 @@
 import { Navigate, useLocation } from 'react-router-dom'
 import { useContext } from 'react'
 import { AuthContext } from '../context/AuthContext.jsx'
-import { getDashboardPath, isMemberOnboardingComplete } from '../utils/dashboardRoutes.js'
+import { getDashboardPath, getPostLoginPath, isMemberOnboardingComplete, normalizeDashboardRole } from '../utils/dashboardRoutes.js'
 
 export default function ProtectedRoute({ element, allowedRoles }) {
   const { user, accessToken, isLoading } = useContext(AuthContext)
   const location = useLocation()
+  const userRole = normalizeDashboardRole(user?.role)
+  const normalizedAllowedRoles = allowedRoles?.map(normalizeDashboardRole)
   const redirect = (to, state) => (
     location.pathname === to
       ? element
@@ -46,19 +48,19 @@ export default function ProtectedRoute({ element, allowedRoles }) {
     return redirect('/login')
   }
 
-  if (allowedRoles?.length && !allowedRoles.includes(user.role)) {
-    return redirect('/dashboard')
+  if (normalizedAllowedRoles?.length && !normalizedAllowedRoles.includes(userRole)) {
+    return redirect(getPostLoginPath(user))
   }
 
   if (
     user.mustChangePassword &&
-    location.pathname !== getDashboardPath(user.role, 'security')
+    location.pathname !== getDashboardPath(userRole, 'security')
   ) {
-    return redirect(getDashboardPath(user.role, 'security'), { forcePasswordChange: true })
+    return redirect(getDashboardPath(userRole, 'security'), { forcePasswordChange: true })
   }
 
   if (
-    String(user.role || '').toUpperCase() === 'MEMBER' &&
+    userRole === 'MEMBER' &&
     !isMemberOnboardingComplete(user) &&
     location.pathname !== '/onboarding'
   ) {

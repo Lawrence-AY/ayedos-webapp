@@ -17,6 +17,7 @@ import { PaymentForm } from '../components/onboarding/PaymentForm';
 import { ConfirmationStep } from '../components/onboarding/ConfirmationStep';
 import { getDashboardPath } from '../utils/dashboardRoutes';
 import { AuthContext } from '../context/AuthContext.jsx';
+import { getIdentityVerificationConfig, verifyIdentity } from '../features/applications/identityVerificationService.js';
 import { CiUser } from 'react-icons/ci';
 import { CiMail } from 'react-icons/ci';
 import {
@@ -32,9 +33,10 @@ import {
 
 function Onboarding() {
   const navigate = useNavigate();
-  const { user, logout } = useContext(AuthContext);
+  const { user, accessToken, logout } = useContext(AuthContext);
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
+  const [iprsEnabled, setIprsEnabled] = useState(false);
   const [mpesaReference, setMpesaReference] = useState(null);
   const [formData, setFormData] = useState({
     firstName: '',
@@ -76,6 +78,21 @@ function Onboarding() {
       // Ignore storage errors.
     }
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!accessToken) return undefined;
+    getIdentityVerificationConfig(accessToken)
+      .then((config) => {
+        if (!cancelled) setIprsEnabled(Boolean(config?.iprsEnabled));
+      })
+      .catch(() => {
+        if (!cancelled) setIprsEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken]);
 
   useEffect(() => {
     const prefillSavedDetails = async () => {
@@ -210,9 +227,36 @@ function Onboarding() {
     return true;
   };
 
-  const handleStep1Submit = (e) => {
+  const handleStep1Submit = async (e) => {
     e.preventDefault();
-    if (validateStep1()) { saveOnboardingProgress(2); setCurrentStep(2); toast.success('Personal details saved.'); }
+    if (!validateStep1()) return;
+
+    if (!iprsEnabled) {
+      saveOnboardingProgress(2);
+      setCurrentStep(2);
+      toast.success('Personal details saved.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const identityNumber = getIdentityNumber();
+      const result = await verifyIdentity({
+        email: formData.email,
+        firstName: formData.firstName,
+        surname: formData.surname,
+        documentType: formData.idType,
+        idNumber: identityNumber,
+      }, accessToken);
+      saveOnboardingProgress(3);
+      setCurrentStep(3);
+      toast.success(result?.message || 'Identity verified successfully.');
+    } catch (error) {
+      setErrors({ step1: error.message || 'Identity verification failed' });
+      toast.error(error.message || 'Identity verification failed');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleStep2Submit = (e) => {
@@ -274,11 +318,12 @@ function Onboarding() {
                     onChange={updateFormData}
                     errors={errors}
                     isLoading={isLoading}
+                    iprsEnabled={iprsEnabled}
                     onSubmit={handleStep1Submit}
                     onBack={handleBackToLogin}
                   />
                 )}
-                {currentStep === 2 && (
+                {currentStep === 2 && !iprsEnabled && (
                   <DocumentsForm
                     formData={documents}
                     onFileChange={updateDocuments}
@@ -292,7 +337,7 @@ function Onboarding() {
                   />
                 )}
                 {currentStep === 3 && (
-                  <PaymentForm onBack={() => setCurrentStep(2)} onPaymentSuccess={handlePaymentSuccess} isLoading={isLoading} setLoading={setIsLoading} userData={formData} documents={documents} />
+                  <PaymentForm onBack={() => setCurrentStep(iprsEnabled ? 1 : 2)} onPaymentSuccess={handlePaymentSuccess} isLoading={isLoading} setLoading={setIsLoading} userData={formData} documents={iprsEnabled ? {} : documents} />
                 )}
                 {currentStep === 4 && (
                   <ConfirmationStep mpesaReference={mpesaReference} onReset={() => setShowResetDialog(true)} />
@@ -307,7 +352,7 @@ function Onboarding() {
                   <CardContent className="pt-1 space-y-3">
                     <div className="flex items-start gap-3">
                       <CiUser className="text-[#8cc63f] w-5 h-5 mt-0.5 flex-shrink-0" />
-                      <span className="text-sm text-gray-600">Name and ID must match your document exactly</span>
+                      <span className="text-sm text-gray-600">{iprsEnabled ? 'Name and ID must match official records exactly' : 'Name and ID must match your document exactly'}</span>
                     </div>
                     <div className="flex items-start gap-3">
                       <CiMail className="text-[#8cc63f] w-5 h-5 mt-0.5 flex-shrink-0" />
