@@ -235,6 +235,29 @@ const REPORT_EXPORT_TEXT_COLOR = "#14532d";
 const REPORT_EXPORT_LABEL_COLOR = "#eaf7df";
 const REPORT_EXPORT_BORDER_COLOR = "#b7dca2";
 
+const REPORT_FIELD_ALIASES = {
+  reference: ["mpesaReference", "internalReference", "id"],
+  memberName: ["name", "fullName"],
+  name: ["memberName", "fullName"],
+  memberNumber: ["membershipNumber", "memberNo"],
+  principal: ["amount", "loanAmount"],
+  amount: ["principal", "loanAmount"],
+  balance: ["outstandingBalance", "remainingBalance", "principalBalance"],
+  outstandingBalance: ["balance", "remainingBalance", "principalBalance"],
+  createdAt: ["date", "timestamp", "requestedAt"],
+  date: ["createdAt", "timestamp"],
+};
+
+function resolveReportValue(row, key) {
+  const direct = row?.[key];
+  if (direct !== undefined && direct !== null && direct !== "") return direct;
+  for (const alias of REPORT_FIELD_ALIASES[key] || []) {
+    const value = row?.[alias];
+    if (value !== undefined && value !== null && value !== "") return value;
+  }
+  return direct;
+}
+
 function exportToCSV(rows, columns, filename = "export.csv", options = {}) {
   const exportRows = Array.isArray(rows) ? rows : [];
   const exportColumns = columns.map((column) =>
@@ -270,7 +293,7 @@ function exportToCSV(rows, columns, filename = "export.csv", options = {}) {
     <thead><tr>${exportColumns.map((column) => `<th bgcolor="${REPORT_EXPORT_HEADER_COLOR}" style="background-color:${REPORT_EXPORT_HEADER_COLOR};color:${REPORT_EXPORT_TEXT_COLOR};font-weight:700;text-transform:uppercase;">${escapeHtml(column.label || column.key)}</th>`).join("")}</tr></thead>
     <tbody>
       ${exportRows.map((row) => `<tr>${exportColumns.map((column) => {
-        const rawValue = row?.[column.key];
+        const rawValue = resolveReportValue(row, column.key);
         const value = column.csv ? column.csv(rawValue, row) : rawValue;
         return cell(value ?? "");
       }).join("")}</tr>`).join("")}
@@ -2987,6 +3010,12 @@ function FinanceFinancialCsvImport({ accessToken, onImported, mode = "financial"
     }
   }
 
+  function closePreview() {
+    setPreview(null);
+    setCsv("");
+    setFileName("");
+  }
+
   return (
     <div className="rounded-lg border bg-white p-5">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -3008,7 +3037,18 @@ function FinanceFinancialCsvImport({ accessToken, onImported, mode = "financial"
       </div>
       {preview ? (
         <div className="mt-4 overflow-x-auto rounded-lg border">
-           <div className="border-b bg-slate-50 px-4 py-2 text-sm font-semibold">{preview.readyCount} ready, {preview.errorCount} need fixes · {preview.dividendReadyCount || 0} dividend rows ready</div>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-slate-50 px-4 py-2">
+            <div className="text-sm font-semibold">{preview.readyCount} ready, {preview.errorCount} need fixes · {preview.dividendReadyCount || 0} dividend rows ready</div>
+            <button
+              type="button"
+              onClick={closePreview}
+              disabled={busy}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+            >
+              <X size={14} />
+              Back to file selection
+            </button>
+          </div>
           <table className="min-w-full">
             <thead>
               <tr className="bg-slate-50">

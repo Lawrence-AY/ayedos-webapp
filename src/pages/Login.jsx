@@ -337,6 +337,7 @@ export default function Login() {
               >
                 <input
                   id="password"
+                  className="login-password-input"
                   type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
                   value={password}
@@ -358,6 +359,8 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
                   style={{
                     background: "none",
                     border: "none",
