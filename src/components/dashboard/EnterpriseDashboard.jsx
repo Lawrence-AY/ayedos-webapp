@@ -134,7 +134,7 @@ export function SkeletonDashboard() {
   );
 }
 
-export function KpiCard({ icon: Icon, label, value, trend, helper, tone = "emerald", bars = [] }) {
+export function KpiCard({ icon: Icon, label, value, trend, helper, tone = "emerald", bars = [], onClick }) {
   const tones = {
     emerald: "bg-emerald-50 text-emerald-700",
     blue: "bg-sky-50 text-sky-700",
@@ -150,7 +150,8 @@ export function KpiCard({ icon: Icon, label, value, trend, helper, tone = "emera
       whileHover={{ y: -4 }}
       transition={{ duration: 0.24 }}
     >
-    <Surface className="group overflow-hidden p-5 transition duration-200 hover:shadow-[0_22px_50px_rgba(15,23,42,0.1)]">
+    <Surface className={`group relative overflow-hidden p-5 transition duration-200 hover:shadow-[0_22px_50px_rgba(15,23,42,0.1)] ${onClick ? "cursor-pointer ring-offset-2 focus-within:ring-2 focus-within:ring-emerald-500" : ""}`}>
+      {onClick ? <button type="button" className="absolute inset-0 z-10 rounded-lg" aria-label={`View ${label}`} onClick={onClick} /> : null}
       <div className="flex items-start justify-between gap-4">
         <div className={`grid h-11 w-11 place-items-center rounded-lg ${tones[tone] || tones.emerald}`}>
           <Icon size={21} />
