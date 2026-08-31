@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import * as XLSX from "xlsx";
 import {
@@ -28,7 +28,6 @@ import {
   UsersRound,
   WalletCards,
   XCircle,
-  LogOut,
 } from "lucide-react";
 import { AuthContext } from "../context/AuthContext.jsx";
 import Sidebar from "../components/layout/Sidebar.jsx";
@@ -49,6 +48,8 @@ import {
   sendGlobalBroadcast,
   sendDirectNotification,
   getAuditLogs,
+  getBlockedIdentityAttempts,
+  unblockIdentityAttempt,
   updateAdminProfile,
   previewMemberCsvImport,
   commitMemberCsvImport,
@@ -168,6 +169,7 @@ export default function AdminDashboard() {
     dividends: [],
     deductions: [],
     auditLogs: [],
+    auditSummary: { activeAdminSessions: 0 },
     reports: {},
     groupBorrowing: { items: [], summary: {} },
   });
@@ -183,12 +185,12 @@ export default function AdminDashboard() {
       getAllApplications(accessToken),
       getSystemStats(accessToken),
       getArchivedMembers(accessToken),
-      getAllTransactions(accessToken),
+      getAllTransactions(accessToken, { limit: 500 }),
       getAllLoans(accessToken),
       getAllShares(accessToken),
       getAllDividends(accessToken),
       getAllDeductions(accessToken),
-      getAuditLogs(accessToken),
+      getAuditLogs(accessToken, { limit: 500 }),
       getAdminNotifications(accessToken),
       getFinancialReports(accessToken),
       getGroupBorrowingOverview(accessToken),
@@ -231,9 +233,10 @@ export default function AdminDashboard() {
           ? r[8].value
           : [],
       auditLogs:
-        r[9].status === "fulfilled" && Array.isArray(r[9].value)
-          ? r[9].value
+        r[9].status === "fulfilled" && Array.isArray(r[9].value?.items || r[9].value)
+          ? (r[9].value.items || r[9].value)
           : [],
+      auditSummary: r[9].status === "fulfilled" ? (r[9].value?.summary || { activeAdminSessions: 0 }) : { activeAdminSessions: 0 },
       reports: r[11]?.status === "fulfilled" ? r[11].value : {},
       groupBorrowing: r[12]?.status === "fulfilled" ? r[12].value : { items: [], summary: {} },
     });
@@ -300,8 +303,9 @@ export default function AdminDashboard() {
             title="Loan Management"
             data={data.loans}
             columns={[
-              { key: "id", label: "ID" },
-              { key: "type", label: "Type" },
+              { key: "memberNumber", label: "Member Number" },
+              { key: "memberName", label: "Member Name", render: (v, row) => v || row.member || "—" },
+              { key: "type", label: "Loan Type" },
               {
                 key: "principal",
                 label: "Principal",
@@ -312,6 +316,8 @@ export default function AdminDashboard() {
                 label: "Balance",
                 render: (v) => formatCurrency(v || 0),
               },
+              { key: "interestRate", label: "Interest Rate", render: (v) => `${Number(v || 0)}%` },
+              { key: "duration", label: "Term (months)" },
               {
                 key: "status",
                 label: "Status",
@@ -322,6 +328,9 @@ export default function AdminDashboard() {
                   </div>
                 ),
               },
+              { key: "createdAt", label: "Application Timestamp", render: formatDateSafe },
+              { key: "disbursedDate", label: "Disbursed", render: formatDateSafe },
+              { key: "nextPaymentDueAt", label: "Next Payment", render: formatDateSafe },
             ]}
             fileName="admin-loans.csv"
           />
@@ -329,41 +338,7 @@ export default function AdminDashboard() {
           </div>
         );
       case "transactions":
-        return (
-          <AdminReadOnlyTable
-            title="Transaction Ledger & Deposit Audit"
-            data={data.transactions}
-            columns={[
-              {
-                key: "reference",
-                label: "Reference",
-                render: (v, r) => v || r.id,
-              },
-              { key: "memberNumber", label: "Member Number" },
-              { key: "memberName", label: "Member" },
-              {
-                key: "category",
-                label: "Category",
-                render: (v) => String(v || "UNCLASSIFIED").replaceAll("_", " "),
-              },
-              { key: "destination", label: "Destination" },
-              { key: "type", label: "Type" },
-              {
-                key: "amount",
-                label: "Amount",
-                render: (v) => formatCurrency(v),
-              },
-              { key: "method", label: "Method" },
-              {
-                key: "status",
-                label: "Status",
-                render: (v) => <StatusBadge status={v || "Pending"} />,
-              },
-              { key: "createdAt", label: "Date", render: formatDateSafe },
-            ]}
-            fileName="admin-transactions.csv"
-          />
-        );
+        return <AdminTransactions data={data} />;
       case "dividends":
         return (
           <AdminReadOnlyTable
@@ -383,27 +358,7 @@ export default function AdminDashboard() {
           />
         );
       case "deductions":
-        return (
-          <AdminReadOnlyTable
-            title="Salary Deductions"
-            data={data.deductions}
-            columns={[
-              { key: "name", label: "Member" },
-              { key: "company", label: "Company" },
-              {
-                key: "salary",
-                label: "Salary",
-                render: (v) => (v ? formatCurrency(v) : "—"),
-              },
-              {
-                key: "deduction",
-                label: "Deduction",
-                render: (v) => (v ? formatCurrency(v) : "—"),
-              },
-            ]}
-            fileName="admin-deductions.csv"
-          />
-        );
+        return <AdminSalaryDeductions data={data} />;
       case "reports":
         return <AdminReportsPage data={data} />;
       case "settings":
@@ -422,7 +377,7 @@ export default function AdminDashboard() {
           />
         );
       case "audit-logs":
-        return <AdminAuditLogs data={data.auditLogs} />;
+        return <AdminAuditLogs data={data.auditLogs} summary={data.auditSummary} />;
       default:
         return (
           <AdminHome
@@ -463,12 +418,51 @@ export default function AdminDashboard() {
 }
 
 function AdminHome({ data, accessToken, onRefresh }) {
+  const [breakdown, setBreakdown] = useState("members");
   const pendingApps = data.applications.filter(
     (a) => String(a.status || "").toUpperCase() === "PENDING",
   );
-  const activeMembers = data.users.filter(
-    (u) => u.status === "Active" || u.active !== false,
-  );
+  const activeMembers = data.users
+    .filter((u) => u.membershipComplete === true)
+    .map((u) => ({
+      ...u,
+      memberId: u.Member?.id || u.member?.id || u.memberId || "",
+      memberNumber: u.Member?.memberNumber || u.member?.memberNumber || u.memberNumber || "",
+      dateJoined: u.Member?.dateJoined || u.member?.dateJoined || u.createdAt,
+      name: u.name || [u.firstName, u.lastName].filter(Boolean).join(" "),
+      status: u.Member?.status || u.member?.status || "ACTIVE",
+    }));
+  const activeStatuses = new Set(["ACTIVE", "DISBURSED", "IN_ARREARS"]);
+  const activeLoans = data.loans.filter((loan) => activeStatuses.has(String(loan.status || loan.financeStatus || "").toUpperCase()));
+  const memberRows = activeMembers.map((member) => {
+    const loans = activeLoans.filter((loan) => loan.memberId === member.memberId || (member.memberNumber && loan.memberNumber === member.memberNumber));
+    return { ...member, activeLoans: loans.length, activeLoanBalance: loans.reduce((sum, loan) => sum + Number(loan.balance || 0), 0) };
+  });
+  const memberColumns = [
+    { key: "memberNumber", label: "Member Number" },
+    { key: "name", label: "Member Name" },
+    { key: "createdAt", label: "Account Timestamp", render: formatDateSafe },
+    { key: "activeLoans", label: "Active Loans" },
+    { key: "activeLoanBalance", label: "Loan Balance", render: (v) => formatCurrency(v || 0) },
+    { key: "dateJoined", label: "Date Joined", render: formatDateSafe },
+    { key: "phone", label: "Phone Number" },
+    { key: "nationalId", label: "National ID" },
+    { key: "company", label: "Company", render: (v, row) => v || row.employer || "—" },
+    { key: "status", label: "Status", render: (v) => <StatusBadge status={v || "ACTIVE"} /> },
+  ];
+  const loanColumns = [
+    { key: "memberNumber", label: "Member Number" },
+    { key: "memberName", label: "Member Name", render: (v, row) => v || row.member || "—" },
+    { key: "type", label: "Loan Type" },
+    { key: "principal", label: "Principal", render: (v) => formatCurrency(v || 0) },
+    { key: "balance", label: "Outstanding", render: (v) => formatCurrency(v || 0) },
+    { key: "interestRate", label: "Interest Rate", render: (v) => `${Number(v || 0)}%` },
+    { key: "duration", label: "Term (months)" },
+    { key: "status", label: "Status", render: (v) => <StatusBadge status={v} /> },
+    { key: "createdAt", label: "Application Timestamp", render: formatDateSafe },
+    { key: "disbursedDate", label: "Disbursed", render: formatDateSafe },
+    { key: "nextPaymentDueAt", label: "Next Payment", render: formatDateSafe },
+  ];
   return (
     <div className="space-y-6">
       <DashboardHero
@@ -478,7 +472,7 @@ function AdminHome({ data, accessToken, onRefresh }) {
         metrics={[
           { label: "Members", value: activeMembers.length },
           { label: "Pending Apps", value: pendingApps.length },
-          { label: "Active Loans", value: data.stats.activeLoans || 0 },
+          { label: "Active Loans", value: activeLoans.length },
         ]}
       />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -488,6 +482,7 @@ function AdminHome({ data, accessToken, onRefresh }) {
           icon={UsersRound}
           tone="blue"
           trend="Live"
+          onClick={() => setBreakdown("members")}
         />
         <KpiCard
           label="Pending Applications"
@@ -495,26 +490,27 @@ function AdminHome({ data, accessToken, onRefresh }) {
           icon={Clock3}
           tone="amber"
           trend="Review"
+          onClick={() => setBreakdown("applications")}
         />
         <KpiCard
-          label="Archived Members"
-          value={data.archived.length}
-          icon={LogOut}
-          tone="rose"
+          label="Loans"
+          value={activeLoans.length}
+          icon={Landmark}
+          tone="emerald"
+          onClick={() => setBreakdown("loans")}
         />
         <KpiCard
           label="Audit Entries"
           value={data.auditLogs.length}
           icon={ShieldAlert}
           tone="slate"
+          onClick={() => setBreakdown("audit")}
         />
       </div>
-      <AdminApplications
-        data={data}
-        accessToken={accessToken}
-        onRefresh={onRefresh}
-        embedded
-      />
+      {breakdown === "members" ? <AdminReadOnlyTable title="Active Member Breakdown" data={memberRows} columns={memberColumns} fileName="active-members.csv" />
+        : breakdown === "loans" ? <AdminReadOnlyTable title="Active Loan Details" data={activeLoans} columns={loanColumns} fileName="active-loans.csv" />
+        : breakdown === "audit" ? <AdminAuditLogs data={data.auditLogs} summary={data.auditSummary} embedded />
+        : <AdminApplications data={data} accessToken={accessToken} onRefresh={onRefresh} embedded />}
     </div>
   );
 }
@@ -578,7 +574,7 @@ function AdminMemberLifecycle({ data, accessToken, onRefresh }) {
       label: "Member Registry",
       icon: UsersRound,
       count:
-        data.users.filter((u) => u.status !== "Archived").length +
+        data.users.filter((u) => u.membershipComplete === true).length +
         data.archived.length,
     },
   ];
@@ -595,22 +591,28 @@ function AdminMemberLifecycle({ data, accessToken, onRefresh }) {
               exportCSV(
                 mainTab === "applications"
                   ? data.applications
-                  : [...data.users, ...data.archived],
+                  : [...data.users, ...data.archived].map((row) => ({
+                      ...row,
+                      memberNumber: row.memberNumber || row.Member?.memberNumber || row.member?.memberNumber || "",
+                      dateJoined: row.dateJoined || row.Member?.dateJoined || row.member?.dateJoined || row.createdAt,
+                    })),
                 mainTab === "applications"
                   ? [
-                      { key: "id", label: "ID" },
                       { key: "name", label: "Name" },
-                      { key: "phone", label: "Phone" },
+                      { key: "phone", label: "Phone Number" },
+                      { key: "onboardingStage", label: "Onboarding Page" },
+                      { key: "paymentStatus", label: "Payment" },
                       { key: "status", label: "Status" },
                       { key: "submittedDate", label: "Date" },
                     ]
                   : [
-                      { key: "id", label: "ID" },
+                      { key: "memberNumber", label: "Member Number" },
                       { key: "name", label: "Name" },
-          { key: "phone", label: "Phone Number" },
-          { key: "nationalId", label: "National ID" },
-          { key: "company", label: "Company" },
+                      { key: "phone", label: "Phone Number" },
+                      { key: "nationalId", label: "National ID" },
+                      { key: "company", label: "Company" },
                       { key: "status", label: "Status" },
+                      { key: "dateJoined", label: "Date Joined", render: formatDateSafe },
                     ],
                 `members-${mainTab}.csv`,
               )
@@ -723,7 +725,9 @@ function AdminMemberLifecycle({ data, accessToken, onRefresh }) {
 }
 
 function MemberRegistryTable({ regTab, data, search, onSelectMember }) {
-  const active = data.users.filter((u) => u.status !== "Archived");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const active = data.users.filter((u) => u.membershipComplete === true);
   const archived = data.archived;
   const rows = regTab === "active" ? active : archived;
   const normalizedRows = rows.map((row) => ({
@@ -736,7 +740,6 @@ function MemberRegistryTable({ regTab, data, search, onSelectMember }) {
       "",
   }));
   const filtered = filterRows(normalizedRows, search, [
-    "id",
     "memberNumber",
     "name",
     "phone",
@@ -745,11 +748,13 @@ function MemberRegistryTable({ regTab, data, search, onSelectMember }) {
     "email",
     "reason",
   ]);
+  useEffect(() => setPage(1), [search, regTab, pageSize]);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const visibleRows = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   const baseColumns =
     regTab === "active"
       ? [
-          { key: "id", label: "ID" },
           { key: "name", label: "Name" },
           { key: "phone", label: "Phone Number" },
           { key: "nationalId", label: "National ID" },
@@ -782,7 +787,7 @@ function MemberRegistryTable({ regTab, data, search, onSelectMember }) {
           },
         ]
       : [
-          { key: "id", label: "ID" },
+          { key: "memberNumber", label: "Member Number" },
           { key: "name", label: "Name" },
           { key: "phone", label: "Phone Number" },
           { key: "nationalId", label: "National ID" },
@@ -798,13 +803,22 @@ function MemberRegistryTable({ regTab, data, search, onSelectMember }) {
   const columns =
     regTab === "active"
       ? [
-          baseColumns[0],
           { key: "memberNumber", label: "Member Number" },
-          ...baseColumns.slice(1),
+          ...baseColumns,
+          { key: "dateJoined", label: "Date Joined", render: formatDateSafe },
         ]
       : baseColumns;
 
   return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
+        <p>{filtered.length} member{filtered.length === 1 ? "" : "s"} found</p>
+        <label className="flex items-center gap-2">Rows per page
+          <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} className="rounded-lg border px-3 py-2">
+            {[10, 25, 50].map((size) => <option key={size} value={size}>{size}</option>)}
+          </select>
+        </label>
+      </div>
     <div className="overflow-x-auto rounded-lg border">
       <table className="min-w-full">
         <thead>
@@ -820,7 +834,7 @@ function MemberRegistryTable({ regTab, data, search, onSelectMember }) {
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {filtered.map((row) => (
+          {visibleRows.map((row) => (
             <tr
               key={row.id}
               className="cursor-pointer hover:bg-slate-50"
@@ -835,6 +849,14 @@ function MemberRegistryTable({ regTab, data, search, onSelectMember }) {
           ))}
         </tbody>
       </table>
+    </div>
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-slate-500">Page {page} of {pageCount}</p>
+        <div className="flex gap-2">
+          <button type="button" disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:opacity-40">Previous</button>
+          <button type="button" disabled={page === pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))} className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:opacity-40">Next</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1094,13 +1116,34 @@ function AdminMemberDetail({ member, onBack, data }) {
 function AdminApplications({ data, accessToken, onRefresh, embedded = false }) {
   const { applications = [] } = data || {};
   const [search, setSearch] = useState("");
-  const filtered = filterRows(applications, search, [
-    "id",
+  const [applicationFilter, setApplicationFilter] = useState("PENDING");
+  const [page, setPage] = useState(1);
+  const [blockedAttempts, setBlockedAttempts] = useState([]);
+  const [resettingId, setResettingId] = useState("");
+  useEffect(() => { if (accessToken) getBlockedIdentityAttempts(accessToken).then((rows) => setBlockedAttempts(Array.isArray(rows) ? rows : [])).catch(() => setBlockedAttempts([])); }, [accessToken]);
+  const searched = filterRows(applications, search, [
     "name",
     "phone",
+    "email",
     "status",
     "nationalId",
+    "onboardingStage",
+    "paymentStatus",
   ]);
+  const filtered = searched.filter((application) => applicationFilter === "ALL" || String(application.status || "").toUpperCase() === applicationFilter);
+  useEffect(() => setPage(1), [search, applicationFilter]);
+  const pageSize = 10;
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const visibleApplications = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  async function handleUnblock(id) {
+    setResettingId(id);
+    try {
+      await unblockIdentityAttempt(id, accessToken);
+      setBlockedAttempts(await getBlockedIdentityAttempts(accessToken));
+    } catch (error) { alert(error.message); }
+    finally { setResettingId(""); }
+  }
 
   async function handleReview(id, status) {
     try {
@@ -1113,6 +1156,7 @@ function AdminApplications({ data, accessToken, onRefresh, embedded = false }) {
 
   const table = (
     <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">{["PENDING", "APPROVED", "REJECTED", "ALL"].map((value) => <button type="button" key={value} onClick={() => setApplicationFilter(value)} className={`rounded-full px-4 py-2 text-sm font-semibold ${applicationFilter === value ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-700"}`}>{value === "ALL" ? "All Applications" : `${value[0]}${value.slice(1).toLowerCase()}`}</button>)}</div>
       <div className="flex items-center gap-3">
         <Search size={16} className="text-slate-400" />
         <input
@@ -1127,9 +1171,12 @@ function AdminApplications({ data, accessToken, onRefresh, embedded = false }) {
             exportCSV(
               applications,
               [
-                { key: "id", label: "ID" },
                 { key: "name", label: "Name" },
-                { key: "phone", label: "Phone" },
+                { key: "phone", label: "Phone Number" },
+                { key: "email", label: "Email" },
+                { key: "memberType", label: "Member Type" },
+                { key: "onboardingStage", label: "Onboarding Page" },
+                { key: "paymentStatus", label: "Payment" },
                 { key: "status", label: "Status" },
                 { key: "submittedDate", label: "Date" },
               ],
@@ -1147,11 +1194,13 @@ function AdminApplications({ data, accessToken, onRefresh, embedded = false }) {
           <thead>
             <tr className="bg-slate-50">
               {[
-                "ID",
                 "Name",
-                "Phone",
-                "National ID",
-                "Date",
+                "Phone Number",
+                "Email",
+                "Member Type",
+                "Onboarding Page",
+                "Payment",
+                "Submitted",
                 "Status",
                 "Action",
               ].map((h) => (
@@ -1165,12 +1214,14 @@ function AdminApplications({ data, accessToken, onRefresh, embedded = false }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filtered.map((a) => (
+            {visibleApplications.map((a) => (
               <tr key={a.id}>
-                <td className="px-4 py-3 text-sm font-semibold">{a.id}</td>
                 <td className="px-4 py-3 text-sm">{a.name}</td>
                 <td className="px-4 py-3 text-sm">{a.phone}</td>
-                <td className="px-4 py-3 text-sm">{a.nationalId}</td>
+                <td className="px-4 py-3 text-sm">{a.email || "—"}</td>
+                <td className="px-4 py-3 text-sm">{String(a.memberType || "—").replaceAll("_", " ")}</td>
+                <td className="px-4 py-3 text-sm">{a.onboardingStage || "—"}</td>
+                <td className="px-4 py-3"><StatusBadge status={a.paymentStatus || "PENDING"} /></td>
                 <td className="px-4 py-3 text-sm">
                   {formatDateSafe(a.submittedDate)}
                 </td>
@@ -1179,7 +1230,7 @@ function AdminApplications({ data, accessToken, onRefresh, embedded = false }) {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex gap-2">
-                    {String(a.status || "").toUpperCase() === "PENDING" ? (
+                    {String(a.applicationStatus || "").toUpperCase() === "PENDING_APPROVAL" ? (
                       <>
                         <button
                           onClick={() => handleReview(a.id, "APPROVED")}
@@ -1195,7 +1246,7 @@ function AdminApplications({ data, accessToken, onRefresh, embedded = false }) {
                         </button>
                       </>
                     ) : (
-                      <span className="text-xs text-slate-400">Reviewed</span>
+                      <span className="text-xs text-slate-400">{a.status === "PENDING" ? "Awaiting completion" : "Reviewed"}</span>
                     )}
                   </div>
                 </td>
@@ -1204,6 +1255,8 @@ function AdminApplications({ data, accessToken, onRefresh, embedded = false }) {
           </tbody>
         </table>
       </div>
+      <div className="flex items-center justify-between"><p className="text-sm text-slate-500">Page {page} of {pageCount} · {filtered.length} applications</p><div className="flex gap-2"><button disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:opacity-40">Previous</button><button disabled={page === pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))} className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:opacity-40">Next</button></div></div>
+      {applicationFilter === "APPROVED" ? <div className="rounded-lg border bg-white p-4"><h3 className="font-semibold">Blocked registration attempts</h3><p className="mb-3 text-sm text-slate-500">Identity verification lockouts requiring administrator review.</p><div className="overflow-x-auto"><table className="min-w-full text-sm"><thead><tr className="border-b text-left text-xs uppercase text-slate-500">{["Email", "ID / Passport", "Timestamp", "Attempts", "Status", "Reason", "Action"].map((label) => <th key={label} className="px-3 py-2">{label}</th>)}</tr></thead><tbody>{blockedAttempts.slice(0, 10).map((attempt) => <tr key={attempt.id} className="border-b"><td className="px-3 py-3 font-semibold">{attempt.email}</td><td className="px-3 py-3">{attempt.documentNumber}</td><td className="px-3 py-3">{formatDateSafe(attempt.timestamp)}</td><td className="px-3 py-3">{attempt.attemptCount}</td><td className="px-3 py-3"><StatusBadge status={attempt.blockStatus ? "BLOCKED" : "RESET"} /></td><td className="px-3 py-3">{attempt.reason || "Identity verification mismatch"}</td><td className="px-3 py-3"><button disabled={!attempt.blockStatus || resettingId === attempt.id} onClick={() => handleUnblock(attempt.id)} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">{resettingId === attempt.id ? "Resetting..." : "Unblock"}</button></td></tr>)}{!blockedAttempts.length ? <tr><td colSpan={7} className="p-6 text-center text-slate-500">No blocked registration attempts.</td></tr> : null}</tbody></table></div></div> : null}
     </div>
   );
 
@@ -1224,13 +1277,80 @@ function AdminApplications({ data, accessToken, onRefresh, embedded = false }) {
 // MODULE 2: READ-ONLY FINANCIAL TABLES (Shared Finance Data Matrix)
 // Admin fetches the same data pipeline as Financier but renders READ-ONLY
 // ============================================================
+function AdminSalaryDeductions({ data }) {
+  const [company, setCompany] = useState("ALL");
+  const deductionMap = new Map((data.deductions || []).map((row) => [row.memberId, row]));
+  const rows = (data.users || []).filter((user) => user.membershipComplete).map((user) => {
+    const member = user.Member || user.member || {};
+    const deduction = deductionMap.get(member.id);
+    return { memberNumber: member.memberNumber, name: user.name, company: user.company || user.employer || "Unassociated", salary: Number(user.monthlyIncome || 0), deduction: Number(deduction?.amount || 0), savings: Number(member.savings || 0), status: deduction ? (deduction.isActive ? "ACTIVE" : "INACTIVE") : "NOT SET" };
+  });
+  const companies = [...new Set(rows.map((row) => row.company))].sort();
+  const displayed = company === "ALL" ? rows : rows.filter((row) => row.company === company);
+  return <div className="space-y-5"><SectionHeader eyebrow="Finance synchronized" title="Salary Deductions" description="Read-only member payroll deductions from the same member and deduction records used by Finance." /><div className="flex flex-wrap gap-2"><button onClick={() => setCompany("ALL")} className={`rounded-full px-4 py-2 text-sm font-semibold ${company === "ALL" ? "bg-slate-950 text-white" : "bg-slate-100"}`}>All ({rows.length})</button>{companies.map((name) => <button key={name} onClick={() => setCompany(name)} className={`rounded-full px-4 py-2 text-sm font-semibold ${company === name ? "bg-slate-950 text-white" : "bg-slate-100"}`}>{name} ({rows.filter((row) => row.company === name).length})</button>)}</div><AdminReadOnlyTable title={company === "ALL" ? "All Member Deductions" : `${company} Deductions`} data={displayed} columns={[{ key: "memberNumber", label: "Member Number" }, { key: "name", label: "Member" }, { key: "company", label: "Company" }, { key: "salary", label: "Salary", render: (v) => v ? formatCurrency(v) : "—" }, { key: "deduction", label: "Deduction", render: (v) => v ? formatCurrency(v) : "—" }, { key: "savings", label: "Savings", render: (v) => formatCurrency(v || 0) }, { key: "status", label: "Status", render: (v) => <StatusBadge status={v} /> }]} fileName="salary-deductions.csv" /></div>;
+}
+
+function AdminTransactions({ data }) {
+  const [category, setCategory] = useState("all");
+  const [loanView, setLoanView] = useState("repayments");
+  const transactions = data.transactions || [];
+  const savings = transactions.filter((row) => ["SAVINGS", "WITHDRAWAL"].includes(String(row.category || "").toUpperCase()));
+  const shareCapital = transactions.filter((row) => ["SHARE_CAPITAL", "SHARE_CAPITAL_TRANSFER", "OPT_OUT_SHARE_TRANSFER"].includes(String(row.category || "").toUpperCase()));
+  const repayments = transactions.filter((row) => String(row.category || row.type || "").toUpperCase().includes("LOAN_REPAYMENT"));
+  const disbursements = transactions.filter((row) => String(row.category || row.type || "").toUpperCase().includes("LOAN_DISBURSEMENT"));
+  const transactionColumns = [
+    { key: "reference", label: "Reference", render: (v) => v || "—" },
+    { key: "memberNumber", label: "Member Number" },
+    { key: "memberName", label: "Member Name" },
+    { key: "category", label: "Category", render: (v) => String(v || "UNCLASSIFIED").replaceAll("_", " ") },
+    { key: "destination", label: "Ledger Destination" },
+    { key: "type", label: "Transaction Type", render: (v) => String(v || "—").replaceAll("_", " ") },
+    { key: "amount", label: "Amount", render: (v) => formatCurrency(v || 0) },
+    { key: "principalPaid", label: "Principal Portion", render: (v) => v == null ? "—" : formatCurrency(v) },
+    { key: "interestPaid", label: "Interest Portion", render: (v) => v == null ? "—" : formatCurrency(v) },
+    { key: "method", label: "Method" },
+    { key: "status", label: "Status", render: (v) => <StatusBadge status={v || "Pending"} /> },
+    { key: "createdAt", label: "Timestamp", render: formatDateSafe },
+  ];
+  const total = (rows) => rows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  let rows = transactions;
+  let title = "All Reconciled Transactions";
+  let columns = transactionColumns;
+  let fileName = "all-transactions.csv";
+  if (category === "savings") { rows = savings; title = "Savings Transactions"; fileName = "savings-transactions.csv"; }
+  if (category === "shares") { rows = shareCapital; title = "Share Capital Transactions"; fileName = "share-capital-transactions.csv"; }
+  if (category === "loans") {
+    if (loanView === "repayments") { rows = repayments; title = "Loan Repayments"; fileName = "loan-repayments.csv"; }
+    if (loanView === "disbursements") { rows = disbursements; title = "Loan Disbursements"; fileName = "loan-disbursements.csv"; }
+  }
+  return <div className="space-y-6">
+    <SectionHeader eyebrow="Financial ledger" title="Transactions" description="Reconciled savings, share capital, and loan movements from the same ledger used by the Finance and Member dashboards." />
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <KpiCard label="All Transactions" value={transactions.length} helper={formatCurrency(total(transactions))} icon={ReceiptText} tone="slate" onClick={() => setCategory("all")} />
+      <KpiCard label="Savings" value={savings.length} helper={formatCurrency(total(savings))} icon={WalletCards} tone="blue" onClick={() => setCategory("savings")} />
+      <KpiCard label="Share Capital" value={shareCapital.length} helper={formatCurrency(total(shareCapital))} icon={TrendingUp} tone="emerald" onClick={() => setCategory("shares")} />
+      <KpiCard label="Loans" value={repayments.length + disbursements.length} helper={`${repayments.length} repayments · ${disbursements.length} disbursements`} icon={Landmark} tone="amber" onClick={() => setCategory("loans")} />
+    </div>
+    {category === "loans" ? <div className="flex flex-wrap gap-2">{[["repayments", "Repayments"], ["disbursements", "Disbursements"]].map(([key, label]) => <button type="button" key={key} onClick={() => setLoanView(key)} className={`rounded-full px-4 py-2 text-sm font-semibold ${loanView === key ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-700"}`}>{label}</button>)}</div> : null}
+    <AdminReadOnlyTable title={title} data={rows} columns={columns} fileName={fileName} />
+  </div>;
+}
+
 function AdminReadOnlyTable({ title, data: rows, columns, fileName }) {
   const [search, setSearch] = useState("");
-  const filtered = filterRows(
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const searched = filterRows(
     rows,
     search,
     columns.map((c) => c.key),
   );
+  const statuses = [...new Set(rows.map((row) => String(row.status || "").toUpperCase()).filter(Boolean))].sort();
+  const filtered = searched.filter((row) => statusFilter === "ALL" || String(row.status || "").toUpperCase() === statusFilter);
+  useEffect(() => setPage(1), [search, statusFilter, pageSize]);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const visibleRows = filtered.slice((page - 1) * pageSize, page * pageSize);
   return (
     <div className="space-y-6">
       <SectionHeader
@@ -1247,15 +1367,17 @@ function AdminReadOnlyTable({ title, data: rows, columns, fileName }) {
           </button>
         }
       />
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <Search size={16} className="text-slate-400" />
         <input
           type="text"
           placeholder="Search..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="rounded-lg border py-2 pl-2 pr-4 text-sm"
+          className="min-w-64 flex-1 rounded-lg border py-2 pl-2 pr-4 text-sm"
         />
+        {statuses.length ? <select aria-label="Filter by status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-lg border px-3 py-2 text-sm"><option value="ALL">All statuses</option>{statuses.map((status) => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}</select> : null}
+        <select aria-label="Rows per page" value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} className="rounded-lg border px-3 py-2 text-sm">{[10, 25, 50].map((size) => <option key={size} value={size}>{size} rows</option>)}</select>
       </div>
       <div className="overflow-x-auto rounded-lg border">
         <table className="min-w-full">
@@ -1272,7 +1394,7 @@ function AdminReadOnlyTable({ title, data: rows, columns, fileName }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filtered.map((row, i) => (
+            {visibleRows.map((row, i) => (
               <tr key={row.id || i}>
                 {columns.map((c) => (
                   <td key={c.key} className="px-4 py-3 text-sm">
@@ -1283,6 +1405,10 @@ function AdminReadOnlyTable({ title, data: rows, columns, fileName }) {
             ))}
           </tbody>
         </table>
+      </div>
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-slate-500">Showing {filtered.length ? (page - 1) * pageSize + 1 : 0}–{Math.min(page * pageSize, filtered.length)} of {filtered.length}</p>
+        <div className="flex gap-2"><button type="button" disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:opacity-40">Previous</button><button type="button" disabled={page === pageCount} onClick={() => setPage((value) => Math.min(pageCount, value + 1))} className="rounded-lg border px-4 py-2 text-sm font-semibold disabled:opacity-40">Next</button></div>
       </div>
     </div>
   );
@@ -1559,79 +1685,56 @@ function AdminNotificationsPanel({
 // ============================================================
 // MODULE 4: AUDIT LOGS
 // ============================================================
-function AdminAuditLogs({ data }) {
-  const [search, setSearch] = useState("");
+function AdminAuditLogs({ data, summary = {}, embedded = false }) {
+  const defaultFrom = useMemo(() => new Date(Date.now() - 86400000).toISOString().slice(0, 16), []);
+  const [filters, setFilters] = useState({ search: "", category: "ALL", severity: "ALL", status: "ALL", from: defaultFrom, to: "" });
+  const [expanded, setExpanded] = useState(null);
   const logs = data || [];
-  const filtered = filterRows(logs, search, [
-    "timestamp",
-    "userId",
-    "actionType",
-    "ipAddress",
-    "affectedRecord",
-  ]);
-  const columns = [
-    { key: "timestamp", label: "Timestamp" },
-    { key: "userId", label: "User" },
-    { key: "actionType", label: "Action" },
-    { key: "ipAddress", label: "IP Address" },
-    { key: "affectedRecord", label: "Record" },
+  const filtered = logs.filter((log) => {
+    const term = filters.search.trim().toLowerCase();
+    const searchable = [log.actorName, log.staffId, log.memberNumber, log.memberName, log.targetId, log.target, log.event].join(" ").toLowerCase();
+    const time = new Date(log.timestamp).getTime();
+    return (!term || searchable.includes(term))
+      && (filters.category === "ALL" || log.category === filters.category)
+      && (filters.severity === "ALL" || log.severity === filters.severity)
+      && (filters.status === "ALL" || log.status === filters.status)
+      && (!filters.from || time >= new Date(filters.from).getTime())
+      && (!filters.to || time <= new Date(filters.to).getTime());
+  });
+  const last24Hours = logs.filter((log) => new Date(log.timestamp).getTime() >= Date.now() - 86400000);
+  const timestamp = (value) => value ? `${new Date(value).toISOString().replace("T", " ").replace("Z", " UTC")}` : "—";
+  const exportColumns = [
+    { key: "timestamp", label: "Timestamp" }, { key: "actorName", label: "Actor" }, { key: "staffId", label: "Staff ID" },
+    { key: "actorRole", label: "Role" }, { key: "category", label: "Category" }, { key: "event", label: "Action Executed" },
+    { key: "target", label: "Target Entity" }, { key: "status", label: "Status" }, { key: "severity", label: "Severity" },
   ];
+  const updateFilter = (key) => (event) => setFilters((current) => ({ ...current, [key]: event.target.value }));
   return (
     <div className="space-y-6">
-      <SectionHeader
-        eyebrow="Audit logs"
-        title="Immutable audit trail"
-        description="Every login, status change, broadcast, transaction, and override is logged."
-        action={
-          <button
-            onClick={() => exportCSV(filtered, columns, "audit-logs.csv")}
-            className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold"
-          >
-            <Download size={14} />
-            Export CSV
-          </button>
-        }
-      />
-      <div className="relative">
-        <Search
-          size={16}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-        />
-        <input
-          type="text"
-          placeholder="Search audit logs..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-lg border py-2 pl-9 pr-4 text-sm"
-        />
+      <SectionHeader eyebrow={embedded ? "Overview drill-down" : "Audit logs"} title="Immutable audit trail" description="Financial, lending, member KYC, and access-control activity recorded in real time." action={<button onClick={() => exportCSV(filtered, exportColumns, "audit-logs.csv")} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold"><Download size={14} />Export CSV</button>} />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard label="Total Log Volume (24h)" value={last24Hours.length} icon={FileText} tone="blue" />
+        <KpiCard label="Failed Actions" value={last24Hours.filter((log) => log.status === "FAILED").length} icon={XCircle} tone="rose" />
+        <KpiCard label="High-Risk Events" value={last24Hours.filter((log) => log.severity === "CRITICAL").length} icon={ShieldAlert} tone="amber" />
+        <KpiCard label="Active Admin Sessions" value={summary.activeAdminSessions || 0} icon={UserRound} tone="emerald" />
       </div>
-      <div className="overflow-x-auto rounded-lg border">
-        <table className="min-w-full">
-          <thead>
-            <tr className="bg-slate-50">
-              {columns.map((c) => (
-                <th
-                  key={c.key}
-                  className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500"
-                >
-                  {c.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {filtered.map((log) => (
-              <tr key={log.id}>
-                {columns.map((c) => (
-                  <td key={c.key} className="px-4 py-3 text-sm">
-                    {log[c.key] || "—"}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="grid gap-3 rounded-lg border bg-white p-4 lg:grid-cols-3 xl:grid-cols-6">
+        <div className="relative lg:col-span-3 xl:col-span-2"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /><input value={filters.search} onChange={updateFilter("search")} placeholder="Actor, member ID, transaction reference..." className="w-full rounded-lg border py-2 pl-9 pr-3 text-sm" /></div>
+        <input type="datetime-local" aria-label="From date and time" value={filters.from} onChange={updateFilter("from")} className="rounded-lg border px-3 py-2 text-sm" />
+        <input type="datetime-local" aria-label="To date and time" value={filters.to} onChange={updateFilter("to")} className="rounded-lg border px-3 py-2 text-sm" />
+        <select aria-label="Category" value={filters.category} onChange={updateFilter("category")} className="rounded-lg border px-3 py-2 text-sm"><option value="ALL">All categories</option>{["Financial", "Loan Management", "Member KYC", "Access Control", "System"].map((value) => <option key={value}>{value}</option>)}</select>
+        <div className="grid grid-cols-2 gap-2"><select aria-label="Severity" value={filters.severity} onChange={updateFilter("severity")} className="rounded-lg border px-2 py-2 text-sm"><option value="ALL">All risks</option>{["INFO", "WARN", "CRITICAL"].map((value) => <option key={value}>{value}</option>)}</select><select aria-label="Outcome" value={filters.status} onChange={updateFilter("status")} className="rounded-lg border px-2 py-2 text-sm"><option value="ALL">All outcomes</option>{["SUCCESS", "FAILED", "PENDING_APPROVAL"].map((value) => <option key={value}>{value}</option>)}</select></div>
       </div>
+      <div className="overflow-x-auto rounded-lg border bg-white"><table className="min-w-full"><thead><tr className="bg-slate-50">{["Timestamp", "Actor", "Category", "Action Executed", "Target Entity", "Status & Severity"].map((label) => <th key={label} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{label}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">
+        {filtered.map((log) => <Fragment key={log.id}><tr className="cursor-pointer hover:bg-slate-50" onClick={() => setExpanded((value) => value === log.id ? null : log.id)}>
+          <td className="whitespace-nowrap px-4 py-3 text-xs font-medium">{timestamp(log.timestamp)}</td>
+          <td className="px-4 py-3 text-sm"><p className="font-semibold">{log.actorName || "System"}</p><p className="text-xs text-slate-500">{log.staffId || "—"}</p><StatusBadge status={String(log.actorRole || "SYSTEM").replaceAll("_", " ")} /></td>
+          <td className="px-4 py-3 text-sm"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold">{log.category}</span></td>
+          <td className="px-4 py-3 font-mono text-xs font-semibold">{log.event}</td><td className="px-4 py-3 text-sm">{log.target || "—"}</td>
+          <td className="px-4 py-3"><div className="flex gap-2"><StatusBadge status={log.status} /><StatusBadge status={log.severity} /></div></td>
+        </tr>{expanded === log.id ? <tr><td colSpan={6} className="bg-slate-50 p-5"><div className="grid gap-5 xl:grid-cols-2"><div className="rounded-lg border bg-white p-4"><h4 className="font-semibold">Network & Session Context</h4><dl className="mt-3 grid grid-cols-[130px_1fr] gap-2 text-sm"><dt className="text-slate-500">IP address</dt><dd>{log.ipAddress || "—"}</dd><dt className="text-slate-500">Device</dt><dd className="break-all">{log.device || "—"}</dd><dt className="text-slate-500">Endpoint</dt><dd className="font-mono text-xs">{log.endpoint || "—"}</dd><dt className="text-slate-500">Location</dt><dd>{log.location || "Not available"}</dd><dt className="text-slate-500">Session</dt><dd>{log.sessionRef || "—"}</dd></dl></div><div className="rounded-lg border bg-white p-4"><h4 className="font-semibold">State Delta</h4><div className="mt-3 grid gap-3 md:grid-cols-2"><div><p className="mb-1 text-xs font-semibold uppercase text-rose-700">Before</p><pre className="max-h-52 overflow-auto rounded bg-rose-50 p-3 text-xs">{JSON.stringify(log.beforeState, null, 2) || "No prior state"}</pre></div><div><p className="mb-1 text-xs font-semibold uppercase text-emerald-700">After</p><pre className="max-h-52 overflow-auto rounded bg-emerald-50 p-3 text-xs">{JSON.stringify(log.afterState, null, 2) || "No resulting state"}</pre></div></div>{log.status === "FAILED" ? <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3"><p className="text-xs font-semibold uppercase text-rose-700">Failure reason</p><p className="mt-1 break-all text-sm text-rose-900">{log.failureReason || "No failure detail recorded"}</p></div> : null}</div></div></td></tr> : null}</Fragment>)}
+      </tbody></table>{!filtered.length ? <p className="p-10 text-center text-sm text-slate-500">No audit events match the selected filters.</p> : null}</div>
+      <div className="flex items-start gap-3 rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950"><LockKeyhole className="mt-0.5 shrink-0" size={18} /><p><strong>System guardrail:</strong> Audit logs are immutable, encrypted, and recorded in real time. Logs cannot be modified or purged.</p></div>
     </div>
   );
 }
