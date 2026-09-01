@@ -1,6 +1,5 @@
 import { Fragment, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
-import * as XLSX from "xlsx";
 import {
   AlertTriangle,
   BadgeCheck,
@@ -33,6 +32,7 @@ import { AuthContext } from "../context/AuthContext.jsx";
 import Sidebar from "../components/layout/Sidebar.jsx";
 import TopNavbar from "../components/layout/TopNavbar.jsx";
 import { exportRichCSV } from "../utils/csvExport.js";
+import { fileToImportCsv } from "../utils/spreadsheetImport.js";
 import { changePassword } from "../services/authService.js";
 import {
   getAllUsers,
@@ -85,26 +85,6 @@ import MemberFinancialProfile from "../components/staff-dashboard/MemberFinancia
 import OptOutRequestsPage from "../components/staff-dashboard/OptOutRequestsPage.jsx";
 import SentNotificationsPanel from "../components/staff-dashboard/SentNotificationsPanel.jsx";
 import { applyLoanPaymentEvent, useDashboardEvents } from "../features/realtime/dashboardEvents.js";
-
-const csvEscape = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
-
-function workbookRowsToCsv(workbook) {
-  const rows = [];
-  workbook.SheetNames.forEach((sheetName) => {
-    const sheet = workbook.Sheets[sheetName];
-    const records = XLSX.utils.sheet_to_json(sheet, { defval: "", raw: false });
-    records.forEach((record) => rows.push({ Sheet: sheetName, ...record }));
-  });
-  if (!rows.length) return "";
-  const headers = [...rows.reduce((set, row) => {
-    Object.keys(row).forEach((key) => set.add(key));
-    return set;
-  }, new Set(["Sheet"]))];
-  return [
-    headers.map(csvEscape).join(","),
-    ...rows.map((row) => headers.map((header) => csvEscape(row[header])).join(",")),
-  ].join("\n");
-}
 
 function filterRows(rows, search, keys) {
   const term = search.trim().toLowerCase();
@@ -865,28 +845,30 @@ function AdminBulkMemberImport({ accessToken, onImported }) {
   const [csv, setCsv] = useState("");
   const [fileInfo, setFileInfo] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [selectedPreviewRow, setSelectedPreviewRow] = useState(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(null);
 
   async function handleFile(event) {
     const file = event.target.files?.[0];
     if (!file) return;
+    setBusy(true);
     try {
-      const extension = file.name.split(".").pop()?.toLowerCase();
-      const text = extension === "xls" || extension === "xlsx"
-        ? workbookRowsToCsv(XLSX.read(await file.arrayBuffer(), { type: "array" }))
-        : await file.text();
+      const text = await fileToImportCsv(file);
       if (!text.trim()) throw new Error("The selected file is empty or has no tabular rows.");
       setCsv(text);
       setFileInfo({ name: file.name, size: file.size, rows: text.split(/\r\n|\r|\n/).filter(Boolean).length });
-      setPreview(null);
+      setPreview(await previewMemberCsvImport(text, accessToken));
+      setSelectedPreviewRow(null);
       setMessage(null);
     } catch (error) {
       setCsv("");
       setFileInfo(null);
       setPreview(null);
+      setSelectedPreviewRow(null);
       setMessage({ type: "error", text: error?.message || "Unable to read import file." });
     } finally {
+      setBusy(false);
       event.target.value = "";
     }
   }
@@ -896,6 +878,8 @@ function AdminBulkMemberImport({ accessToken, onImported }) {
     setMessage(null);
     try {
       setPreview(await previewMemberCsvImport(csv, accessToken));
+      setSelectedPreviewRow(null);
+      setMessage({ type: "success", text: "Preview refreshed. Review the rows below before creating accounts." });
     } catch (error) {
       setMessage({ type: "error", text: error?.message || "Preview failed." });
     } finally {
@@ -908,8 +892,11 @@ function AdminBulkMemberImport({ accessToken, onImported }) {
     setMessage(null);
     try {
       const result = await commitMemberCsvImport(csv, accessToken);
-      setMessage({ type: "success", text: `Imported ${result.imported?.length || 0} member${result.imported?.length === 1 ? "" : "s"}.` });
+      const created = (result.imported || []).filter((row) => row.accountCreated !== false).length;
+      const recorded = (result.imported || []).filter((row) => row.accountCreated === false).length;
+      setMessage({ type: "success", text: `Created ${created} account${created === 1 ? "" : "s"} and saved ${recorded} record-only member${recorded === 1 ? "" : "s"}.` });
       setPreview(null);
+      setSelectedPreviewRow(null);
       setCsv("");
       setFileInfo(null);
       await onImported?.();
@@ -920,46 +907,100 @@ function AdminBulkMemberImport({ accessToken, onImported }) {
     }
   }
 
+  function cancelImport() {
+    setCsv("");
+    setFileInfo(null);
+    setPreview(null);
+    setSelectedPreviewRow(null);
+    setMessage(null);
+  }
+
+  const previewHasErrors = Boolean(preview?.errorCount);
+  const cellClass = (invalid) => `px-3 py-2 text-sm ${invalid ? "bg-rose-50 font-semibold text-rose-700" : ""}`;
+  const isMissing = (row, field) => row.missing?.includes(field);
+
   return (
     <div className="rounded-lg border bg-white p-5">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h3 className="text-base font-semibold text-slate-950">Bulk Ayedos member onboarding</h3>
-          <p className="text-sm text-slate-500">Bulk-register new members, create default-login accounts, and initialize baseline savings and share capital.</p>
-          <p className="text-xs text-slate-500">CSV columns: Staff ID, Email, Member ID, Share Capital, Savings, Join Date, Status, National ID, Name, Phone Number.</p>
+          <p className="text-sm text-slate-500">Bulk-register employee members, create default-login accounts, and initialize baseline savings and share capital.</p>
+          <p className="text-xs text-slate-500">Supports CSV, XLS, XLSX, and XML files. Columns: Staff ID, Email, Member ID, Share Capital, Savings, Join Date, Status, National ID, Name, Phone Number.</p>
           {fileInfo ? <p className="mt-1 text-xs font-semibold text-emerald-700">Loaded {fileInfo.name} ({fileInfo.rows} row{fileInfo.rows === 1 ? "" : "s"}, {fileInfo.size.toLocaleString()} bytes)</p> : null}
         </div>
         <div className="flex flex-wrap gap-2">
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold">
             <FileText size={14} />
-            Choose CSV
-            <input type="file" accept=".csv,text/csv,.xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="sr-only" onChange={handleFile} />
+            Choose file
+            <input type="file" accept=".csv,text/csv,.xls,.xlsx,.xml,text/xml,application/xml,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="sr-only" onChange={handleFile} />
           </label>
-          <button disabled={!csv || busy} onClick={previewImport} className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Working..." : "Preview"}</button>
-          <button disabled={!preview?.readyCount || busy} onClick={commitImport} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Import ready rows</button>
+          <button disabled={!csv || busy} onClick={previewImport} className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Working..." : "Refresh preview"}</button>
+          {preview ? <button disabled={busy} onClick={cancelImport} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50">Cancel / Change File</button> : null}
+          <button disabled={!preview?.readyCount || previewHasErrors || busy} onClick={commitImport} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Confirm & Create Accounts</button>
         </div>
       </div>
       {message ? <p className={`mt-3 text-sm font-semibold ${message.type === "success" ? "text-emerald-700" : "text-rose-700"}`}>{message.text}</p> : null}
       {preview ? (
         <div className="mt-4 overflow-x-auto rounded-lg border">
-          <div className="border-b bg-slate-50 px-4 py-2 text-sm font-semibold">{preview.readyCount} ready, {preview.errorCount} need fixes</div>
+          <div className={`border-b px-4 py-2 text-sm font-semibold ${previewHasErrors ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-800"}`}>{preview.readyCount} ready, {preview.errorCount} need fixes</div>
           <table className="min-w-full">
-            <thead><tr className="bg-slate-50">{["Row", "Staff ID", "Email", "Member ID", "Share Capital", "Savings", "Join Date", "Status", "National ID", "Name", "Phone Number", "Readiness"].map((h) => <th key={h} className="px-3 py-2 text-left text-xs uppercase text-slate-500">{h}</th>)}</tr></thead>
+            <thead><tr className="bg-slate-50">{["Name", "Member No.", "Status", "ID Number", "Joining Date", "Share Capital", "Savings", "Readiness"].map((h) => <th key={h} className="px-3 py-2 text-left text-xs uppercase text-slate-500">{h}</th>)}</tr></thead>
             <tbody className="divide-y">
               {preview.rows.map((row) => (
-                <tr key={row.rowNumber}>
-                  <td className="px-3 py-2 text-sm">{row.rowNumber}</td>
-                  <td className="px-3 py-2 text-sm">{row.data.staffId || "-"}</td>
-                  <td className="px-3 py-2 text-sm">{row.data.email || "-"}</td>
-                  <td className="px-3 py-2 text-sm">{row.data.memberNumber || "Auto"}</td>
+                <tr key={row.rowNumber} className={row.ready ? "" : "bg-rose-50/30"}>
+                  <td className="px-3 py-2 text-sm">
+                    <button type="button" onClick={() => setSelectedPreviewRow(row)} className="text-left font-semibold text-emerald-700 hover:text-emerald-900">
+                      {row.data.fullName || row.data.memberNumber || row.data.nationalId || "Imported employee"}
+                    </button>
+                  </td>
+                  <td className={cellClass(isMissing(row, "memberNumber"))}>{row.data.memberNumber || "Missing member no."}</td>
+                  <td className="px-3 py-2 text-sm">{row.data.status || "ACTIVE"}</td>
+                  <td className={cellClass(isMissing(row, "nationalId"))}>{row.data.nationalId || "Missing ID"}</td>
+                  <td className="px-3 py-2 text-sm">{row.data.joinDate || "-"}</td>
                   <td className="px-3 py-2 text-sm">{row.data.shareCapital || 0}</td>
                   <td className="px-3 py-2 text-sm">{row.data.savings || 0}</td>
-                  <td className="px-3 py-2 text-sm">{row.data.joinDate || "-"}</td>
-                  <td className="px-3 py-2 text-sm">{row.data.status || "-"}</td>
-                  <td className="px-3 py-2 text-sm">{row.data.nationalId || "-"}</td>
-                  <td className="px-3 py-2 text-sm">{row.data.fullName || "-"}</td>
-                  <td className="px-3 py-2 text-sm">{row.data.phone || "-"}</td>
-                  <td className="px-3 py-2 text-sm"><StatusBadge status={row.ready ? "Ready" : `Missing ${row.missing.join(", ")}`} /></td>
+                  <td className="px-3 py-2 text-sm"><StatusBadge status={row.ready ? (row.action === "RECORD_ONLY" ? "Record only" : "Create account") : `Missing ${row.missing.join(", ")}`} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+      {selectedPreviewRow ? <MemberImportPreviewDetail row={selectedPreviewRow} onClose={() => setSelectedPreviewRow(null)} /> : null}
+    </div>
+  );
+}
+
+function MemberImportPreviewDetail({ row, onClose }) {
+  const details = row.data.statementDetails;
+  const periods = details?.periods || [];
+  return (
+    <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50/40 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h4 className="text-base font-semibold text-slate-950">{row.data.fullName || row.data.memberNumber || row.data.nationalId || "Imported employee"}</h4>
+          <p className="text-sm text-slate-600">{row.data.memberNumber || "Auto"} · {row.data.nationalId || "No ID"} · {row.data.status || "ACTIVE"}</p>
+          {row.data.statementSheet ? <p className="mt-1 text-xs font-semibold text-emerald-700">Statement sheet: {row.data.statementSheet}</p> : null}
+        </div>
+        <button type="button" onClick={onClose} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">Close</button>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-lg border bg-white p-3"><p className="text-xs font-semibold uppercase text-slate-500">Share Capital</p><p className="mt-1 text-lg font-bold text-slate-950">{formatCurrency(row.data.shareCapital || 0)}</p></div>
+        <div className="rounded-lg border bg-white p-3"><p className="text-xs font-semibold uppercase text-slate-500">Savings</p><p className="mt-1 text-lg font-bold text-slate-950">{formatCurrency(row.data.savings || 0)}</p></div>
+        <div className="rounded-lg border bg-white p-3"><p className="text-xs font-semibold uppercase text-slate-500">Employer Contribution</p><p className="mt-1 text-lg font-bold text-slate-950">{formatCurrency(row.data.employerContribution || 0)}</p></div>
+      </div>
+      {periods.length ? (
+        <div className="mt-4 overflow-x-auto rounded-lg border bg-white">
+          <table className="min-w-full">
+            <thead><tr className="bg-slate-50">{["From", "To", "Share Capital", "Savings", "Employer Contribution"].map((h) => <th key={h} className="px-3 py-2 text-left text-xs uppercase text-slate-500">{h}</th>)}</tr></thead>
+            <tbody className="divide-y">
+              {periods.map((period, index) => (
+                <tr key={`${period.from}-${period.to}-${index}`}>
+                  <td className="px-3 py-2 text-sm">{period.from || "-"}</td>
+                  <td className="px-3 py-2 text-sm">{period.to || "-"}</td>
+                  <td className="px-3 py-2 text-sm">{formatCurrency(period.shareCapital || 0)}</td>
+                  <td className="px-3 py-2 text-sm">{formatCurrency(period.savings || 0)}</td>
+                  <td className="px-3 py-2 text-sm">{formatCurrency(period.employerContribution || 0)}</td>
                 </tr>
               ))}
             </tbody>

@@ -49,7 +49,7 @@ export default function App() {
                 path="/onboarding"
                 element={
                   <ProtectedRoute
-                    allowedRoles={['PENDING', 'MEMBER']}
+                    allowedRoles={['PENDING', 'MEMBER', 'EMPLOYEE']}
                     element={<Onboarding />}
                   />
                 }
@@ -82,7 +82,7 @@ export default function App() {
                 path="/dashboard/user/*"
                 element={
                   <ProtectedRoute
-                    allowedRoles={['MEMBER']}
+                    allowedRoles={['MEMBER', 'EMPLOYEE']}
                     element={<UserDashboard />}
                   />
                 }

@@ -19,7 +19,7 @@ export function isMemberOnboardingComplete(user) {
   if (!user) return false;
   const role = normalizeDashboardRole(user.role);
   if (role === "PENDING") return false;
-  if (role !== "MEMBER") return true;
+  if (!["MEMBER", "EMPLOYEE"].includes(role)) return true;
   if (
     user.onboardingComplete ||
     user.onboardingCompleted ||

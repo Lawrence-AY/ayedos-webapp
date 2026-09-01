@@ -62,7 +62,7 @@ export default function Login() {
     const tempToken = otpSession?.tempToken || otpSession?.sessionId || null;
 
     if (!/^\d{6,8}$/.test(code)) {
-      setFormError("Enter the 6 to 8 digit OTP sent to your email");
+      setFormError("Enter the 6 to 8 digit OTP sent to your registered phone or email");
       return;
     }
 
@@ -117,7 +117,7 @@ export default function Login() {
       return;
     }
 
-    if (!email.trim()) return setFormError("Email is required");
+    if (!email.trim()) return setFormError("Email, National ID or phone number is required");
     if (!password) return setFormError("Password is required");
 
     try {
@@ -132,7 +132,7 @@ export default function Login() {
         setOtpCountdown(Math.ceil(Math.max((nextSession?.resendAvailableAt || Date.now() + OTP_COOLDOWN_SECONDS * 1000) - Date.now(), 0) / 1000));
         setSubmitCooldown(0);
         setFormError(null);
-        setOtpMessage("We sent a verification code via sms and email.");
+        setOtpMessage("We sent a verification code to your registered phone and email.");
         return;
       }
       navigate(getPostLoginPath(loggedInUser), { replace: true });
@@ -198,7 +198,7 @@ export default function Login() {
       const nextSession = response?.otpSession;
       setOtp("");
       setOtpCountdown(Math.ceil(Math.max((nextSession?.resendAvailableAt || Date.now() + OTP_COOLDOWN_SECONDS * 1000) - Date.now(), 0) / 1000));
-      setOtpMessage(response?.message || "A new OTP has been sent to your email.");
+      setOtpMessage(response?.message || "A new OTP has been sent to your registered phone and email.");
     } catch (err) {
       setFormError(err?.message || "Unable to resend OTP");
     } finally {
@@ -305,17 +305,17 @@ export default function Login() {
           <form onSubmit={onSubmit}>
             <div style={{ marginBottom: 20 }}>
               <label htmlFor="email" style={labelStyle}>
-                Email Address
+                Email, National ID or Phone
               </label>
               <input
                 id="email"
-                type="email"
-                autoComplete="email"
+                type="text"
+                autoComplete="username"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={otpRequired}
                 style={inputStyle}
-                placeholder="name@email.com"
+                placeholder="Email, National ID or phone"
                 required
               />
             </div>
@@ -422,7 +422,7 @@ export default function Login() {
       <div style={modalStyle} role="dialog" aria-modal="true" aria-labelledby="otp-title">
         <h2 id="otp-title" style={modalTitleStyle}>Verify sign in</h2>
         <p style={modalTextStyle}>
-          Enter the code sent to <strong>{maskEmail((email || otpSession?.email || "").trim())}</strong>.
+          Enter the code sent to your registered phone and email for <strong>{maskEmail((email || otpSession?.email || "").trim())}</strong>.
         </p>
         <p style={timerTextStyle}>
           {otpCountdown > 0 ? ` ` : "You can request another code now."}
