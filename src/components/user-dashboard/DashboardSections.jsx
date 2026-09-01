@@ -1006,6 +1006,8 @@ function DashboardOverview({
 }) {
   const greeting = getGreeting();
   const showEmployerContribution = hasStaffId(user);
+  const statementDetails = user?.Member?.importProfile?.statementDetails || user?.member?.importProfile?.statementDetails || null;
+  const statementPeriods = statementDetails?.periods || [];
   const cards = [
     {
       label: "Share Capital",
@@ -1084,6 +1086,38 @@ function DashboardOverview({
           <StatCard key={card.label} {...card} blur={!showValues} />
         ))}
       </div>
+
+      {statementDetails ? (
+        <Surface className="overflow-hidden">
+          <div className="border-b border-slate-200 p-4">
+            <h4 className="text-base font-semibold tracking-normal text-slate-950">Imported member statement</h4>
+            <p className="text-sm text-slate-500">{statementDetails.sheetName || "Member workbook"} · {statementDetails.memberNumber || stats.memberNumber}</p>
+          </div>
+          <div className="grid gap-3 p-4 sm:grid-cols-3">
+            <div className="rounded-lg border bg-white p-3"><p className="text-xs font-semibold uppercase text-slate-500">Share Capital</p><p className="mt-1 text-lg font-bold text-slate-950">{formatCurrency(statementDetails.totals?.shareCapital || stats.shareCapital || 0)}</p></div>
+            <div className="rounded-lg border bg-white p-3"><p className="text-xs font-semibold uppercase text-slate-500">Savings</p><p className="mt-1 text-lg font-bold text-slate-950">{formatCurrency(statementDetails.totals?.savings || stats.totalSavings || 0)}</p></div>
+            <div className="rounded-lg border bg-white p-3"><p className="text-xs font-semibold uppercase text-slate-500">Employer Contribution</p><p className="mt-1 text-lg font-bold text-slate-950">{formatCurrency(statementDetails.totals?.employerContribution || stats.employerContribution || 0)}</p></div>
+          </div>
+          {statementPeriods.length ? (
+            <div className="overflow-x-auto border-t">
+              <table className="min-w-full">
+                <thead><tr className="bg-slate-50">{["From", "To", "Share Capital", "Savings", "Employer Contribution"].map((h) => <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>)}</tr></thead>
+                <tbody className="divide-y">
+                  {statementPeriods.map((period, index) => (
+                    <tr key={`${period.from}-${period.to}-${index}`}>
+                      <td className="px-4 py-3 text-sm">{period.from || "-"}</td>
+                      <td className="px-4 py-3 text-sm">{period.to || "-"}</td>
+                      <td className="px-4 py-3 text-sm">{formatCurrency(period.shareCapital || 0)}</td>
+                      <td className="px-4 py-3 text-sm">{formatCurrency(period.savings || 0)}</td>
+                      <td className="px-4 py-3 text-sm">{formatCurrency(period.employerContribution || 0)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </Surface>
+      ) : null}
 
       {/* Dividend Projection Card */}
       <DividendProjection stats={stats} showValues={showValues} />
@@ -1812,18 +1846,92 @@ function SecuritySection({
     newPassword: "",
     confirmPassword: "",
   });
+  const [setupForm, setSetupForm] = useState({
+    email: user?.email || "",
+    phone: user?.phone || "",
+    newPassword: "",
+  });
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [message, setMessage] = useState(null);
   const [savingSecurity, setSavingSecurity] = useState(false);
   const [lastPasswordUpdate, setLastPasswordUpdate] = useState(null);
+  const requiresFirstLoginSetup = Boolean(user?.mustChangePassword);
+
+  useEffect(() => {
+    setSetupForm((current) => ({
+      ...current,
+      email: current.email || user?.email || "",
+      phone: current.phone || user?.phone || "",
+    }));
+  }, [user?.email, user?.phone]);
 
   function updatePassword(event) {
     setPasswordForm((current) => ({
       ...current,
       [event.target.name]: event.target.value,
     }));
+  }
+
+  function updateSetupForm(event) {
+    setSetupForm((current) => ({
+      ...current,
+      [event.target.name]: event.target.value,
+    }));
+  }
+
+  const setupEmailValid = /^\S+@\S+\.\S+$/.test(setupForm.email.trim());
+  const setupPhoneValid = setupForm.phone.trim().length >= 7;
+  const setupPasswordValid = setupForm.newPassword.length >= 8 && setupForm.newPassword !== "12345678";
+  const setupCanSubmit = setupEmailValid && setupPhoneValid && setupPasswordValid && !savingSecurity;
+
+  async function handleFirstLoginSetupSubmit(event) {
+    event.preventDefault();
+    setMessage(null);
+    if (!setupEmailValid || !setupPhoneValid || !setupPasswordValid) {
+      setMessage({
+        type: "error",
+        text: "Enter a valid email address, mobile phone number, and a new password that is not the default password.",
+      });
+      return;
+    }
+
+    setSavingSecurity(true);
+    try {
+      const updatedProfile = await updateMemberProfile(
+        {
+          email: setupForm.email.trim().toLowerCase(),
+          phone: setupForm.phone.trim(),
+          currentPassword: "12345678",
+        },
+        accessToken,
+      );
+      const response = await changePassword(
+        {
+          currentPassword: "12345678",
+          newPassword: setupForm.newPassword,
+        },
+        accessToken,
+      );
+      const successText = response?.message || "Account setup completed. Full portal access is now enabled.";
+      setMessage({ type: "success", text: successText });
+      setSetupForm((current) => ({ ...current, newPassword: "" }));
+      await onPasswordChanged?.(response?.data?.notification, {
+        ...(updatedProfile || user),
+        mustChangePassword: false,
+        onboardingComplete: true,
+        onboardingCompleted: true,
+        onboardingStatus: true,
+      });
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: error?.message || "Failed to complete account setup.",
+      });
+    } finally {
+      setSavingSecurity(false);
+    }
   }
 
   async function handlePasswordSubmit(event) {
@@ -1927,6 +2035,69 @@ function SecuritySection({
           {message.text}
         </div>
       ) : null}
+
+      {requiresFirstLoginSetup ? (
+        <Surface className="p-5">
+          <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+            Email Address and Mobile Phone Number are required. Your One-Time Password (OTP) and login verification codes will be sent to these contacts.
+          </div>
+          <div className="mb-5 flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-lg bg-slate-100 text-slate-700">
+              <ShieldCheck className="text-[#8cc63f]" size={20} />
+            </div>
+            <div>
+              <h5 className="text-base font-semibold tracking-normal text-slate-950">
+                Complete account setup
+              </h5>
+              <p className="text-sm text-slate-500">
+                Update your password and confirm the contacts used for login verification.
+              </p>
+            </div>
+          </div>
+          <form className="space-y-4" onSubmit={handleFirstLoginSetupSubmit}>
+            <Field
+              label="Email Address"
+              name="email"
+              type="email"
+              value={setupForm.email}
+              onChange={updateSetupForm}
+            />
+            <Field
+              label="Mobile Phone Number"
+              name="phone"
+              type="tel"
+              value={setupForm.phone}
+              onChange={updateSetupForm}
+            />
+            <Field
+              label="New Password"
+              name="newPassword"
+              type={showNewPassword ? "text" : "password"}
+              value={setupForm.newPassword}
+              onChange={updateSetupForm}
+              suffix={
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword((current) => !current)}
+                  className="text-xs font-semibold text-slate-500 hover:text-slate-900"
+                >
+                  {showNewPassword ? "Hide" : "Show"}
+                </button>
+              }
+            />
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-600">
+              Use at least 8 characters and choose a password different from 12345678.
+            </div>
+            <button disabled={!setupCanSubmit} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70">
+              {savingSecurity ? <RefreshCw className="animate-spin text-[#8cc63f]" size={17} /> : <LockKeyhole size={17} />}
+              {savingSecurity ? "Completing setup" : "Complete Setup"}
+            </button>
+          </form>
+        </Surface>
+      ) : null}
+
+      {requiresFirstLoginSetup ? null : (
+      <>
 
       {/* 1. LOGIN HISTORY - TOP */}
       <div className="grid xl:grid-cols-1">
@@ -2207,6 +2378,8 @@ function SecuritySection({
           </Surface>
         </div>
       </div>
+      </>
+      )}
 
     </div>
   );

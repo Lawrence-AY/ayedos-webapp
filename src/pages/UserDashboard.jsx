@@ -236,7 +236,8 @@ export default function UserDashboard() {
       const amount = Number(outgoing ? (transaction.amount || 0) : (transaction.netAmount ?? transaction.amount ?? 0));
       return sum + (outgoing ? -amount : amount);
     }, 0);
-    const savings = Math.max(signedCategoryTotal(["savings"]), 0);
+    const storedMemberSavings = Number(user?.savings || user?.Member?.savings || user?.member?.savings || 0);
+    const savings = Math.max(signedCategoryTotal(["savings"]), storedMemberSavings, 0);
     const paidShareCapital = categoryTotal(["share_capital", "sharecapital", "share capital"]);
     const shareAccountCapital = data.shares.reduce((sum, share) => sum + Number(share.totalInvested || 0), 0);
     const storedMemberShareCapital = Number(user?.shareCapital || user?.Member?.shareCapital || user?.member?.shareCapital || 0);
@@ -326,9 +327,10 @@ export default function UserDashboard() {
           activeSessions={data.activeSessions}
           loginHistory={data.loginHistory}
           onRefresh={() => loadDashboardData({ showLoading: false })}
-          onPasswordChanged={(notification) => {
+          onPasswordChanged={(notification, updatedUser) => {
             updateCurrentUser?.({
               ...user,
+              ...(updatedUser || {}),
               mustChangePassword: false,
               onboardingComplete: true,
               onboardingCompleted: true,
@@ -341,7 +343,7 @@ export default function UserDashboard() {
                 notificationUnreadCount: current.notificationUnreadCount + (notification.readAt || notification.isRead || notification.read ? 0 : 1),
               }));
             }
-            navigate(getDashboardPath("MEMBER"), { replace: true });
+            navigate(getDashboardPath(updatedUser?.role || user?.role || "MEMBER"), { replace: true });
           }}
         />
       );

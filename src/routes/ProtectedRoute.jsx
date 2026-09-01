@@ -60,7 +60,7 @@ export default function ProtectedRoute({ element, allowedRoles }) {
   }
 
   if (
-    userRole === 'MEMBER' &&
+    ['MEMBER', 'EMPLOYEE'].includes(userRole) &&
     !isMemberOnboardingComplete(user) &&
     location.pathname !== '/onboarding'
   ) {

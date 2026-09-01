@@ -78,6 +78,9 @@ export async function previewFinancialCsvImport(csv, accessToken) {
     method: 'POST',
     accessToken,
     body: { csv },
+    cache: false,
+    retry: false,
+    timeoutMs: 60000,
   })
   if (!res.ok) throw new Error(res.json?.message || 'Failed to preview financial import')
   return unwrapEnvelopeData(res.json)
@@ -88,8 +91,37 @@ export async function commitFinancialCsvImport(csv, accessToken) {
     method: 'POST',
     accessToken,
     body: { csv },
+    cache: false,
+    retry: false,
+    timeoutMs: 60000,
   })
   if (!res.ok) throw new Error(res.json?.message || 'Failed to import financial records')
+  return unwrapEnvelopeData(res.json)
+}
+
+export async function previewMemberImport(csv, accessToken) {
+  const res = await apiRequest('/api/finance/members/import/preview', {
+    method: 'POST',
+    accessToken,
+    body: { csv },
+    cache: false,
+    retry: false,
+    timeoutMs: 60000,
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to preview member import')
+  return unwrapEnvelopeData(res.json)
+}
+
+export async function commitMemberImport(csv, accessToken) {
+  const res = await apiRequest('/api/finance/members/import/commit', {
+    method: 'POST',
+    accessToken,
+    body: { csv },
+    cache: false,
+    retry: false,
+    timeoutMs: 60000,
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to import members')
   return unwrapEnvelopeData(res.json)
 }
 
