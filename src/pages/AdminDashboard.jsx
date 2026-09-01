@@ -1982,7 +1982,7 @@ function AdminProfileSettings({ user, accessToken }) {
     setPwMsg(null);
     try {
       await changePassword(
-        { currentPassword: passwords.current, newPassword: passwords.new },
+        { currentPassword: passwords.current, newPassword: passwords.new, confirmPassword: passwords.confirm },
         accessToken,
       );
       setPwMsg({ type: "success", text: "Password changed." });

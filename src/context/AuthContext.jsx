@@ -72,6 +72,7 @@ const getPersistableUser = (user) => {
     payrollNumber: user.payrollNumber,
     nominees: user.nominees,
     staffId: user.staffId,
+    employmentTag: user.employmentTag,
     isWhitelisted: user.isWhitelisted,
     employerContribution: user.employerContribution,
     onboardingComplete: user.onboardingComplete,

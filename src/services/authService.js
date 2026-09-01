@@ -233,11 +233,11 @@ export async function verifyLoginOtp({ email, otp, tempToken, sessionId }) {
 /**
  * Change password while authenticated.
  */
-export async function changePassword({ currentPassword, newPassword }, accessToken) {
+export async function changePassword({ currentPassword, newPassword, confirmPassword }, accessToken) {
   const res = await apiRequest(AUTH_ENDPOINTS.CHANGE_PASSWORD, {
     method: 'POST',
     accessToken,
-    body: { currentPassword, newPassword },
+    body: { currentPassword, newPassword, confirmPassword },
   })
 
   if (!res.ok) {

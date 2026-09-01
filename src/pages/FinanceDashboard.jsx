@@ -3849,7 +3849,7 @@ function FinancierProfileSettings({ user, stats, accessToken }) {
     setPwMessage(null);
     try {
       await changePassword(
-        { currentPassword: passwords.current, newPassword: passwords.new },
+        { currentPassword: passwords.current, newPassword: passwords.new, confirmPassword: passwords.confirm },
         accessToken,
       );
       setPwMessage({ type: "success", text: "Password changed successfully." });
