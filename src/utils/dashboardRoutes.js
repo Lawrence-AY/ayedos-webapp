@@ -51,6 +51,7 @@ export function isMemberOnboardingComplete(user) {
 }
 
 export function getPostLoginPath(user) {
+  if (user?.mustChangePassword) return getDashboardPath(user?.role, "security");
   if (!isMemberOnboardingComplete(user)) return "/onboarding";
   return getDashboardPath(user?.role);
 }

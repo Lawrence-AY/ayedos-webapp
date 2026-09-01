@@ -150,7 +150,9 @@ function isAyedosMember(user = {}) {
 }
 
 function hasStaffId(user = {}) {
-  return Boolean(String(user?.staffId || user?.payrollNumber || "").trim());
+  return Boolean(String(user?.staffId || user?.payrollNumber || "").trim())
+    || String(user?.employmentTag || "").toUpperCase() === "EMPLOYEE"
+    || String(user?.role || "").toUpperCase() === "EMPLOYEE";
 }
 
 const LOAN_PRODUCTS = [
@@ -1094,9 +1096,9 @@ function DashboardOverview({
             <p className="text-sm text-slate-500">{statementDetails.sheetName || "Member workbook"} · {statementDetails.memberNumber || stats.memberNumber}</p>
           </div>
           <div className="grid gap-3 p-4 sm:grid-cols-3">
-            <div className="rounded-lg border bg-white p-3"><p className="text-xs font-semibold uppercase text-slate-500">Share Capital</p><p className="mt-1 text-lg font-bold text-slate-950">{formatCurrency(statementDetails.totals?.shareCapital || stats.shareCapital || 0)}</p></div>
-            <div className="rounded-lg border bg-white p-3"><p className="text-xs font-semibold uppercase text-slate-500">Savings</p><p className="mt-1 text-lg font-bold text-slate-950">{formatCurrency(statementDetails.totals?.savings || stats.totalSavings || 0)}</p></div>
-            <div className="rounded-lg border bg-white p-3"><p className="text-xs font-semibold uppercase text-slate-500">Employer Contribution</p><p className="mt-1 text-lg font-bold text-slate-950">{formatCurrency(statementDetails.totals?.employerContribution || stats.employerContribution || 0)}</p></div>
+            <div className="rounded-lg border bg-white p-3"><p className="text-xs font-semibold uppercase text-slate-500">Share Capital</p><p className="mt-1 text-lg font-bold text-slate-950">{formatCurrency(stats.shareCapital || statementDetails.totals?.shareCapital || 0)}</p></div>
+            <div className="rounded-lg border bg-white p-3"><p className="text-xs font-semibold uppercase text-slate-500">Savings</p><p className="mt-1 text-lg font-bold text-slate-950">{formatCurrency(stats.totalSavings || statementDetails.totals?.savings || 0)}</p></div>
+            <div className="rounded-lg border bg-white p-3"><p className="text-xs font-semibold uppercase text-slate-500">Employer Contribution</p><p className="mt-1 text-lg font-bold text-slate-950">{formatCurrency(stats.employerContribution || statementDetails.totals?.employerContribution || 0)}</p></div>
           </div>
           {statementPeriods.length ? (
             <div className="overflow-x-auto border-t">
@@ -1187,6 +1189,9 @@ function Field({
   max,
   disabled = false,
   helper = "",
+  autoComplete,
+  onFocus,
+  onBlur,
 }) {
   const controlClass =
     "mt-2 w-full rounded-lg border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-900 outline-none transition disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:disabled:bg-slate-800 dark:disabled:text-slate-400 dark:focus:border-emerald-500 dark:focus:ring-emerald-950";
@@ -1229,6 +1234,9 @@ function Field({
             min={min}
             max={max}
             disabled={disabled}
+            autoComplete={autoComplete}
+            onFocus={onFocus}
+            onBlur={onBlur}
           />
         )}
         {suffix ? (
@@ -1847,25 +1855,29 @@ function SecuritySection({
     confirmPassword: "",
   });
   const [setupForm, setSetupForm] = useState({
-    email: user?.email || "",
-    phone: user?.phone || "",
+    email: "",
+    phone: "",
     newPassword: "",
+    confirmPassword: "",
   });
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showSetupPasswordRules, setShowSetupPasswordRules] = useState(false);
   const [message, setMessage] = useState(null);
   const [savingSecurity, setSavingSecurity] = useState(false);
   const [lastPasswordUpdate, setLastPasswordUpdate] = useState(null);
   const requiresFirstLoginSetup = Boolean(user?.mustChangePassword);
 
   useEffect(() => {
-    setSetupForm((current) => ({
-      ...current,
-      email: current.email || user?.email || "",
-      phone: current.phone || user?.phone || "",
-    }));
-  }, [user?.email, user?.phone]);
+    if (!requiresFirstLoginSetup) return;
+    setSetupForm({
+      email: "",
+      phone: "",
+      newPassword: "",
+      confirmPassword: "",
+    });
+  }, [requiresFirstLoginSetup, user?.id]);
 
   function updatePassword(event) {
     setPasswordForm((current) => ({
@@ -1883,16 +1895,25 @@ function SecuritySection({
 
   const setupEmailValid = /^\S+@\S+\.\S+$/.test(setupForm.email.trim());
   const setupPhoneValid = setupForm.phone.trim().length >= 7;
-  const setupPasswordValid = setupForm.newPassword.length >= 8 && setupForm.newPassword !== "12345678";
-  const setupCanSubmit = setupEmailValid && setupPhoneValid && setupPasswordValid && !savingSecurity;
+  const setupPasswordRules = [
+    { label: "At least 8 characters", met: setupForm.newPassword.length >= 8 },
+    { label: "At least one uppercase letter (A-Z)", met: /[A-Z]/.test(setupForm.newPassword) },
+    { label: "At least one lowercase letter (a-z)", met: /[a-z]/.test(setupForm.newPassword) },
+    { label: "At least one numeric digit (0-9)", met: /[0-9]/.test(setupForm.newPassword) },
+    { label: "At least one special character, such as @, #, $, or %", met: /[^A-Za-z0-9]/.test(setupForm.newPassword) },
+  ];
+  const setupPasswordStrong = setupPasswordRules.every((rule) => rule.met);
+  const setupPasswordValid = setupPasswordStrong && setupForm.newPassword !== "12345678";
+  const setupPasswordsMatch = setupForm.newPassword.length > 0 && setupForm.newPassword === setupForm.confirmPassword;
+  const setupCanSubmit = setupEmailValid && setupPhoneValid && setupPasswordValid && setupPasswordsMatch && !savingSecurity;
 
   async function handleFirstLoginSetupSubmit(event) {
     event.preventDefault();
     setMessage(null);
-    if (!setupEmailValid || !setupPhoneValid || !setupPasswordValid) {
+    if (!setupEmailValid || !setupPhoneValid || !setupPasswordValid || !setupPasswordsMatch) {
       setMessage({
         type: "error",
-        text: "Enter a valid email address, mobile phone number, and a new password that is not the default password.",
+        text: "Enter a valid email address, mobile phone number, strong new password, and matching confirmation.",
       });
       return;
     }
@@ -1911,12 +1932,13 @@ function SecuritySection({
         {
           currentPassword: "12345678",
           newPassword: setupForm.newPassword,
+          confirmPassword: setupForm.confirmPassword,
         },
         accessToken,
       );
       const successText = response?.message || "Account setup completed. Full portal access is now enabled.";
       setMessage({ type: "success", text: successText });
-      setSetupForm((current) => ({ ...current, newPassword: "" }));
+      setSetupForm((current) => ({ ...current, newPassword: "", confirmPassword: "" }));
       await onPasswordChanged?.(response?.data?.notification, {
         ...(updatedProfile || user),
         mustChangePassword: false,
@@ -1964,6 +1986,7 @@ function SecuritySection({
         {
           currentPassword: passwordForm.currentPassword,
           newPassword: passwordForm.newPassword,
+          confirmPassword: passwordForm.confirmPassword,
         },
         accessToken,
       );
@@ -2061,6 +2084,7 @@ function SecuritySection({
               type="email"
               value={setupForm.email}
               onChange={updateSetupForm}
+              autoComplete="off"
             />
             <Field
               label="Mobile Phone Number"
@@ -2068,6 +2092,7 @@ function SecuritySection({
               type="tel"
               value={setupForm.phone}
               onChange={updateSetupForm}
+              autoComplete="off"
             />
             <Field
               label="New Password"
@@ -2075,6 +2100,11 @@ function SecuritySection({
               type={showNewPassword ? "text" : "password"}
               value={setupForm.newPassword}
               onChange={updateSetupForm}
+              autoComplete="new-password"
+              onFocus={() => setShowSetupPasswordRules(true)}
+              onBlur={() => {
+                if (setupPasswordStrong) setShowSetupPasswordRules(false);
+              }}
               suffix={
                 <button
                   type="button"
@@ -2085,9 +2115,41 @@ function SecuritySection({
                 </button>
               }
             />
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-600">
-              Use at least 8 characters and choose a password different from 12345678.
-            </div>
+            {showSetupPasswordRules || setupForm.newPassword ? (
+              <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-xs font-medium text-slate-600 shadow-sm">
+                <p className="mb-2 font-semibold text-slate-700">Password must include:</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {setupPasswordRules.map((rule) => (
+                    <div key={rule.label} className={`flex items-center gap-2 ${rule.met ? "text-emerald-700" : "text-slate-500"}`}>
+                      <span className={`grid h-4 w-4 place-items-center rounded-full border text-[10px] ${rule.met ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-slate-300 bg-white text-slate-400"}`}>
+                        {rule.met ? "✓" : ""}
+                      </span>
+                      <span>{rule.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {setupPasswordStrong ? (
+              <Field
+                label="Confirm Password"
+                name="confirmPassword"
+                type={showConfirmPassword ? "text" : "password"}
+                value={setupForm.confirmPassword}
+                onChange={updateSetupForm}
+                autoComplete="new-password"
+                error={setupForm.confirmPassword && !setupPasswordsMatch ? "Passwords do not match." : ""}
+                suffix={
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword((current) => !current)}
+                    className="text-xs font-semibold text-slate-500 hover:text-slate-900"
+                  >
+                    {showConfirmPassword ? "Hide" : "Show"}
+                  </button>
+                }
+              />
+            ) : null}
             <button disabled={!setupCanSubmit} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70">
               {savingSecurity ? <RefreshCw className="animate-spin text-[#8cc63f]" size={17} /> : <LockKeyhole size={17} />}
               {savingSecurity ? "Completing setup" : "Complete Setup"}
@@ -2758,6 +2820,7 @@ function LoansTable({ loans, showValues = true }) {
   const repaymentRecords = filteredLoans
     .flatMap((loan) => (loan.repayments || []).map((repayment) => ({ ...repayment, loanType: loan.type, loanId: loan.id })))
     .sort((a, b) => new Date(b.paidAt) - new Date(a.paidAt));
+  const loanDisplayType = (loan) => loan.sourceLabel || loan.type || "Loan";
   return (
     <Surface className="overflow-hidden">
       <div className="border-b border-slate-200 p-5">
@@ -2818,7 +2881,10 @@ function LoansTable({ loans, showValues = true }) {
               {filteredLoans.map((loan) => (
                 <tr key={loan.id}>
                   <td className="px-5 py-4 text-sm font-semibold text-slate-900">
-                    {loan.type}
+                    <span className="block">{loanDisplayType(loan)}</span>
+                    {loan.isImportedLiabilityStatement ? (
+                      <span className="mt-1 block text-xs font-medium text-amber-700">Uploaded liability balance</span>
+                    ) : null}
                   </td>
                   <td className="px-5 py-4 text-sm">
                     {loanMoney(loan.principal)}
@@ -2827,7 +2893,8 @@ function LoansTable({ loans, showValues = true }) {
                     {loanMoney(loanOutstandingBalance(loan))}
                   </td>
                   <td className="px-5 py-4 text-sm">
-                    {formatLoanDuration(loan)}
+                    <span className="block">{formatLoanDuration(loan)}</span>
+                    {loan.reason ? <span className="mt-1 block text-xs text-slate-500">{loan.reason}</span> : null}
                   </td>
                   <td className="px-5 py-4 text-sm">
                     {loan.selfGuaranteed ? "Self-guaranteed | " : ""}{statusMap[String(loan.status || "").toUpperCase()] || normalizeStatus(loan.status)}
@@ -3704,7 +3771,25 @@ function ReportsPage({ accessToken, data = {} }) {
   const fw = ft.filter(t => lbl(t).includes("withdraw")||lbl(t).includes("payout")||lbl(t).includes("disburse"));
   const fr = ft.filter(t => lbl(t).includes("repay")||lbl(t).includes("loan")||lbl(t).includes("credit"));
   const fd = ft.filter(t => lbl(t).includes("dividend"));
-  const fpd = showPayrollReports ? ft.filter(t => lbl(t).includes("payroll")||lbl(t).includes("deduction")||lbl(t).includes("salary")) : [];
+  const payrollCategory = (transaction) => {
+    const label = lbl(transaction);
+    if (label.includes("employer")) return "Employer Contribution";
+    if (label.includes("loan") || label.includes("repay")) return "Loan Repayment";
+    if (label.includes("saving")) return "Savings";
+    if (label.includes("share")) return "Share Capital";
+    return "Personal Contribution";
+  };
+  const fpd = showPayrollReports ? ft.filter((transaction) => {
+    const label = lbl(transaction);
+    return label.includes("payroll")
+      || label.includes("deduction")
+      || label.includes("salary")
+      || label.includes("employer")
+      || label.includes("contribution")
+      || label.includes("loan")
+      || label.includes("repay")
+      || label.includes("saving");
+  }) : [];
   const dateTime = (value) => value ? new Date(value).toLocaleString() : "-";
   const loanAmount = (loan) => Number(loan.amount || loan.principal || loan.requestedAmount || 0);
   const loanInterest = (loan) => {
@@ -3788,7 +3873,7 @@ function ReportsPage({ accessToken, data = {} }) {
     "savings-records": { title: "Savings Records", headers: ["Date","Activity","Amount","Status","Reference"], rows: savingsRows, summary:{"Current Savings Balance":formatCurrency(Number(reportStats?.totalSavings||0)),Records:savingsRows.length} },
     "share-capital-records": { title: "Share Capital Records", headers: ["Date","Activity","Amount","Status","Reference"], rows: shareCapitalRows, summary:{Records:shareCapitalRows.length} },
     dividend: { title: "Dividend Report", headers: ["Date","Reference","Amount","Status"], rows: fd.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-",Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Dividends":formatCurrency(fd.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fd.length} },
-    ...(showPayrollReports ? { "payroll-deduction": { title: "Payroll Deduction Report", headers: ["Date","Reference","Amount","Status"], rows: fpd.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-",Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Total Deducted":formatCurrency(fpd.reduce((s,t)=>s+Number(t.amount||0),0)),Count:fpd.length} } } : {}),
+    ...(showPayrollReports ? { "payroll-deduction": { title: "Payroll Deduction Report", headers: ["Date","Category","Reference","Amount","Status"], rows: fpd.map(t=>({Date:t.createdAt||t.date?new Date(t.createdAt||t.date).toLocaleDateString():"-",Category:payrollCategory(t),Reference:t.mpesaReference||t.reference||t.id||"-",Amount:formatCurrency(Number(t.amount||0)),Status:normalizeStatus(t.status||"Completed")})),summary:{"Employee Deductions":formatCurrency(fpd.filter(t=>payrollCategory(t)!=="Employer Contribution").reduce((s,t)=>s+Number(t.amount||0),0)),"Employer Contributions":formatCurrency(fpd.filter(t=>payrollCategory(t)==="Employer Contribution").reduce((s,t)=>s+Number(t.amount||0),0)),Count:fpd.length} } } : {}),
   };
   const loanReportData = {
     loans: { title: "Loans", headers: ["Date & Time","Type","Amount","Guarantor","Status","Loan Duration","Interest to be Paid","Reason"], rows: fl.map(l=>({"Date & Time":dateTime(l.createdAt||l.date),Type:l.type||l.loanType||"Loan",Amount:formatCurrency(loanAmount(l)),Guarantor:loanGuarantorLabel(l),Status:normalizeStatus(l.status||"Pending"),"Loan Duration":l.duration||l.loanDuration||l.term?`${l.duration||l.loanDuration||l.term} month${Number(l.duration||l.loanDuration||l.term)===1?"":"s"}`:"-","Interest to be Paid":formatCurrency(loanInterest(l)),Reason:l.reason||"-"})),summary:{"Active Balance":formatCurrency(fl.reduce((s,l)=>s+Number(l.balance||l.outstandingBalance||l.principal||l.amount||0),0)),Count:fl.length} },

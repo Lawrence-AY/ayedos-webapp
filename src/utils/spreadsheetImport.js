@@ -80,6 +80,7 @@ function parseStatementSheet(sheetName, matrix) {
   };
   const periods = [];
   const headerIndex = matrix.findIndex((row) => normalizeHeader(row[0]) === "from" && normalizeHeader(row[1]) === "to");
+  const liabilityIndex = matrix.findIndex((row) => normalizeHeader(row[0]) === "liabilityaccountstatement");
   if (headerIndex >= 0) {
     for (const row of matrix.slice(headerIndex + 1)) {
       const first = normalizeHeader(row[0]);
@@ -96,6 +97,10 @@ function parseStatementSheet(sheetName, matrix) {
     }
   }
   const totalRow = matrix.find((row) => normalizeHeader(row[0]) === "total");
+  const liabilityAmountRow = liabilityIndex >= 0
+    ? matrix.slice(liabilityIndex + 1).find((row) => normalizeHeader(row[0]) === "amount")
+    : null;
+  const liabilityAmount = toNumber(liabilityAmountRow?.find((cell, index) => index > 0 && String(cell || "").trim()));
   return {
     sheetName,
     name: findValue("Name"),
@@ -106,6 +111,11 @@ function parseStatementSheet(sheetName, matrix) {
       shareCapital: toNumber(totalRow?.[2]),
       savings: toNumber(totalRow?.[3]),
       employerContribution: toNumber(totalRow?.[4]),
+      liability: liabilityAmount,
+      loans: liabilityAmount,
+    },
+    liabilityAccountStatement: {
+      amount: liabilityAmount,
     },
   };
 }
@@ -132,6 +142,8 @@ function memberStatementWorkbookToCsv(workbook) {
       "Share Capital": statement?.totals?.shareCapital || "",
       "Savings": statement?.totals?.savings || "",
       "Employer Contribution": statement?.totals?.employerContribution || "",
+      "Loans": statement?.totals?.loans || "",
+      "Liability": statement?.totals?.liability || "",
       "Statement Details": statementDetails,
     };
   });

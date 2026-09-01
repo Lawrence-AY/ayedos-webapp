@@ -59,6 +59,10 @@ export default function ProtectedRoute({ element, allowedRoles }) {
     return redirect(getDashboardPath(userRole, 'security'), { forcePasswordChange: true })
   }
 
+  if (user.mustChangePassword) {
+    return element
+  }
+
   if (
     ['MEMBER', 'EMPLOYEE'].includes(userRole) &&
     !isMemberOnboardingComplete(user) &&
