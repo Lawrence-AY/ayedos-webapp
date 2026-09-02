@@ -50,6 +50,7 @@ export default function UserDashboard() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [search, setSearch] = useState("");
   const [remoteSearch, setRemoteSearch] = useState({ loading: false, error: "", results: null, query: "" });
+  const [groupRealtimeRefresh, setGroupRealtimeRefresh] = useState(0);
   const [showValues, setShowValues] = useState(false);
   const locallyReadNotificationIds = useRef(new Set());
   const markAllReadAt = useRef(null);
@@ -202,6 +203,10 @@ export default function UserDashboard() {
     onLoanPaymentProcessed: (payload) => {
       setData((current) => applyLoanPaymentEvent(current, payload));
       window.setTimeout(() => loadDashboardData({ showLoading: false }), 250);
+    },
+    onGroupRoleUpdated: () => {
+      setGroupRealtimeRefresh((value) => value + 1);
+      loadDashboardData({ showLoading: false });
     },
     onRecoveryNeeded: () => loadDashboardData({ showLoading: false }),
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -403,7 +408,7 @@ export default function UserDashboard() {
       return <ReportsPage accessToken={accessToken} data={{ transactions: data.transactions, loans: data.loans, shares: data.shares, stats, user }} />;
     }
     if (path.includes("/groups")) {
-      return <GroupsPage user={user} accessToken={accessToken} stats={stats} onRefresh={() => loadDashboardData({ showLoading: false })} />;
+      return <GroupsPage user={user} accessToken={accessToken} stats={stats} realtimeRefresh={groupRealtimeRefresh} onRefresh={() => loadDashboardData({ showLoading: false })} />;
     }
     if (path.includes("/savings")) {
       return <SavingsPage stats={stats} transactions={data.transactions} accessToken={accessToken} onRefresh={() => loadDashboardData({ showLoading: false })} showValues={showValues} onToggleValues={() => setShowValues((current) => !current)} user={user} />;
