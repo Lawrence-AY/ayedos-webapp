@@ -28,12 +28,21 @@ export default function TopNavbar({
   const { resolvedTheme, setTheme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const [photoFailed, setPhotoFailed] = useState(false);
+  const [searchDraft, setSearchDraft] = useState(searchValue);
   const name = user?.name || "AYEDOS Member";
   const dashboardBase = getDashboardPath(user?.role);
   const profilePhoto = user?.passportPhotoUrl || user?.profilePhotoUrl || user?.avatarUrl;
   useEffect(() => {
     setPhotoFailed(false);
   }, [profilePhoto]);
+  useEffect(() => {
+    setSearchDraft(searchValue);
+  }, [searchValue]);
+
+  function submitSearch(event) {
+    event.preventDefault();
+    onSearchChange?.(searchDraft.trim());
+  }
 
   return (
     <header className="sticky top-0 z-20 border-b border-emerald-900/10 bg-white/82 px-4 py-3  backdrop-blur-xl transition-colors duration-200 dark:border-slate-800 dark:bg-slate-950/90 sm:px-6 lg:px-8">
@@ -48,17 +57,23 @@ export default function TopNavbar({
         </button>
       
 
-        <div className="relative ml-0 min-w-0 flex-1 md:ml-4">
+        <form onSubmit={submitSearch} role="search" className="relative ml-0 flex min-w-0 flex-1 gap-2 md:ml-4">
+          <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8cc63f] dark:text-[#8cc63f]" size={18} />
           <input
             type="search"
-            value={searchValue}
-            onChange={(event) => onSearchChange?.(event.target.value)}
+            value={searchDraft}
+            onChange={(event) => setSearchDraft(event.target.value)}
             placeholder="Search transactions, loans, statements..."
             className="h-11 w-full rounded-lg border border-emerald-900/10 bg-white/86 pl-10 pr-4 text-sm text-slate-900 
             outline-none transition duration-200 placeholder:text-slate-400 hover:border-emerald-200 hover:bg-white focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100 dark:border-slate-800 dark:bg-slate-900/50 dark:text-white dark:placeholder:text-slate-500 dark:hover:border-slate-700 dark:hover:bg-slate-900 dark:focus:border-emerald-500 dark:focus:bg-slate-900 dark:focus:ring-emerald-950/30"
           />
-        </div>
+          </div>
+          <button type="submit" className="inline-flex h-11 shrink-0 items-center gap-2 rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600" aria-label="Search dashboard">
+            <Search size={17} />
+            <span className="hidden sm:inline">Search</span>
+          </button>
+        </form>
 
         <div className="flex items-center gap-2">
           <button

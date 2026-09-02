@@ -141,7 +141,7 @@ const calculateLoanNextDueAmount = (loan) => {
   return Math.round(Math.min(Math.max(calculated, fallbackDue, 0), outstanding) * 100) / 100;
 };
 
-const MIN_SHARE_CAPITAL = 25000;
+const MIN_SHARE_CAPITAL = 20000;
 const MAX_PROFILE_PHOTO_BYTES = 1.5 * 1024 * 1024;
 
 function isAyedosMember(user = {}) {
@@ -4366,7 +4366,7 @@ function TransferShareCapitalForm({ accessToken, shareCapitalAmount, optOut = fa
       {msg && <div className={`rounded-lg border px-4 py-3 text-sm font-medium ${msg.type==="success"?"border-emerald-200 bg-emerald-50 text-emerald-800":"border-rose-200 bg-rose-50 text-rose-800"}`}>{msg.text}</div>}
       <label className="block text-sm font-semibold text-slate-700">
         Recipient membership number
-        <div className="mt-1 flex gap-2"><input type="text" value={form.memberId} onChange={(e) => { setForm((f) => ({ ...f, memberId: e.target.value })); setRecipient(null); }} className="w-full rounded-lg border px-3.5 py-3 text-sm" placeholder="29903-001" /><button type="button" onClick={searchRecipient} className="rounded-lg border px-4 text-sm font-semibold">Search</button></div>
+        <div className="mt-1 flex gap-2"><input type="text" value={form.memberId} onChange={(e) => { setForm((f) => ({ ...f, memberId: e.target.value })); setRecipient(null); }} className="w-full rounded-lg border px-3.5 py-3 text-sm" placeholder="29903-00001" /><button type="button" onClick={searchRecipient} className="rounded-lg border px-4 text-sm font-semibold">Search</button></div>
       </label>
       {recipient ? <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm"><strong>{recipient.name || recipient.User?.name || recipient.memberNumber}</strong><br />{recipient.memberNumber}</div> : null}
       <label className="block text-sm font-semibold text-slate-700">
