@@ -45,6 +45,7 @@ import {
 import { AuthContext } from "../context/AuthContext.jsx";
 import Sidebar from "../components/layout/Sidebar.jsx";
 import TopNavbar from "../components/layout/TopNavbar.jsx";
+import StaffGlobalSearchResults from "../components/staff-dashboard/StaffGlobalSearchResults.jsx";
 import StaffSecurityPage from "../components/staff-dashboard/StaffSecurityPage.jsx";
 import SupportPage from "../components/user-dashboard/SupportPage.jsx";
 import MemberFinancialProfile from "../components/staff-dashboard/MemberFinancialProfile.jsx";
@@ -612,6 +613,7 @@ export default function FinanceDashboard() {
 
   function renderContent() {
     if (loading) return <SkeletonDashboard />;
+    if (globalSearch.trim()) return <StaffGlobalSearchResults query={globalSearch} accessToken={accessToken} role="FINANCE" />;
     switch (activeSection) {
       case "transactions":
         return (
@@ -2729,16 +2731,14 @@ function AddMemberModal({ companies, onClose, onSubmit }) {
 // ============================================================
 function MemberProfilesPage({ data, accessToken, onRefresh, currentUser }) {
   const [search, setSearch] = useState("");
+  const [searchDraft, setSearchDraft] = useState("");
   const [selectedMember, setSelectedMember] = useState(null);
   const [searchMessage, setSearchMessage] = useState("");
   const [searching, setSearching] = useState(false);
   const members = data.members || [];
   const locallyFiltered = members.filter((m) =>
     search.trim()
-      ? String(m.id || "")
-          .toLowerCase()
-          .includes(search.toLowerCase()) ||
-        String(m.name || "")
+      ? String(m.name || "")
           .toLowerCase()
           .includes(search.toLowerCase()) ||
         String(m.memberNumber || "")
@@ -2758,12 +2758,12 @@ function MemberProfilesPage({ data, accessToken, onRefresh, currentUser }) {
           },
         ]
       : locallyFiltered;
-  async function searchMemberNumber() {
+  async function searchMemberNumber(query = search) {
     setSearching(true);
     setSelectedMember(null);
     setSearchMessage("Searching by registration number...");
     try {
-      const result = await findMemberByNumber(search, accessToken);
+      const result = await findMemberByNumber(query, accessToken);
       if (!result.member) {
         setSelectedMember(null);
         setSearchMessage(result.message);
@@ -2790,25 +2790,27 @@ function MemberProfilesPage({ data, accessToken, onRefresh, currentUser }) {
       setSearching(false);
     }
   }
-  useEffect(() => {
-    const memberNumber = search.trim();
-    if (!memberNumber) {
+  function submitMemberSearch(event) {
+    event.preventDefault();
+    const query = searchDraft.trim();
+    setSearch(query);
+    if (!query) {
+      setSelectedMember(null);
       setSearchMessage("");
-      return undefined;
+      return;
     }
-    const timeoutId = window.setTimeout(() => {
-      searchMemberNumber();
-    }, 450);
-    return () => window.clearTimeout(timeoutId);
-    // Search is deliberately debounced and uses an indexed exact-match endpoint.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
+    if (/^29903-\d+$/i.test(query)) searchMemberNumber(query);
+    else {
+      setSelectedMember(null);
+      setSearchMessage("");
+    }
+  }
   return (
     <div className="space-y-6">
       <SectionHeader
         //eyebrow="Member profiles"
         title="Member profiles"
-        description="Search by ID, view risk flags, aggregated balances, and ledgers."
+        description="Search by member number or name, view risk flags, aggregated balances, and ledgers."
         action={
           <div className="flex flex-wrap gap-2">
             <button
@@ -2816,7 +2818,6 @@ function MemberProfilesPage({ data, accessToken, onRefresh, currentUser }) {
                 exportToCSV(
                   members,
                   [
-                    { key: "id" },
                     { key: "memberNumber" },
                     { key: "name" },
                     { key: "company" },
@@ -2846,19 +2847,22 @@ function MemberProfilesPage({ data, accessToken, onRefresh, currentUser }) {
       />
       <FinanceMemberImport accessToken={accessToken} onImported={onRefresh} />
       <FinanceFinancialCsvImport accessToken={accessToken} onImported={onRefresh} />
-      <div className="relative">
+      <form onSubmit={submitMemberSearch} className="flex gap-2">
+        <div className="relative flex-1">
         <Search
           size={18}
           className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
         />
         <input
           type="text"
-          placeholder="Search by ID, member number, or name..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by member number or name..."
+          value={searchDraft}
+          onChange={(e) => setSearchDraft(e.target.value)}
           className="w-full rounded-lg border border-slate-200 py-3 pl-10 pr-4 text-sm"
         />
-      </div>
+        </div>
+        <button type="submit" disabled={searching} className="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"><Search size={17} />{searching ? "Searching..." : "Search"}</button>
+      </form>
       {selectedMember ? (
         <FinanceMemberFinancialDetail
           member={selectedMember}
@@ -2871,7 +2875,6 @@ function MemberProfilesPage({ data, accessToken, onRefresh, currentUser }) {
             <thead>
               <tr className="bg-slate-50">
                 {[
-                  "ID",
                   "Member Number",
                   "Name",
                   "Company",
@@ -2897,9 +2900,6 @@ function MemberProfilesPage({ data, accessToken, onRefresh, currentUser }) {
                   className="cursor-pointer hover:bg-slate-50"
                   onClick={() => setSelectedMember(m)}
                 >
-                  <td className="px-4 py-3 text-sm font-semibold text-sky-700">
-                    {m.id}
-                  </td>
                   <td className="px-4 py-3 font-mono text-sm font-semibold">
                     {m.memberNumber || "—"}
                   </td>

@@ -21,7 +21,7 @@ export default function MemberFinancialProfile({ profile, loading, error, onBack
         <>
           <section className="rounded-lg border bg-white p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
-              <div><h2 className="text-xl font-semibold">{user.name || "Member"}</h2><p className="mt-1 text-sm text-slate-500">{member.memberNumber} · {user.email || "No email"} · {user.phone || "No phone"}</p><p className="mt-1 text-xs text-slate-500">Internal ID: {member.id} · Joined: {formatDate(member.dateJoined)}</p></div>
+              <div><h2 className="text-xl font-semibold">{user.name || "Member"}</h2><p className="mt-1 text-sm text-slate-500">{member.memberNumber} · {user.email || "No email"} · {user.phone || "No phone"}</p><p className="mt-1 text-xs text-slate-500">Joined: {formatDate(member.dateJoined)}</p></div>
               <StatusBadge status={member.status || "Pending"} />
             </div>
           </section>

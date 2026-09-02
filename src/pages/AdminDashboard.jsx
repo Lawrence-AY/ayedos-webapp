@@ -85,6 +85,7 @@ import MemberFinancialProfile from "../components/staff-dashboard/MemberFinancia
 import OptOutRequestsPage from "../components/staff-dashboard/OptOutRequestsPage.jsx";
 import SentNotificationsPanel from "../components/staff-dashboard/SentNotificationsPanel.jsx";
 import { applyLoanPaymentEvent, useDashboardEvents } from "../features/realtime/dashboardEvents.js";
+import StaffGlobalSearchResults from "../components/staff-dashboard/StaffGlobalSearchResults.jsx";
 
 function filterRows(rows, search, keys) {
   const term = search.trim().toLowerCase();
@@ -267,6 +268,7 @@ export default function AdminDashboard() {
 
   function renderContent() {
     if (loading) return <SkeletonDashboard />;
+    if (globalSearch.trim()) return <StaffGlobalSearchResults query={globalSearch} accessToken={accessToken} role="ADMIN" />;
     switch (section) {
       case "members":
         return (
