@@ -18,9 +18,10 @@ export function useDashboardEvents(accessToken, handlers = {}) {
     const url = new URL(buildApiUrl("/api/v1/events"), window.location.origin);
 
     const dispatchEvent = (event) => {
-      if (event.type !== "LOAN_PAYMENT_PROCESSED") return;
       try {
-        handlers.onLoanPaymentProcessed?.(JSON.parse(event.data || "{}"));
+        const payload = JSON.parse(event.data || "{}");
+        if (event.type === "LOAN_PAYMENT_PROCESSED") handlers.onLoanPaymentProcessed?.(payload);
+        if (event.type === "GROUP_ROLE_UPDATED") handlers.onGroupRoleUpdated?.(payload);
       } catch {
         handlers.onRecoveryNeeded?.();
       }
