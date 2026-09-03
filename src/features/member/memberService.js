@@ -39,6 +39,21 @@ export async function requestMemberOptOut(data, accessToken) {
   return unwrapEnvelopeData(res.json)
 }
 
+export async function sendSupportInquiry(data, accessToken) {
+  const res = await apiRequest('/api/support/inquiries', {
+    method: 'POST',
+    accessToken,
+    body: data,
+    cache: false,
+    timeoutMs: 20000,
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to send inquiry')
+  return {
+    ...unwrapEnvelopeData(res.json),
+    message: res.json?.message,
+  }
+}
+
 export async function sendMemberOptOutOtp(accessToken) {
   const res = await apiRequest('/api/member/opt-out/otp', {
     method: 'POST',
@@ -89,6 +104,52 @@ export async function applyForLoan(data, accessToken) {
 export async function getMyLoans(accessToken) {
   const res = await apiRequest('/api/member/loans', { method: 'GET', accessToken })
   if (!res.ok) throw new Error(res.json?.message || 'Failed to fetch loans')
+  return unwrapEnvelopeData(res.json)
+}
+
+export async function getWalletCashOutSummary(accessToken) {
+  const res = await apiRequest('/api/member/wallet/cash-out', { method: 'GET', accessToken, cache: false })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to fetch cash-out balance')
+  return unwrapEnvelopeData(res.json)
+}
+
+export async function sendCashOutOtp(accessToken) {
+  const res = await apiRequest('/api/member/wallet/cash-out/otp', {
+    method: 'POST',
+    accessToken,
+    body: {},
+    cache: false,
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to send cash-out OTP')
+  return {
+    ...unwrapEnvelopeData(res.json),
+    message: res.json?.message,
+  }
+}
+
+export async function sendLoanPayoutOtp(accessToken) {
+  const res = await apiRequest('/api/member/loans/payout/otp', {
+    method: 'POST',
+    accessToken,
+    body: {},
+    cache: false,
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to send payout OTP')
+  return {
+    ...unwrapEnvelopeData(res.json),
+    message: res.json?.message,
+  }
+}
+
+export async function cashOutWallet(data, accessToken) {
+  const res = await apiRequest('/api/member/wallet/cash-out', {
+    method: 'POST',
+    accessToken,
+    body: data,
+    cache: false,
+    timeoutMs: 60000,
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to process withdrawal')
   return unwrapEnvelopeData(res.json)
 }
 

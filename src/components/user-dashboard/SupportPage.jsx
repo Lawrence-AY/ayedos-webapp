@@ -9,6 +9,7 @@ import {
   Send,
 } from "lucide-react";
 import { toast } from "sonner";
+import { sendSupportInquiry } from "../../features/member/memberService";
 
 const contactDetails = [
   {
@@ -39,31 +40,6 @@ const inquiryTypes = [
   "Feedback",
 ];
 
-function buildMailtoUrl({ user, form, roleLabel }) {
-  const memberName =
-    form.name ||
-    user?.name ||
-    [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
-    "Member";
-  const memberEmail = form.email || user?.email || "";
-  const memberPhone = form.phone || user?.phone || user?.phoneNumber || "";
-  const subject = `AYEDOS SACCO ${roleLabel} ${form.type}: ${form.subject}`;
-  const body = [
-    `Name: ${memberName}`,
-    memberEmail ? `Email: ${memberEmail}` : null,
-    memberPhone ? `Phone: ${memberPhone}` : null,
-    `Account role: ${roleLabel}`,
-    `Inquiry type: ${form.type}`,
-    "",
-    "Message:",
-    form.message,
-  ]
-    .filter((line) => line !== null)
-    .join("\n");
-
-  return `mailto:info@cowrie.io?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-}
-
 export default function SupportPage({ user, role }) {
   const normalizedRole = String(role || user?.role || "MEMBER").toUpperCase();
   const roleLabel =
@@ -89,6 +65,7 @@ export default function SupportPage({ user, role }) {
     message: "",
   });
   const [submitted, setSubmitted] = useState(false);
+  const [isSending, setIsSending] = useState(false);
 
   const charactersLeft = useMemo(
     () => Math.max(0, 800 - form.message.length),
@@ -100,7 +77,7 @@ export default function SupportPage({ user, role }) {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
     const missingFields = [
       ["name", "your name"],
@@ -114,9 +91,16 @@ export default function SupportPage({ user, role }) {
       return;
     }
 
-    window.location.href = buildMailtoUrl({ user, form, roleLabel });
-    setSubmitted(true);
-    toast.success("Your inquiry has been prepared for email.");
+    setIsSending(true);
+    try {
+      const result = await sendSupportInquiry({ ...form, roleLabel });
+      setSubmitted(true);
+      toast.success(result?.message || "Your inquiry has been sent to support.");
+    } catch (error) {
+      toast.error(error?.message || "Unable to send inquiry. Please try again.");
+    } finally {
+      setIsSending(false);
+    }
   }
 
   return (
@@ -187,14 +171,14 @@ export default function SupportPage({ user, role }) {
               Send feedback or inquiry
             </h2>
             <p className="mt-1 text-sm leading-6 text-slate-500">
-              Fill in the details below and the message will be prepared for
-              email.
+              Fill in the details below and the message will be sent directly
+              to support.
             </p>
           </div>
           {submitted ? (
             <span className="inline-flex w-fit items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
               <CheckCircle2 size={14} />
-              Prepared
+              Sent
             </span>
           ) : null}
         </div>
@@ -271,10 +255,11 @@ export default function SupportPage({ user, role }) {
           </p>
           <button
             type="submit"
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+            disabled={isSending}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
           >
             <Send size={17} className="text-[#8cc63f]" />
-            Send inquiry
+            {isSending ? "Sending..." : "Send inquiry"}
           </button>
         </div>
       </form>
