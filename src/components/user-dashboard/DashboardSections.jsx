@@ -82,6 +82,7 @@ import {
   emailMemberReport,
   initiateLoanRepaymentStk,
   getLoanPaymentStatus,
+  sendLoanPayoutOtp,
   searchQualifiedGuarantors,
   transferShareCapital,
 } from "../../features/member/memberService.js";
@@ -196,6 +197,25 @@ const LOAN_PRODUCTS = [
     guarantors: 1,
     requiresFullShareCapital: true,
   },
+];
+
+const KENYA_PAYOUT_BANKS = [
+  { name: "KCB Bank Kenya", code: "01", swiftCode: "KCBLKENX", branchCode: "01000" },
+  { name: "Standard Chartered Bank Kenya", code: "02", swiftCode: "SCBLKENX", branchCode: "02000" },
+  { name: "Absa Bank Kenya", code: "03", swiftCode: "BARCKENX", branchCode: "03000" },
+  { name: "NCBA Bank Kenya", code: "07", swiftCode: "CBAFKENX", branchCode: "07000" },
+  { name: "Co-operative Bank of Kenya", code: "11", swiftCode: "KCOOKENA", branchCode: "11000" },
+  { name: "National Bank of Kenya", code: "12", swiftCode: "NBKEKENX", branchCode: "12000" },
+  { name: "Stanbic Bank Kenya", code: "31", swiftCode: "SBICKENX", branchCode: "31000" },
+  { name: "I&M Bank Kenya", code: "57", swiftCode: "IMBLKENA", branchCode: "57000" },
+  { name: "Equity Bank Kenya", code: "68", swiftCode: "EQBLKENA", branchCode: "68000" },
+  { name: "Family Bank", code: "70", swiftCode: "FABLKENA", branchCode: "70000" },
+  { name: "Gulf African Bank", code: "72", swiftCode: "GAFRKENA", branchCode: "72000" },
+  { name: "First Community Bank", code: "74", swiftCode: "IFCBKENA", branchCode: "74000" },
+  { name: "DIB Bank Kenya", code: "75", swiftCode: "DUIBKENA", branchCode: "75000" },
+  { name: "UBA Kenya Bank", code: "76", swiftCode: "UNAFKENA", branchCode: "76000" },
+  { name: "KWFT Bank", code: "78", swiftCode: "KWFTKENA", branchCode: "78000" },
+  { name: "Sendwave Remittance", code: "SENDWAVE", swiftCode: "SENDWAVE", branchCode: "SWV001", channel: "SENDWAVE" },
 ];
 
 function formatCurrency(value, options = {}) {
@@ -1190,6 +1210,7 @@ function Field({
   disabled = false,
   helper = "",
   autoComplete,
+  inputMode,
   onFocus,
   onBlur,
 }) {
@@ -1235,6 +1256,7 @@ function Field({
             max={max}
             disabled={disabled}
             autoComplete={autoComplete}
+            inputMode={inputMode}
             onFocus={onFocus}
             onBlur={onBlur}
           />
@@ -2450,7 +2472,19 @@ function SecuritySection({
 function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues }) {
   const isLoanEligible = Number(stats.shareCapital || 0) >= MIN_SHARE_CAPITAL;
   const loanEligibilityMessage = "You are not yet eligible to apply for a loan. Please complete the minimum required share capital purchase before submitting a loan application.";
-  const [loanForm, setLoanForm] = useState({ type: "EMERGENCY", amount: "10000", duration: "12", reason: "", selfGuarantee: false });
+  const [loanForm, setLoanForm] = useState({
+    type: "EMERGENCY",
+    amount: "10000",
+    duration: "12",
+    reason: "",
+    selfGuarantee: false,
+    payoutChannel: "",
+    payoutPhone: "",
+    payoutBankCode: "",
+    payoutAccountNumber: "",
+    payoutAccountName: "",
+    payoutOtp: "",
+  });
   const [repayAmount, setRepayAmount] = useState("");
   const [mpesaPhone, setMpesaPhone] = useState("");
   const [message, setMessage] = useState(null);
@@ -2468,6 +2502,29 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
   const totalBalance = activeLoans.reduce((sum, loan) => sum + loanOutstandingBalance(loan), 0);
   const rows = loans.filter((loan) => matchesSearch(loan, search));
   const selectedProduct = LOAN_PRODUCTS.find((p) => p.type === loanForm.type) || LOAN_PRODUCTS[0];
+  const payoutSectionUnlocked = Number(loanForm.duration || 0) > 0;
+  const selectedPayoutBank = KENYA_PAYOUT_BANKS.find((bank) => bank.code === loanForm.payoutBankCode) || null;
+  const availablePayoutBanks = KENYA_PAYOUT_BANKS.filter((bank) => loanForm.payoutChannel === "SENDWAVE" ? bank.channel === "SENDWAVE" : bank.channel !== "SENDWAVE");
+  const payoutDestination = loanForm.payoutChannel === "MPESA"
+    ? { channel: "MPESA", phoneNumber: normalizeMpesaPhone(loanForm.payoutPhone), otp: loanForm.payoutOtp }
+    : loanForm.payoutChannel
+      ? {
+          channel: loanForm.payoutChannel,
+          bankName: selectedPayoutBank?.name,
+          bankCode: selectedPayoutBank?.code,
+          branchCode: selectedPayoutBank?.branchCode,
+          swiftCode: selectedPayoutBank?.swiftCode,
+          accountNumber: loanForm.payoutAccountNumber.trim(),
+          accountName: loanForm.payoutAccountName.trim(),
+          otp: loanForm.payoutOtp,
+        }
+      : null;
+  const payoutDestinationValid = payoutSectionUnlocked && (
+    (loanForm.payoutChannel === "MPESA" && isValidMpesaPhone(loanForm.payoutPhone))
+    || (["BANK", "SENDWAVE"].includes(loanForm.payoutChannel) && selectedPayoutBank && loanForm.payoutAccountNumber.trim().length >= 5 && loanForm.payoutAccountName.trim().length >= 2)
+  );
+  const payoutOtpVerified = payoutDestinationValid && loanForm.payoutOtp.trim().length >= 4;
+  const canSubmitLoanRequest = payoutDestinationValid && payoutOtpVerified;
   const selectedRepayLoanId = repayLoanId || activeLoans[0]?.id || "";
   const requestedAmount = Math.min(Number(loanForm.amount || 0), selectedProduct.max);
   const requestedDuration = Math.min(Number(loanForm.duration || 1), selectedProduct.duration);
@@ -2534,16 +2591,17 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
     if (!isLoanEligible) { setMessage({ type: "error", text: loanEligibilityMessage }); return; }
     if (requestedAmount <= 0) { setMessage({ type: "error", text: "Enter a valid loan amount." }); return; }
     if (!selectedProduct) { setMessage({ type: "error", text: "Select a valid loan product." }); return; }
+    if (!canSubmitLoanRequest) { setMessage({ type: "error", text: "Verify your payout destination with the OTP sent to your registered mobile number before submitting your loan request." }); return; }
     if (selectedProduct.requiresFullShareCapital && stats.shareCapitalRemaining > 0) { setMessage({ type: "error", text: "Minimum share capital must be fully paid." }); return; }
     if (loanForm.selfGuarantee && requestedAmount > savingsBalance) { setMessage({ type: "error", text: `Self-guarantee limit exceeded. Available savings: ${formatCurrency(savingsBalance)}.` }); return; }
     if (requiresGuarantors && selectedGuarantors.length < 1) { setMessage({ type: "error", text: "Select at least one guarantor, or use self-guarantee if your savings cover the loan." }); return; }
     if (loanForm.type !== "EMERGENCY" && !loanForm.reason.trim()) { setMessage({ type: "error", text: "Please add the reason for this loan request." }); return; }
     try {
       setBusyAction("borrow"); setConfirmation(null);
-      const result = await applyForLoan({ type: loanForm.type, amount: requestedAmount, duration: requestedDuration, interestRate: selectedProduct.interestRate, reason: loanForm.reason.trim(), selfGuarantee: loanForm.selfGuarantee, selfGuaranteedAmount: loanForm.selfGuarantee ? requestedAmount : undefined, guarantors: requiresGuarantors ? selectedGuarantors.map((member) => ({ memberId: member.memberId, amount: requestedAmount })) : undefined }, accessToken);
+      const result = await applyForLoan({ type: loanForm.type, amount: requestedAmount, duration: requestedDuration, interestRate: selectedProduct.interestRate, reason: loanForm.reason.trim(), payoutDestination, selfGuarantee: loanForm.selfGuarantee, selfGuaranteedAmount: loanForm.selfGuarantee ? requestedAmount : undefined, guarantors: requiresGuarantors ? selectedGuarantors.map((member) => ({ memberId: member.memberId, amount: requestedAmount })) : undefined }, accessToken);
       const text = result?.loanDetails?.autoApproved ? "Emergency Loan Auto-Approved & Disbursed" : "Loan application submitted successfully";
       setMessage({ type: "success", text }); toast.success(text, { duration: 4000 });
-      setLoanForm((current) => ({ ...current, reason: "" }));
+      setLoanForm((current) => ({ ...current, reason: "", payoutChannel: "", payoutPhone: "", payoutBankCode: "", payoutAccountNumber: "", payoutAccountName: "", payoutOtp: "" }));
       setSelectedGuarantors([]); setGuarantorQuery(""); setGuarantorResults([]); await onRefresh?.();
     } catch (error) { const text = error?.message || "Loan application failed"; setMessage({ type: "error", text }); toast.error(text, { duration: 4000 }); }
     finally { setBusyAction(""); }
@@ -2594,6 +2652,25 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
     finally { setBusyAction(""); }
   }
 
+  async function requestLoanPayoutOtp() {
+    if (!payoutDestinationValid) {
+      setMessage({ type: "error", text: "Complete a valid payout destination before requesting the OTP." });
+      return;
+    }
+    try {
+      setBusyAction("payout-otp");
+      const result = await sendLoanPayoutOtp(accessToken);
+      setMessage({ type: "success", text: result.message || "OTP sent to your registered mobile number." });
+      toast.success("OTP sent", { description: "Check the mobile number attached to your account.", duration: 4000 });
+    } catch (error) {
+      const text = error?.message || "Unable to send payout OTP.";
+      setMessage({ type: "error", text });
+      toast.error(text, { duration: 4000 });
+    } finally {
+      setBusyAction("");
+    }
+  }
+
   const scrollToApplication = () => {
     if (!isLoanEligible) {
       setMessage({ type: "error", text: loanEligibilityMessage });
@@ -2640,6 +2717,57 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
             </label>
             <Field label="Amount" name="amount" type="number" value={loanForm.amount} onChange={(e) => setLoanForm((c) => ({ ...c, amount: e.target.value }))} />
             <Field label="Duration (months)" name="duration" type="number" value={loanForm.duration} onChange={(e) => setLoanForm((c) => ({ ...c, duration: e.target.value }))} />
+            {payoutSectionUnlocked ? (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <div className="mb-4 flex items-center gap-2">
+                  <WalletCards size={17} className="text-emerald-700" />
+                  <span className="text-sm font-semibold text-slate-900">Disbursement & Withdrawal Method</span>
+                </div>
+                <label className="text-sm font-semibold text-slate-700">Payout channel
+                  <select value={loanForm.payoutChannel} onChange={(e) => setLoanForm((current) => ({ ...current, payoutChannel: e.target.value, payoutBankCode: e.target.value === "SENDWAVE" ? "SENDWAVE" : "", payoutAccountNumber: "", payoutAccountName: "", payoutOtp: "" }))} className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3.5 py-3 text-sm">
+                    <option value="">Select payout channel</option>
+                    <option value="MPESA">M-Pesa</option>
+                    <option value="BANK">Bank Transfer</option>
+                    <option value="SENDWAVE">Sendwave</option>
+                  </select>
+                </label>
+                {loanForm.payoutChannel === "MPESA" ? (
+                  <div className="mt-4">
+                    <Field label="M-Pesa registered phone number" name="loanPayoutPhone" type="tel" value={loanForm.payoutPhone} onChange={(e) => setLoanForm((current) => ({ ...current, payoutPhone: e.target.value, payoutOtp: "" }))} placeholder="07XX XXX XXX" helper={isValidMpesaPhone(loanForm.payoutPhone) ? "M-Pesa payout destination validated." : "Enter a valid Safaricom M-Pesa number."} />
+                  </div>
+                ) : null}
+                {["BANK", "SENDWAVE"].includes(loanForm.payoutChannel) ? (
+                  <div className="mt-4 grid gap-4">
+                    <label className="text-sm font-semibold text-slate-700">{loanForm.payoutChannel === "SENDWAVE" ? "Sendwave payout route" : "Commercial bank"}
+                      <select value={loanForm.payoutBankCode} onChange={(e) => setLoanForm((current) => ({ ...current, payoutBankCode: e.target.value, payoutOtp: "" }))} className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3.5 py-3 text-sm">
+                        <option value="">Select destination</option>
+                        {availablePayoutBanks.map((bank) => <option key={bank.code} value={bank.code}>{bank.name}</option>)}
+                      </select>
+                    </label>
+                    <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700 sm:grid-cols-2">
+                      <span><strong>Branch code:</strong> {selectedPayoutBank?.branchCode || "-"}</span>
+                      <span><strong>Swift code:</strong> {selectedPayoutBank?.swiftCode || "-"}</span>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field label="Beneficiary account number" name="loanPayoutAccount" value={loanForm.payoutAccountNumber} onChange={(e) => setLoanForm((current) => ({ ...current, payoutAccountNumber: e.target.value, payoutOtp: "" }))} />
+                      <Field label="Account holder name" name="loanPayoutAccountName" value={loanForm.payoutAccountName} onChange={(e) => setLoanForm((current) => ({ ...current, payoutAccountName: e.target.value, payoutOtp: "" }))} />
+                    </div>
+                  </div>
+                ) : null}
+                {payoutDestinationValid ? (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                    <Field label="OTP verification" name="loanPayoutOtp" inputMode="numeric" value={loanForm.payoutOtp} onChange={(e) => setLoanForm((current) => ({ ...current, payoutOtp: e.target.value.replace(/\D/g, "").slice(0, 8) }))} placeholder="Enter OTP sent to your account phone" />
+                    <button type="button" onClick={requestLoanPayoutOtp} disabled={busyAction === "payout-otp"} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 disabled:opacity-60">
+                      {busyAction === "payout-otp" ? <RefreshCw className="animate-spin" size={17} /> : <MailCheck size={17} />}
+                      Send OTP
+                    </button>
+                  </div>
+                ) : null}
+                <div className={`mt-4 rounded-lg border px-3 py-2 text-xs font-semibold ${canSubmitLoanRequest ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
+                  {canSubmitLoanRequest ? "Payout destination verified. You can submit the loan request." : "Submit unlocks after payout details are valid and OTP is entered."}
+                </div>
+              </div>
+            ) : null}
             <label className="text-sm font-semibold text-slate-700">Reason
               <textarea value={loanForm.reason} onChange={(e) => setLoanForm((c) => ({ ...c, reason: e.target.value }))} className="mt-2 min-h-24 w-full rounded-lg border px-3.5 py-3 text-sm" placeholder="Purpose of the loan" />
             </label>
@@ -2684,7 +2812,7 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
                 {selectedGuarantors.length > 0 && (<p className="mt-3 text-xs font-medium text-sky-700">Selected: {selectedMemberNames}</p>)}
               </div>
             ) : null}
-            <button className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"><FileText size={17} />{busyAction === "borrow" ? "Submitting..." : "Request loan"}</button>
+            <button disabled={!canSubmitLoanRequest} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"><FileText size={17} />{busyAction === "borrow" ? "Submitting..." : "Submit Loan Request"}</button>
             </fieldset>
           </form>
         </Surface>
