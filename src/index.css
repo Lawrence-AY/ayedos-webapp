@@ -14,6 +14,32 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Group dashboard contrast guardrails for both themes. */
+.group-page .text-slate-500 {
+  color: #475569;
+}
+
+.group-page .group-page-hero-title {
+  color: #ffffff !important;
+}
+
+.dark .group-page .text-slate-500,
+.dark .group-page .text-slate-400 {
+  color: #cbd5e1;
+}
+
+.group-page button:focus-visible,
+.group-page input:focus-visible,
+.group-page select:focus-visible,
+.group-page textarea:focus-visible {
+  outline: 3px solid rgba(140, 198, 63, 0.55);
+  outline-offset: 2px;
+}
+
+.group-page button:disabled {
+  opacity: 0.65;
+}
+
 /* Keep the login's custom visibility toggle as the single password eye. */
 .login-password-input::-ms-reveal,
 .login-password-input::-ms-clear {
