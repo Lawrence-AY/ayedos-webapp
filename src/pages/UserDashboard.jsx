@@ -208,6 +208,7 @@ export default function UserDashboard() {
       setGroupRealtimeRefresh((value) => value + 1);
       loadDashboardData({ showLoading: false });
     },
+    onBalanceUpdated: () => loadDashboardData({ showLoading: false }),
     onRecoveryNeeded: () => loadDashboardData({ showLoading: false }),
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [accessToken]);

@@ -21,6 +21,7 @@ export function useDashboardEvents(accessToken, handlers = {}) {
       try {
         const payload = JSON.parse(event.data || "{}");
         if (event.type === "LOAN_PAYMENT_PROCESSED") handlers.onLoanPaymentProcessed?.(payload);
+        if (event.type === "BALANCE_UPDATED") handlers.onBalanceUpdated?.(payload);
         if (event.type === "GROUP_ROLE_UPDATED") handlers.onGroupRoleUpdated?.(payload);
       } catch {
         handlers.onRecoveryNeeded?.();

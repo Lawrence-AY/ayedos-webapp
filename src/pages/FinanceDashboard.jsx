@@ -491,6 +491,7 @@ export default function FinanceDashboard() {
       setData((current) => applyLoanPaymentEvent(current, payload));
       window.setTimeout(() => loadAllData({ showLoading: false }), 250);
     },
+    onBalanceUpdated: () => loadAllData({ showLoading: false }),
     onRecoveryNeeded: () => loadAllData({ showLoading: false }),
   }), [loadAllData]);
   useDashboardEvents(accessToken, realtimeHandlers);
