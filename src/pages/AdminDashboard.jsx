@@ -239,6 +239,7 @@ export default function AdminDashboard() {
       setData((current) => applyLoanPaymentEvent(current, payload));
       window.setTimeout(() => loadData({ showLoading: false }), 250);
     },
+    onBalanceUpdated: () => loadData({ showLoading: false }),
     onRecoveryNeeded: () => loadData({ showLoading: false }),
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [accessToken]);

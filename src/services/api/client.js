@@ -2,7 +2,7 @@ import axios from 'axios'
 
 export const DEFAULT_API_PATH_PREFIX = '/api'
 
-const DEFAULT_TIMEOUT_MS = 10000
+const DEFAULT_TIMEOUT_MS = 30000
 const DEFAULT_RETRY_ATTEMPTS = 2
 const CACHE_TTL_MS = 60 * 1000
 const RAILWAY_WAKE_DELAY_MS = 1200
@@ -109,7 +109,7 @@ export function getApiErrorMessage(error) {
   }
   if (error.status >= 500) return safeMessagesByStatus[error.status] || safeMessagesByStatus[500]
 
-  if (error.kind === 'timeout') return 'The request timed out. Please try again.'
+  if (error.kind === 'timeout') return 'The request is still processing. Please refresh the status in a moment.'
   if (error.kind === 'network') {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
       return 'Unable to connect. Please check your internet connection.'
@@ -310,7 +310,7 @@ api.interceptors.response.use(
     const isTimeout = error.code === 'ECONNABORTED' || String(error.message || '').toLowerCase().includes('timeout')
     const kind = isTimeout ? 'timeout' : 'network'
     const apiError = new ApiError(
-      kind === 'timeout' ? 'The request timed out. Please try again.' : 'Unable to connect',
+      kind === 'timeout' ? 'The request is still processing. Please refresh the status in a moment.' : 'Unable to connect',
       {
         kind,
         url: `${config.baseURL || ''}${config.url || ''}`,
