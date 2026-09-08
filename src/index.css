@@ -41,8 +41,17 @@
 }
 
 /* Keep the login's custom visibility toggle as the single password eye. */
+.login-password-input::-webkit-credentials-auto-fill-button,
+.login-password-input::-webkit-caps-lock-indicator,
 .login-password-input::-ms-reveal,
 .login-password-input::-ms-clear {
+  display: none;
+}
+
+input[type="password"]::-webkit-credentials-auto-fill-button,
+input[type="password"]::-webkit-caps-lock-indicator,
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
   display: none;
 }
 

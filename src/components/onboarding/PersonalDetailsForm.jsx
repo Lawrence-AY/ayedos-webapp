@@ -89,6 +89,8 @@ export const PersonalDetailsForm = ({
     poBox,
     county,
     subCounty,
+    dateOfBirth,
+    gender,
     termsAccepted,
   } = formData;
 
@@ -330,6 +332,32 @@ export const PersonalDetailsForm = ({
           </Select>
         </div>
       </div>
+
+      {iprsEnabled && (dateOfBirth || gender) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="dateOfBirth">Date of Birth</Label>
+            <Input
+              id="dateOfBirth"
+              type="date"
+              value={dateOfBirth || ''}
+              readOnly
+              disabled
+              aria-readonly="true"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="gender">Gender</Label>
+            <Input
+              id="gender"
+              value={gender || ''}
+              readOnly
+              disabled
+              aria-readonly="true"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Terms */}
       {errors?.step1 && (

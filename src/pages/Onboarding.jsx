@@ -31,6 +31,25 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
+const normalizeIprsDate = (value) => {
+  if (!value) return '';
+  const raw = String(value).trim();
+  const slashMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (slashMatch) {
+    const [, day, month, year] = slashMatch;
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString().slice(0, 10);
+};
+
+const normalizeIprsGender = (value) => {
+  const normalized = String(value || '').trim().toUpperCase();
+  if (normalized === 'M' || normalized === 'MALE') return 'Male';
+  if (normalized === 'F' || normalized === 'FEMALE') return 'Female';
+  return value || '';
+};
+
 function Onboarding() {
   const navigate = useNavigate();
   const { user, accessToken, logout } = useContext(AuthContext);
@@ -54,6 +73,8 @@ function Onboarding() {
     poBox: '',
     county: '',
     subCounty: '',
+    dateOfBirth: '',
+    gender: '',
     termsAccepted: false,
   });
   const [documents, setDocuments] = useState({
@@ -248,7 +269,27 @@ function Onboarding() {
         documentType: formData.idType,
         idNumber: identityNumber,
       }, accessToken);
-      saveOnboardingProgress(3);
+      if (result?.person) {
+        const officialDateOfBirth = normalizeIprsDate(result.person.dateOfBirth);
+        const officialGender = normalizeIprsGender(result.person.gender);
+        const verifiedFormData = {
+          ...formData,
+          dateOfBirth: officialDateOfBirth || formData.dateOfBirth,
+          gender: officialGender || formData.gender,
+        };
+        setFormData((prev) => {
+          const next = {
+            ...prev,
+            dateOfBirth: officialDateOfBirth || prev.dateOfBirth,
+            gender: officialGender || prev.gender,
+          };
+          saveOnboardingProgress(3, next);
+          return next;
+        });
+        saveOnboardingProgress(3, verifiedFormData);
+      } else {
+        saveOnboardingProgress(3, formData);
+      }
       setCurrentStep(3);
       toast.success(result?.message || 'Identity verified successfully.');
     } catch (error) {
@@ -283,7 +324,7 @@ function Onboarding() {
     setFormData({
       firstName: '', secondName: '', surname: '', email: '',
       idType: '', nationalId: '', passportNumber: '', driverLicenseNumber: '', idDocument: null,
-      kraPin: '', phone: '', occupation: '', poBox: '', county: '', subCounty: '', termsAccepted: false,
+      kraPin: '', phone: '', occupation: '', poBox: '', county: '', subCounty: '', dateOfBirth: '', gender: '', termsAccepted: false,
     });
     setDocuments({ idFile: null, photoFile: null });
     setMpesaReference(null);
@@ -311,7 +352,7 @@ function Onboarding() {
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 min-w-0">
-                <StepIndicator currentStep={currentStep} totalSteps={4} />
+                <StepIndicator currentStep={currentStep} iprsEnabled={iprsEnabled} />
                 {currentStep === 1 && (
                   <PersonalDetailsForm
                     formData={formData}
