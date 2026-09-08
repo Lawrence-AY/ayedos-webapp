@@ -33,11 +33,9 @@ export function isMemberOnboardingComplete(user) {
   const activeVerifiedMember = Boolean(
     member.memberNumber &&
       member.isVerified &&
-      String(member.status || 'ACTIVE').toUpperCase() === 'ACTIVE' &&
-      user.consentGiven &&
-      (user.nationalId || member.nationalId) &&
-      (user.phone || user.phoneNumber)
+      String(member.status || 'ACTIVE').toUpperCase() === 'ACTIVE'
   );
+  if (activeVerifiedMember) return true;
   if (
     activeVerifiedMember &&
     (user.isWhitelisted || String(user.employer || user.company || '').toLowerCase() === 'ayedos')

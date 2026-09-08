@@ -122,6 +122,8 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
       poBox: userData.poBox || null,
       county: userData.county || null,
       subCounty: userData.subCounty || null,
+      dateOfBirth: userData.dateOfBirth || null,
+      gender: userData.gender || null,
       type: membershipType,
       consentGiven: userData.termsAccepted,
     };
@@ -182,6 +184,8 @@ export const PaymentForm = ({ onBack, onPaymentSuccess, isLoading, setLoading, u
       poBox: userData.poBox || '',
       county: userData.county || '',
       subCounty: userData.subCounty || '',
+      dateOfBirth: userData.dateOfBirth || '',
+      gender: userData.gender || '',
       consentGiven: Boolean(userData.termsAccepted),
       consentGivenAt: new Date().toISOString(),
     };

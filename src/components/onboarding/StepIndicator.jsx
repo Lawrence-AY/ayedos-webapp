@@ -1,10 +1,10 @@
 /// StepIndicator.jsx
 import { CheckCircle2 } from 'lucide-react';
 
-export const StepIndicator = ({ currentStep }) => {
+export const StepIndicator = ({ currentStep, iprsEnabled = false }) => {
   const steps = [
     { number: 1, title: 'Personal Details' },
-    { number: 2, title: 'Documents' },
+    ...(!iprsEnabled ? [{ number: 2, title: 'Documents' }] : []),
     { number: 3, title: 'Payment' },
     { number: 4, title: 'Confirmation' },
   ];
@@ -28,7 +28,7 @@ export const StepIndicator = ({ currentStep }) => {
             {currentStep > step.number ? (
               <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5" />
             ) : (
-              step.number
+              steps.findIndex((item) => item.number === step.number) + 1
             )}
           </div>
           <p

@@ -705,7 +705,7 @@ function NotificationsPanel({
                   }
                 }}
                 className={`
-                  group flex cursor-pointer items-start gap-3 py-3 border-b border-slate-100
+                  group flex cursor-pointer touch-manipulation items-start gap-3 border-b border-slate-100 px-2 py-3 sm:px-0
                   ${!isRead ? "bg-emerald-50/30" : ""}
                   hover:bg-slate-50 transition-colors
                 `}
@@ -1346,11 +1346,14 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
   });
   const [submittingOptOut, setSubmittingOptOut] = useState(false);
   const [nominees, setNominees] = useState(() => user?.nominees || []);
+  const [nomineesLocked, setNomineesLocked] = useState(() => Boolean(user?.nominees?.length));
+  const employerLocked = isAyedosMember(user);
   useEffect(() => {
     setForm(buildProfileForm(user));
     setPreview(user?.passportPhotoUrl || null);
     setPhotoFile(null);
     setNominees(user?.nominees || []);
+    setNomineesLocked(Boolean(user?.nominees?.length));
   }, [user]);
 
   const maskedEmail = form.email ? maskEmail(form.email) : "—";
@@ -1505,6 +1508,7 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
         payrollNumber: form.payrollNumber,
         employer: form.employer,
       };
+      if (employerLocked) delete profilePayload.employer;
       if (changedPassportPhotoUrl) profilePayload.passportPhotoUrl = changedPassportPhotoUrl;
       const nomineeDrafts = nominees.filter((nominee) => (
         nominee.fullName?.trim() ||
@@ -1542,6 +1546,13 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
         type: "success",
         message: "Profile changes saved successfully.",
       });
+      if (nomineeDrafts.length) {
+        setNomineesLocked(true);
+        setAlert({
+          type: "success",
+          message: "Profile changes and nominee records saved successfully.",
+        });
+      }
       setEditingPersonal(false);
     } catch (error) {
       setAlert({
@@ -1790,6 +1801,8 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
             name="employer"
             value={form.employer}
             onChange={update}
+            disabled={employerLocked}
+            helper={employerLocked ? "Ayedos employee company is managed by payroll records" : ""}
           />
           <Field
             label="Job Title"
@@ -1815,14 +1828,14 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
         <Surface className="p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div><h5 className="font-semibold text-slate-950">Nominees</h5><p className="text-sm text-slate-500">Add up to 3 nominees. Drafts and partial allocations can be saved anytime.</p></div>
-            <button type="button" disabled={nominees.length >= 3} onClick={() => setNominees((items) => [...items, { fullName: "", relationship: "", phone: "", nationalId: "", allocationPercentage: "" }])} className="rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-40"><Plus size={15} className="mr-1 inline" />Add nominee</button>
+            <button type="button" disabled={nomineesLocked || nominees.length >= 3} onClick={() => setNominees((items) => [...items, { fullName: "", relationship: "", phone: "", nationalId: "", allocationPercentage: "" }])} className="rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-40"><Plus size={15} className="mr-1 inline" />Add nominee</button>
           </div>
           <div className="space-y-3">
             {nominees.map((nominee, index) => (
               <div key={index} className="grid gap-3 rounded-lg border bg-slate-50 p-4 md:grid-cols-2">
-                {[['fullName','Full name'],['relationship','Relationship'],['phone','Phone'],['nationalId','National ID']].map(([name,label]) => <label key={name} className="text-sm font-semibold text-slate-700">{label}<input value={nominee[name] || ''} onChange={(e) => setNominees((items) => items.map((item, i) => i === index ? { ...item, [name]: e.target.value } : item))} className="mt-1 w-full rounded-lg border px-3 py-2" /></label>)}
-                <label className="text-sm font-semibold text-slate-700">Allocation (%)<input type="number" min="0" max="100" step="0.01" value={nominee.allocationPercentage} onChange={(e) => setNominees((items) => items.map((item, i) => i === index ? { ...item, allocationPercentage: e.target.value } : item))} className="mt-1 w-full rounded-lg border px-3 py-2" /></label>
-                <button type="button" onClick={() => setNominees((items) => items.filter((_, i) => i !== index))} className="self-end justify-self-start text-sm font-semibold text-rose-600">Remove nominee</button>
+                {[['fullName','Full name'],['relationship','Relationship'],['phone','Phone'],['nationalId','National ID']].map(([name,label]) => <label key={name} className="text-sm font-semibold text-slate-700">{label}<input value={nominee[name] || ''} readOnly={nomineesLocked} disabled={nomineesLocked} onChange={(e) => setNominees((items) => items.map((item, i) => i === index ? { ...item, [name]: e.target.value } : item))} className="mt-1 w-full rounded-lg border px-3 py-2 disabled:bg-slate-100 disabled:text-slate-600" /></label>)}
+                <label className="text-sm font-semibold text-slate-700">Allocation (%)<input type="number" min="0" max="100" step="0.01" value={nominee.allocationPercentage} readOnly={nomineesLocked} disabled={nomineesLocked} onChange={(e) => setNominees((items) => items.map((item, i) => i === index ? { ...item, allocationPercentage: e.target.value } : item))} className="mt-1 w-full rounded-lg border px-3 py-2 disabled:bg-slate-100 disabled:text-slate-600" /></label>
+                {!nomineesLocked && <button type="button" onClick={() => setNominees((items) => items.filter((_, i) => i !== index))} className="self-end justify-self-start text-sm font-semibold text-rose-600">Remove nominee</button>}
               </div>
             ))}
           </div>

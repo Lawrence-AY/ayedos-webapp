@@ -1055,11 +1055,18 @@ function NotificationsPanel({
         <SentNotificationsPanel accessToken={accessToken} />
       ) : <div className="space-y-3">
         {filtered.map((n) => (
-          <button
-            type="button"
+          <div
+            role="button"
+            tabIndex={0}
             onClick={() => openNotification(n)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                openNotification(n);
+              }
+            }}
             key={n.id}
-            className={`w-full rounded-lg border p-4 text-left transition-colors duration-300 ${n.read ? "bg-white" : "border-emerald-300 bg-emerald-50 shadow-sm"}`}
+            className={`w-full cursor-pointer touch-manipulation rounded-lg border p-4 text-left transition-colors duration-300 ${n.read ? "bg-white" : "border-emerald-300 bg-emerald-50 shadow-sm"}`}
           >
             <div className="flex items-start justify-between">
               <div>
@@ -1092,9 +1099,8 @@ function NotificationsPanel({
                 </span>
               )}
               {!n.read && (
-                <span
-                  role="button"
-                  tabIndex={0}
+                <button
+                  type="button"
                   onClick={(event) => {
                     event.stopPropagation();
                     onMarkRead?.(n.id);
@@ -1110,10 +1116,10 @@ function NotificationsPanel({
                 >
                   <CheckCircle2 size={13} />
                   Mark as Read
-                </span>
+                </button>
               )}
             </div>
-          </button>
+          </div>
         ))}
       </div>}
       {selectedNotification ? (
