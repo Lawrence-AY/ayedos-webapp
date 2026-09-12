@@ -375,8 +375,11 @@ const login = useCallback(
         const fieldErrors = res.json?.details
           ? Object.values(res.json.details).flat().filter(Boolean)
           : []
-        const msg = fieldErrors[0] || res.json?.message || `Register failed (status ${res.status})`
-        throw new Error(msg)
+        const firstError = fieldErrors[0]
+        const msg = (typeof firstError === 'string' ? firstError : firstError?.message) || res.json?.message || `Register failed (status ${res.status})`
+        const error = new Error(msg)
+        error.status = res.status
+        throw error
       }
 
       const data = unwrapEnvelopeData(res.json)

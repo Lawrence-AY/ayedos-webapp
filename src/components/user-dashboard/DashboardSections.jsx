@@ -1345,15 +1345,15 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
     acknowledgedTerms: false,
   });
   const [submittingOptOut, setSubmittingOptOut] = useState(false);
-  const [nominees, setNominees] = useState(() => user?.nominees || []);
-  const [nomineesLocked, setNomineesLocked] = useState(() => Boolean(user?.nominees?.length));
+  const [nominees, setNominees] = useState(() => user?.nominees || user?.Member?.nominees || []);
+  const nomineesLocked = saving;
   const employerLocked = isAyedosMember(user);
   useEffect(() => {
     setForm(buildProfileForm(user));
     setPreview(user?.passportPhotoUrl || null);
     setPhotoFile(null);
-    setNominees(user?.nominees || []);
-    setNomineesLocked(Boolean(user?.nominees?.length));
+    setNominees(user?.nominees || user?.Member?.nominees || []);
+
   }, [user]);
 
   const maskedEmail = form.email ? maskEmail(form.email) : "—";
@@ -1504,7 +1504,6 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
         county: form.county,
         subCounty: form.subCounty,
         occupation: form.jobTitle,
-        monthlyIncome: form.monthlyIncome,
         payrollNumber: form.payrollNumber,
         employer: form.employer,
       };
@@ -1547,7 +1546,7 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
         message: "Profile changes saved successfully.",
       });
       if (nomineeDrafts.length) {
-        setNomineesLocked(true);
+        setNominees(updatedProfile?.nominees || nomineeDrafts);
         setAlert({
           type: "success",
           message: "Profile changes and nominee records saved successfully.",
@@ -1730,9 +1729,9 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
         {/* Employment information – editable */}
         {editingPersonal ? (
           <EditableSection title="Edit profile" icon={UserRound}>
-            <Field label="Full Name" name="fullName" value={form.fullName} onChange={update} error={errors.fullName} disabled={lockedProfileFields.fullName} helper={lockedProfileFields.fullName ? "Captured during onboarding" : ""} />
-            <Field label="Phone Number" name="phone" value={form.phone} onChange={update} error={errors.phone} disabled={lockedProfileFields.phone} helper={lockedProfileFields.phone ? "Captured during onboarding" : ""} />
-            <Field label="National ID" name="nationalId" value={form.nationalId} onChange={update} error={errors.nationalId} disabled={lockedProfileFields.nationalId} helper={lockedProfileFields.nationalId ? "Captured during onboarding" : ""} />
+            <Field label="Full Name" name="fullName" value={form.fullName} onChange={update} error={errors.fullName} disabled={lockedProfileFields.fullName} helper={lockedProfileFields.fullName ? " " : ""} />
+            <Field label="Phone Number" name="phone" value={form.phone} onChange={update} error={errors.phone} disabled={lockedProfileFields.phone} helper={lockedProfileFields.phone ? " " : ""} />
+            <Field label="National ID" name="nationalId" value={form.nationalId} onChange={update} error={errors.nationalId} disabled={lockedProfileFields.nationalId} helper={lockedProfileFields.nationalId ? " " : ""} />
             <Field label="KRA PIN" name="kraPin" value={form.kraPin} onChange={update} placeholder="e.g., A123456789B" />
             <Field label="Physical Address / P.O. Box" name="poBox" value={form.poBox} onChange={update} placeholder="e.g., P.O. Box 12345-00100" />
             <div className="space-y-2">
@@ -1772,7 +1771,7 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
               </Select>
             </div>
             <Field label="Address Notes" name="address" value={form.address} onChange={update} as="textarea" />
-            <Field label="Date of Birth" name="dateOfBirth" value={form.dateOfBirth} onChange={update} type="date" disabled={lockedProfileFields.dateOfBirth} helper={lockedProfileFields.dateOfBirth ? "Captured during onboarding" : ""} />
+            <Field label="Date of Birth" name="dateOfBirth" value={form.dateOfBirth} onChange={update} type="date" disabled={lockedProfileFields.dateOfBirth} helper={lockedProfileFields.dateOfBirth ? " " : ""} />
             <Field
               label="Gender"
               name="gender"
@@ -1780,7 +1779,7 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
               value={form.gender}
               onChange={update}
               disabled={lockedProfileFields.gender}
-              helper={lockedProfileFields.gender ? "Captured during onboarding" : ""}
+              helper={lockedProfileFields.gender ? " " : ""}
               options={[
                 { label: "Select gender", value: "" },
                 { label: "Female", value: "Female" },
@@ -1811,13 +1810,6 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
             onChange={update}
           />
           <Field
-            label="Monthly Income"
-            name="monthlyIncome"
-            value={form.monthlyIncome}
-            onChange={update}
-            type="number"
-          />
-          <Field
             label="Payroll Number"
             name="payrollNumber"
             value={form.payrollNumber}
@@ -1827,19 +1819,24 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
 
         <Surface className="p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <div><h5 className="font-semibold text-slate-950">Nominees</h5><p className="text-sm text-slate-500">Add up to 3 nominees. Drafts and partial allocations can be saved anytime.</p></div>
+            <div><h5 className="font-semibold text-slate-950">Nominees</h5><p className="text-sm text-slate-500">Add up to 3 nominees. Partial records remain drafts.</p></div>
             <button type="button" disabled={nomineesLocked || nominees.length >= 3} onClick={() => setNominees((items) => [...items, { fullName: "", relationship: "", phone: "", nationalId: "", allocationPercentage: "" }])} className="rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-40"><Plus size={15} className="mr-1 inline" />Add nominee</button>
           </div>
           <div className="space-y-3">
             {nominees.map((nominee, index) => (
               <div key={index} className="grid gap-3 rounded-lg border bg-slate-50 p-4 md:grid-cols-2">
-                {[['fullName','Full name'],['relationship','Relationship'],['phone','Phone'],['nationalId','National ID']].map(([name,label]) => <label key={name} className="text-sm font-semibold text-slate-700">{label}<input value={nominee[name] || ''} readOnly={nomineesLocked} disabled={nomineesLocked} onChange={(e) => setNominees((items) => items.map((item, i) => i === index ? { ...item, [name]: e.target.value } : item))} className="mt-1 w-full rounded-lg border px-3 py-2 disabled:bg-slate-100 disabled:text-slate-600" /></label>)}
+                {[['fullName','Full name'],['relationship','Relationship'],['phone','Phone'],['nationalId','National ID']].map(([name,label]) => <label key={name} className="text-sm font-semibold text-slate-700">{label}<input value={nominee[name] || ''} readOnly={nomineesLocked || (nominee.verificationStatus === "VERIFIED" && ["fullName", "nationalId"].includes(name))} disabled={nomineesLocked || (nominee.verificationStatus === "VERIFIED" && ["fullName", "nationalId"].includes(name))} onChange={(e) => setNominees((items) => items.map((item, i) => i === index ? { ...item, [name]: e.target.value, ...(["fullName", "nationalId"].includes(name) ? { verificationStatus: "DRAFT", verifiedAt: null } : {}) } : item))} className="mt-1 w-full rounded-lg border px-3 py-2 disabled:bg-slate-100 disabled:text-slate-600" /></label>)}
                 <label className="text-sm font-semibold text-slate-700">Allocation (%)<input type="number" min="0" max="100" step="0.01" value={nominee.allocationPercentage} readOnly={nomineesLocked} disabled={nomineesLocked} onChange={(e) => setNominees((items) => items.map((item, i) => i === index ? { ...item, allocationPercentage: e.target.value } : item))} className="mt-1 w-full rounded-lg border px-3 py-2 disabled:bg-slate-100 disabled:text-slate-600" /></label>
-                {!nomineesLocked && <button type="button" onClick={() => setNominees((items) => items.filter((_, i) => i !== index))} className="self-end justify-self-start text-sm font-semibold text-rose-600">Remove nominee</button>}
+                <p className="text-sm text-slate-600">{nominee.verificationStatus === "VERIFIED" ? "Verified." : nominee.verificationStatus === "UNAVAILABLE" ? "Verification unavailable" : ""}</p>
+                {!nomineesLocked && nominee.verificationStatus !== "VERIFIED" && <button type="button" onClick={() => setNominees((items) => items.filter((_, i) => i !== index))} className="self-end justify-self-start text-sm font-semibold text-rose-600">Remove nominee</button>}
               </div>
             ))}
           </div>
           <p className="mt-3 text-sm font-semibold text-slate-600">Allocated so far: {nominees.reduce((sum, nominee) => sum + Number(nominee.allocationPercentage || 0), 0)}%</p>
+          <div className="mt-4 space-y-2"><h5 className="font-semibold">Uploaded identity documents</h5>{[['nationalIdUrl', 'National ID front'], ['nationalIdBackUrl', 'National ID back'], ['passportUrl', 'Passport']].map(([key, label]) => {
+            const url = user?.Member?.[key] || user?.member?.[key];
+            return <p key={key} className="text-sm">{label}: {url && /^https?:\/\//i.test(url) ? <a href={url} target="_blank" rel="noreferrer" className="font-semibold underline">View uploaded document</a> : 'Not uploaded'}</p>;
+          })}</div>
         </Surface>
 <div className="flex justify-end">
           <button
@@ -2395,7 +2392,7 @@ function SecuritySection({
                   Multi-factor authentication
                 </h5>
                 <p className="mt-1 text-sm text-slate-500">
-                  Authenticator and SMS verification will be available in a
+                  Authenticator will be available in a
                   future release.
                 </p>
               </div>

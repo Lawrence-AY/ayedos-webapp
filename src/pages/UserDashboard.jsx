@@ -5,6 +5,7 @@ import Sidebar from "../components/layout/Sidebar.jsx";
 import TopNavbar from "../components/layout/TopNavbar.jsx";
 import { getDashboardPath } from "../utils/dashboardRoutes.js";
 import {
+  getMemberProfile,
   getMyLoans,
   getMyGuarantees,
   getMyNotifications,
@@ -45,6 +46,8 @@ export default function UserDashboard() {
   const navigate = useNavigate();
   const { user, accessToken, loadCurrentUser, updateCurrentUser } = useContext(AuthContext);
   const dashboardBasePath = getDashboardPath("MEMBER");
+  const [refreshError, setRefreshError] = useState("");
+  const requestVersion = useRef(0);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -104,6 +107,7 @@ export default function UserDashboard() {
         return;
       }
 
+      const version = ++requestVersion.current;
       if (showLoading) setLoading(true);
       const results = await Promise.allSettled([
         getMyTransactions(accessToken),
@@ -112,7 +116,12 @@ export default function UserDashboard() {
         getAuthSessions(accessToken),
         getMyNotifications(accessToken, { limit: 100 }),
         getMyGuarantees(accessToken),
+        getMemberProfile(accessToken),
       ]);
+      if (version !== requestVersion.current) return;
+      const labels = ["transactions", "loans", "share capital", "sessions", "notifications", "guarantees", "member balances"];
+      const failed = results.flatMap((result, index) => result.status === "rejected" ? [labels[index]] : []);
+      setRefreshError(failed.length ? `Unable to refresh ${failed.join(", ")}. Previously loaded values may be out of date.` : "");
       const sessions = results[3].status === "fulfilled" && Array.isArray(results[3].value) ? results[3].value : [];
 
       const fetchedNotifications = results[4].status === "fulfilled" && Array.isArray(results[4].value) ? results[4].value : [];
@@ -128,8 +137,9 @@ export default function UserDashboard() {
       const fetchedUnreadCount = notifications.filter((notification) => !notification.read && !notification.isRead && !notification.readAt).length;
 
       setData((current) => ({
+        member: results[6].status === "fulfilled" ? results[6].value?.Member : current.member,
         transactions: results[0].status === "fulfilled" && Array.isArray(results[0].value)
-          ? results[0].value.filter((transaction) => ["SUCCESS", "PAID", "COMPLETED"].includes(String(transaction.status || "").toUpperCase()))
+          ? results[0].value
           : current.transactions,
         loans: results[1].status === "fulfilled" && Array.isArray(results[1].value) ? results[1].value : current.loans,
         shares: results[2].status === "fulfilled" && Array.isArray(results[2].value) ? results[2].value : current.shares,
@@ -244,11 +254,11 @@ export default function UserDashboard() {
     }, 0);
     const storedMemberSavings = Number(user?.savings || user?.Member?.savings || user?.member?.savings || 0);
     const transactionSavings = signedCategoryTotal(["savings"]);
-    const savings = storedMemberSavings || Math.max(transactionSavings, 0);
+    const savings = data.member ? Number(data.member.savings ?? 0) : (storedMemberSavings || Math.max(transactionSavings, 0));
     const paidShareCapital = signedCategoryTotal(["share_capital", "sharecapital", "share capital"]);
     const shareAccountCapital = data.shares.reduce((sum, share) => sum + Number(share.totalInvested || 0), 0);
     const storedMemberShareCapital = Number(user?.shareCapital || user?.Member?.shareCapital || user?.member?.shareCapital || 0);
-    const shareCapital = shareAccountCapital || storedMemberShareCapital || Math.max(paidShareCapital, 0);
+    const shareCapital = data.member ? Number(data.member.shareCapital ?? 0) : (shareAccountCapital || storedMemberShareCapital || Math.max(paidShareCapital, 0));
     const balance = successfulTransactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
     const loanBalance = data.loans
       .filter((loan) => ["ACTIVE", "APPROVED", "DISBURSED"].includes(String(loan.status || "").toUpperCase()))
@@ -447,6 +457,7 @@ export default function UserDashboard() {
           onSearchChange={setSearch}
         />
         <div className="mx-auto w-full max-w-[1500px] px-4 py-2 sm:px-2 lg:px-2">
+          {refreshError && <div role="alert" className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{refreshError} <button type="button" className="font-semibold underline" onClick={() => loadDashboardData({ showLoading: false })}>Retry</button></div>}
           {renderContent()}
         </div>
       </main>
