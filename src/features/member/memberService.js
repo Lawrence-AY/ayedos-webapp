@@ -6,6 +6,7 @@ export async function getMemberProfile(accessToken) {
   const res = await apiRequest('/api/member/profile', {
     method: 'GET',
     accessToken,
+    cache: false,
   })
   if (!res.ok) throw new Error(res.json?.message || 'Failed to fetch profile')
   return unwrapEnvelopeData(res.json)
@@ -102,7 +103,7 @@ export async function applyForLoan(data, accessToken) {
 }
 
 export async function getMyLoans(accessToken) {
-  const res = await apiRequest('/api/member/loans', { method: 'GET', accessToken })
+  const res = await apiRequest('/api/member/loans', { method: 'GET', accessToken, cache: false })
   if (!res.ok) throw new Error(res.json?.message || 'Failed to fetch loans')
   return unwrapEnvelopeData(res.json)
 }
@@ -164,7 +165,7 @@ export async function cancelLoanApplication(id, accessToken) {
 
 // Shares
 export async function getMyShares(accessToken) {
-  const res = await apiRequest('/api/member/shares', { method: 'GET', accessToken })
+  const res = await apiRequest('/api/member/shares', { method: 'GET', accessToken, cache: false })
   if (!res.ok) throw new Error(res.json?.message || 'Failed to fetch shares')
   return unwrapEnvelopeData(res.json)
 }

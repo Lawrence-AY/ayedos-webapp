@@ -2,6 +2,7 @@ import { useContext, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext.jsx";
 import { resendOtp } from "../services/authService.js";
+import { suggestPassword } from "../utils/suggestPassword.js";
 import logo from "../assets/logo-light.png";
 import DotSwarmCanvas from "../components/landing/DotTextCanvas.jsx";
 import {
@@ -46,6 +47,8 @@ export default function Register() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordHintOpen, setPasswordHintOpen] = useState(false);
   const [formError, setFormError] = useState(null);
+  const [registrationConflict, setRegistrationConflict] = useState(false);
+  const [passwordSuggestionMessage, setPasswordSuggestionMessage] = useState("");
   const passwordRequirements = [
     { id: "length", label: "At least 8 characters", met: password.length >= 8 },
     { id: "uppercase", label: "At least one uppercase letter", met: /[A-Z]/.test(password) },
@@ -61,7 +64,9 @@ export default function Register() {
 
   async function onSubmit(e) {
     e.preventDefault();
+    if (isRegistering || submitCooldown > 0) return;
     setFormError(null);
+    setRegistrationConflict(false);
     setOtpError(null);
     setOtpMessage("");
 
@@ -102,7 +107,10 @@ export default function Register() {
       setOtpCountdown(OTP_COOLDOWN_SECONDS);
       setSubmitCooldown(OTP_COOLDOWN_SECONDS);
     } catch (err) {
-      setFormError(err?.message || "Registration failed");
+      setRegistrationConflict(err?.status === 409);
+      setFormError(err?.status === 409
+        ? "These details could not be used to create an account. If you registered before, sign in or reset your password."
+        : err?.message || "Registration failed");
     } finally {
       setIsRegistering(false);
     }
@@ -318,6 +326,24 @@ export default function Register() {
                 visible={showPassword}
                 onToggle={() => setShowPassword((visible) => !visible)}
               />
+              <button
+                type="button"
+                disabled={isRegistering}
+                className="mt-2 text-sm font-semibold text-green-700 underline disabled:opacity-50"
+                onClick={() => {
+                  try {
+                    const suggestion = suggestPassword();
+                    setPassword(suggestion);
+                    setConfirmPassword(suggestion);
+                    setShowPassword(true);
+                    setPasswordHintOpen(true);
+                    setPasswordSuggestionMessage(" ");
+                  } catch {
+                    setPasswordSuggestionMessage("Password suggestion is unavailable. Please enter your own password.");
+                  }
+                }}
+              >Suggest password</button>
+              {passwordSuggestionMessage && <p role="status" className="mt-2 text-sm">{passwordSuggestionMessage}</p>}
               {passwordHintOpen && (
                 <div style={passwordChecklistStyle}>
                   <p style={passwordGuidanceStyle}>{PASSWORD_RULE_TEXT}</p>
@@ -357,6 +383,10 @@ export default function Register() {
             {(formError || authError) && (
               <div role="alert" style={errorStyle}>
                 {formError || authError}
+                {registrationConflict && <div className="mt-2 flex gap-4">
+                  <Link to="/login" state={{ email: email.trim() }} className="font-semibold underline">Sign in</Link>
+                  <Link to="/forgot-password" className="font-semibold underline">Reset password</Link>
+                </div>}
               </div>
             )}
 

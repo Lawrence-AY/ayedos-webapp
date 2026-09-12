@@ -15,6 +15,8 @@ export function useDashboardEvents(accessToken, handlers = {}) {
     if (!token || typeof fetch === "undefined") return undefined;
 
     const controller = new AbortController();
+    let reconnectTimer;
+    let reconnectDelay = 1000;
     const url = new URL(buildApiUrl("/api/v1/events"), window.location.origin);
 
     const dispatchEvent = (event) => {
@@ -47,6 +49,8 @@ export function useDashboardEvents(accessToken, handlers = {}) {
         }
 
         const reader = response.body.getReader();
+        reconnectDelay = 1000;
+        handlers.onRecoveryNeeded?.();
         const decoder = new TextDecoder();
         let buffer = "";
 
@@ -69,17 +73,28 @@ export function useDashboardEvents(accessToken, handlers = {}) {
         }
       } catch (error) {
         if (!controller.signal.aborted) handlers.onConnectionInterrupted?.();
+      } finally {
+        if (!controller.signal.aborted) {
+          reconnectTimer = window.setTimeout(readStream, reconnectDelay);
+          reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+        }
       }
     };
 
     readStream();
 
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      window.clearTimeout(reconnectTimer);
+    };
   }, [accessToken, handlers]);
 }
 
 export function applyLoanPaymentEvent(current, payload) {
   if (!payload?.loanId) return current;
+  const existingTransaction = payload.transaction?.id && current.transactions?.find((item) => item.id === payload.transaction.id);
+  const alreadyApplied = existingTransaction && ['SUCCESS', 'PAID', 'COMPLETED'].includes(String(existingTransaction.status || '').toUpperCase());
+  if (alreadyApplied) return current;
   const transaction = payload.transaction
     ? {
         ...payload.transaction,
@@ -88,8 +103,10 @@ export function applyLoanPaymentEvent(current, payload) {
       }
     : null;
 
-  const nextTransactions = transaction && !current.transactions?.some((item) => item.id === transaction.id)
-    ? [transaction, ...(current.transactions || [])]
+  const nextTransactions = transaction
+    ? existingTransaction
+      ? current.transactions.map((item) => item.id === transaction.id ? { ...item, ...transaction } : item)
+      : [transaction, ...(current.transactions || [])]
     : current.transactions || [];
 
   const nextLoans = (current.loans || []).map((loan) => (

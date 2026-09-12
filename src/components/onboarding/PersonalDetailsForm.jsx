@@ -365,11 +365,7 @@ export const PersonalDetailsForm = ({
           {errors.step1}
         </div>
       )}
-      {iprsEnabled && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900">
-          Your details will be checked against official IPRS records before payment.
-        </div>
-      )}
+      
 
       {/* Terms */}
       <div className="flex items-center gap-2">
