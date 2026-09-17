@@ -151,9 +151,7 @@ function isAyedosMember(user = {}) {
 }
 
 function hasStaffId(user = {}) {
-  return Boolean(String(user?.staffId || user?.payrollNumber || "").trim())
-    || String(user?.employmentTag || "").toUpperCase() === "EMPLOYEE"
-    || String(user?.role || "").toUpperCase() === "EMPLOYEE";
+  return Boolean(String(user?.staffId || user?.payrollNumber || "").trim());
 }
 
 const LOAN_PRODUCTS = [
@@ -1120,12 +1118,12 @@ function DashboardOverview({
           <div className="grid gap-3 p-4 sm:grid-cols-3">
             <div className="rounded-lg border bg-white p-3"><p className="text-xs font-semibold uppercase text-slate-500">Share Capital</p><p className="mt-1 text-lg font-bold text-slate-950">{formatCurrency(stats.shareCapital || statementDetails.totals?.shareCapital || 0)}</p></div>
             <div className="rounded-lg border bg-white p-3"><p className="text-xs font-semibold uppercase text-slate-500">Savings</p><p className="mt-1 text-lg font-bold text-slate-950">{formatCurrency(stats.totalSavings || statementDetails.totals?.savings || 0)}</p></div>
-            <div className="rounded-lg border bg-white p-3"><p className="text-xs font-semibold uppercase text-slate-500">Employer Contribution</p><p className="mt-1 text-lg font-bold text-slate-950">{formatCurrency(stats.employerContribution || statementDetails.totals?.employerContribution || 0)}</p></div>
+            {showEmployerContribution ? <div className="rounded-lg border bg-white p-3"><p className="text-xs font-semibold uppercase text-slate-500">Employer Contribution</p><p className="mt-1 text-lg font-bold text-slate-950">{formatCurrency(stats.employerContribution || statementDetails.totals?.employerContribution || 0)}</p></div> : null}
           </div>
           {statementPeriods.length ? (
             <div className="overflow-x-auto border-t">
               <table className="min-w-full">
-                <thead><tr className="bg-slate-50">{["From", "To", "Share Capital", "Savings", "Employer Contribution"].map((h) => <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>)}</tr></thead>
+                <thead><tr className="bg-slate-50">{["From", "To", "Share Capital", "Savings", ...(showEmployerContribution ? ["Employer Contribution"] : [])].map((h) => <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>)}</tr></thead>
                 <tbody className="divide-y">
                   {statementPeriods.map((period, index) => (
                     <tr key={`${period.from}-${period.to}-${index}`}>
@@ -1133,7 +1131,7 @@ function DashboardOverview({
                       <td className="px-4 py-3 text-sm">{period.to || "-"}</td>
                       <td className="px-4 py-3 text-sm">{formatCurrency(period.shareCapital || 0)}</td>
                       <td className="px-4 py-3 text-sm">{formatCurrency(period.savings || 0)}</td>
-                      <td className="px-4 py-3 text-sm">{formatCurrency(period.employerContribution || 0)}</td>
+                      {showEmployerContribution ? <td className="px-4 py-3 text-sm">{formatCurrency(period.employerContribution || 0)}</td> : null}
                     </tr>
                   ))}
                 </tbody>
@@ -1504,7 +1502,6 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
         county: form.county,
         subCounty: form.subCounty,
         occupation: form.jobTitle,
-        payrollNumber: form.payrollNumber,
         employer: form.employer,
       };
       if (employerLocked) delete profilePayload.employer;
@@ -1810,10 +1807,12 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
             onChange={update}
           />
           <Field
-            label="Payroll Number"
-            name="payrollNumber"
-            value={form.payrollNumber}
+            label="Staff ID"
+            name="staffId"
+            value={form.staffId || form.payrollNumber || ""}
             onChange={update}
+            disabled
+            helper="Assigned by management during employee onboarding"
           />
         </EditableSection>
 
@@ -1833,10 +1832,7 @@ function ProfileSettings({ user, stats = {}, accessToken, onProfileUpdated, onRe
             ))}
           </div>
           <p className="mt-3 text-sm font-semibold text-slate-600">Allocated so far: {nominees.reduce((sum, nominee) => sum + Number(nominee.allocationPercentage || 0), 0)}%</p>
-          <div className="mt-4 space-y-2"><h5 className="font-semibold">Uploaded identity documents</h5>{[['nationalIdUrl', 'National ID front'], ['nationalIdBackUrl', 'National ID back'], ['passportUrl', 'Passport']].map(([key, label]) => {
-            const url = user?.Member?.[key] || user?.member?.[key];
-            return <p key={key} className="text-sm">{label}: {url && /^https?:\/\//i.test(url) ? <a href={url} target="_blank" rel="noreferrer" className="font-semibold underline">View uploaded document</a> : 'Not uploaded'}</p>;
-          })}</div>
+          
         </Surface>
 <div className="flex justify-end">
           <button
