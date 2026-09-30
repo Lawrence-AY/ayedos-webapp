@@ -253,15 +253,15 @@ export default function UserDashboard() {
       return sum + (outgoing ? -amount : amount);
     }, 0);
     const storedMemberSavings = Number(user?.savings || user?.Member?.savings || user?.member?.savings || 0);
-    const transactionSavings = signedCategoryTotal(["savings"]);
-    const savings = data.member ? Number(data.member.savings ?? 0) : (storedMemberSavings || Math.max(transactionSavings, 0));
+    const transactionSavings = signedCategoryTotal(["savings", "monthly_contribution", "monthlycontributions"]);
+    const savings = Math.max(Number(data.member?.savings || 0), storedMemberSavings, transactionSavings, 0);
     const paidShareCapital = signedCategoryTotal(["share_capital", "sharecapital", "share capital"]);
     const shareAccountCapital = data.shares.reduce((sum, share) => sum + Number(share.totalInvested || 0), 0);
     const storedMemberShareCapital = Number(user?.shareCapital || user?.Member?.shareCapital || user?.member?.shareCapital || 0);
-    const shareCapital = data.member ? Number(data.member.shareCapital ?? 0) : (shareAccountCapital || storedMemberShareCapital || Math.max(paidShareCapital, 0));
+    const shareCapital = Math.max(Number(data.member?.shareCapital || 0), shareAccountCapital, storedMemberShareCapital, paidShareCapital, 0);
     const balance = successfulTransactions.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
     const loanBalance = data.loans
-      .filter((loan) => ["ACTIVE", "APPROVED", "DISBURSED"].includes(String(loan.status || "").toUpperCase()))
+      .filter((loan) => ["ACTIVE", "APPROVED", "DISBURSED", "OVERDUE", "IN_ARREARS", "DEFAULTED"].includes(String(loan.status || "").toUpperCase()))
       .reduce((sum, loan) => sum + loanOutstandingBalance(loan), 0);
     const now = new Date();
     const monthlyContributions = successfulTransactions.reduce((sum, transaction) => {
@@ -284,7 +284,7 @@ export default function UserDashboard() {
       loanBalance,
       monthlyContributions,
       employerContribution: Number(user?.employerContribution || user?.Member?.employerContribution || user?.member?.employerContribution || 0),
-      activeLoans: data.loans.filter((loan) => ["ACTIVE", "APPROVED"].includes(String(loan.status || "").toUpperCase())).length,
+      activeLoans: data.loans.filter((loan) => ["ACTIVE", "APPROVED", "DISBURSED", "OVERDUE", "IN_ARREARS", "DEFAULTED"].includes(String(loan.status || "").toUpperCase())).length,
       shareCapitalRemaining: Math.max(MIN_SHARE_CAPITAL - shareCapital, 0),
       shareCapitalProgress: Math.min((shareCapital / MIN_SHARE_CAPITAL) * 100, 100),
     };
