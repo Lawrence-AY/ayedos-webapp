@@ -240,7 +240,7 @@ export async function getMyGuarantees(accessToken) {
 }
 
 export async function searchQualifiedGuarantors(query, accessToken) {
-  const res = await apiRequest(`/api/member/guarantors/search?q=${encodeURIComponent(query)}`, {
+  const res = await apiRequest(`/api/v1/guarantors/search?q=${encodeURIComponent(query)}`, {
     method: 'GET',
     accessToken,
     cache: false,

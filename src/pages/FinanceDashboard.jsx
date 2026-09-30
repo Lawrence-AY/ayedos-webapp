@@ -1527,9 +1527,9 @@ function WalletLiquidityPage({ data }) {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <KpiCard label="Active system users" value={activeMembers} icon={UsersRound} trend="Live" tone="blue" />
-        <KpiCard label="Current wallet liquidity" value={formatCurrency(currentLiquidity)} icon={WalletCards} trend={`${coverageRatio}% covered`} tone="emerald" />
-        <KpiCard label="Forecast demand" value={formatCurrency(forecastDemand)} icon={TrendingUp} trend="30-day view" tone="amber" />
-        <KpiCard label="Funding gap" value={formatCurrency(fundingGap)} icon={AlertTriangle} trend={`${runwayDays} days runway`} tone={fundingGap > 0 ? "rose" : "emerald"} />
+        <KpiCard label="Available cash" value={formatCurrency(currentLiquidity)} icon={WalletCards} trend={`${coverageRatio}% Last reconciled`} tone="emerald" />
+        {/*<KpiCard label="Forecast demand" value={formatCurrency(forecastDemand)} icon={TrendingUp} trend="30-day view" tone="amber" />
+        <KpiCard label="Funding gap" value={formatCurrency(fundingGap)} icon={AlertTriangle} trend={`${runwayDays} days runway`} tone={fundingGap > 0 ? "rose" : "emerald"} />*/}
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
@@ -1878,7 +1878,7 @@ function UnifiedLoansPage({
     },
     review: {
       label: "Finance Queue",
-      filter: (l) => ["UNDER_REVIEW", "PENDING"].includes(String(l.status || "").toUpperCase()),
+      filter: (l) => ["UNDER_REVIEW", "PENDING", "FULLY_COVERED"].includes(String(l.status || "").toUpperCase()),
       icon: Landmark,
     },
     approved: {

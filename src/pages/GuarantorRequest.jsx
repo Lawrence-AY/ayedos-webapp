@@ -15,16 +15,22 @@ export default function GuarantorRequest() {
 
   useEffect(() => {
     let cancelled = false
-    getGuarantorRequest(token)
-      .then((data) => { if (!cancelled) setRequest(data) })
+    const load = () => getGuarantorRequest(token)
+      .then((data) => { if (!cancelled) { setRequest(data); setGuaranteeAmount((current) => current || String(data.maxAllowedPledge || '')); } })
       .catch((error) => { if (!cancelled) setMessage({ type: 'error', text: error?.message || 'This guarantor link is unavailable.' }) })
       .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
+    load()
+    const timer = window.setInterval(load, 15000)
+    return () => { cancelled = true; window.clearInterval(timer) }
   }, [token])
 
   async function submit(decision) {
     if (decision === 'ACCEPTED' && Number(guaranteeAmount || 0) <= 0) {
       setMessage({ type: 'error', text: 'Enter the amount you agree to guarantee.' })
+      return
+    }
+    if (decision === 'ACCEPTED' && Number(guaranteeAmount) > Number(request?.maxAllowedPledge || 0)) {
+      setMessage({ type: 'error', text: `The maximum currently available pledge is ${formatCurrency(request?.maxAllowedPledge)}.` })
       return
     }
     setSubmitting(true)
@@ -41,7 +47,7 @@ export default function GuarantorRequest() {
   }
 
   const status = String(request?.status || '').toUpperCase()
-  const disabled = submitting || ['ACCEPTED', 'REJECTED', 'EXPIRED'].includes(status)
+  const disabled = submitting || ['ACCEPTED', 'REJECTED', 'EXPIRED', 'CANCELLED', 'RELEASED'].includes(status)
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-10 text-slate-950">
@@ -59,6 +65,9 @@ export default function GuarantorRequest() {
               <div className="flex justify-between gap-3"><dt className="text-slate-500">Loan type</dt><dd className="font-semibold">{request.loan?.type}</dd></div>
               <div className="flex justify-between gap-3"><dt className="text-slate-500">Loan amount</dt><dd className="font-semibold">{formatCurrency(request.loan?.amount)}</dd></div>
               <div className="flex justify-between gap-3"><dt className="text-slate-500">Requested guarantee</dt><dd className="font-semibold">{formatCurrency(request.amount)}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-slate-500">Loan balance not yet reserved</dt><dd className="font-semibold">{formatCurrency(request.remainingNeeded)}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-slate-500">Your current free savings</dt><dd className="font-semibold">{formatCurrency(request.freeSavings)}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-slate-500">Maximum you may accept</dt><dd className="font-semibold text-emerald-700">{formatCurrency(request.maxAllowedPledge)}</dd></div>
               <div className="flex justify-between gap-3"><dt className="text-slate-500">Expires</dt><dd className="font-semibold">{request.expiresAt ? new Date(request.expiresAt).toLocaleString() : '-'}</dd></div>
             </dl>
             {request.loan?.reason ? <p className="rounded-lg bg-slate-100 p-3 text-sm text-slate-700">{request.loan.reason}</p> : null}
@@ -67,7 +76,7 @@ export default function GuarantorRequest() {
               <input
                 type="number"
                 min="1"
-                max={request.loan?.amount || undefined}
+                max={request.maxAllowedPledge || undefined}
                 value={guaranteeAmount}
                 onChange={(event) => setGuaranteeAmount(event.target.value.replace(/\D/g, ''))}
                 className="mt-2 min-h-12 w-full rounded-lg border border-slate-200 px-3.5 text-sm"
