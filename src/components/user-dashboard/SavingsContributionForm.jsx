@@ -93,7 +93,12 @@ export default function SavingsContributionForm({ accessToken, user, onRefresh, 
           status: status.status,
           reference: status.reference,
         });
-        setPaymentResult(null);
+        setPaymentResult((current) => ({
+          ...current,
+          ...status,
+          status: "FAILED",
+          error: status.message || "M-PESA could not complete this payment.",
+        }));
         await onRefresh?.();
         return;
       }
@@ -230,19 +235,28 @@ export default function SavingsContributionForm({ accessToken, user, onRefresh, 
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-lg bg-emerald-50 px-3 py-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">Paybill</p>
-                <p className="mt-1 text-lg font-bold text-emerald-950">{paymentResult.paybill.businessNumber || "Not configured"}</p>
+                <p className="mt-1 text-lg font-bold text-emerald-950">{paymentResult.paybill.businessNumber || "522533"}</p>
               </div>
               <div className="rounded-lg bg-emerald-50 px-3 py-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">Account</p>
-                <p className="mt-1 text-lg font-bold text-emerald-950">{paymentResult.paybill.accountNumber}</p>
+                <p className="mt-1 break-all text-lg font-bold text-emerald-950">{paymentResult.paybill.accountNumber || "7929884#MS00000"}</p>
               </div>
               <div className="rounded-lg bg-emerald-50 px-3 py-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">Amount</p>
                 <p className="mt-1 text-lg font-bold text-emerald-950">KSh {Number(paymentResult.paybill.amount || paymentResult.amount || 0).toLocaleString()}</p>
               </div>
             </div>
-            <ol className="mt-4 list-decimal space-y-1 pl-5 text-sm text-slate-700">
-              {(paymentResult.paybill.steps || []).map((step) => (
+            <p className="mt-4 text-sm font-semibold text-slate-800">How to pay:</p>
+            <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-slate-700">
+              {(paymentResult.paybill.steps?.length ? paymentResult.paybill.steps : [
+                "Open M-PESA on your phone or SIM toolkit.",
+                "Select Lipa na M-PESA.",
+                "Select Pay Bill.",
+                "Enter the business number shown here.",
+                "Enter the account number shown here.",
+                "Enter the amount and confirm with your PIN.",
+                "Keep the M-PESA confirmation message for your records.",
+              ]).map((step) => (
                 <li key={step}>{step}</li>
               ))}
             </ol>
@@ -256,6 +270,8 @@ export default function SavingsContributionForm({ accessToken, user, onRefresh, 
           <p className="font-semibold">STK request sent to {phoneDigits}. Check your phone for the M-PESA PIN prompt.</p>
            {paymentResult.status === "SUCCESS" ? (
             <p className="mt-2 font-semibold text-emerald-700">Payment confirmed.</p>
+          ) : paymentResult.status === "FAILED" ? (
+            <p className="mt-2 font-semibold text-rose-700">{paymentResult.error || "Payment failed. Please retry or use Paybill."}</p>
           ) : (
             <p className="mt-2 text-sky-800">Waiting for M-PESA confirmation...</p>
           )}
