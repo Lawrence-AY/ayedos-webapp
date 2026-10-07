@@ -48,6 +48,7 @@ export default function UserDashboard() {
   const dashboardBasePath = getDashboardPath("MEMBER");
   const [refreshError, setRefreshError] = useState("");
   const requestVersion = useRef(0);
+  const refreshInFlight = useRef(false);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -98,12 +99,18 @@ export default function UserDashboard() {
   };
 
   async function loadDashboardData({ showLoading = true } = {}) {
+      // Do not let a slow refresh overlap a newer one and then replace fresh
+      // dashboard data with an older response.
+      if (refreshInFlight.current) return;
+      refreshInFlight.current = true;
       if (!accessToken) {
         setLoading(false);
+        refreshInFlight.current = false;
         return;
       }
       if (user?.mustChangePassword) {
         setLoading(false);
+        refreshInFlight.current = false;
         return;
       }
 
@@ -118,7 +125,10 @@ export default function UserDashboard() {
         getMyGuarantees(accessToken),
         getMemberProfile(accessToken),
       ]);
-      if (version !== requestVersion.current) return;
+      if (version !== requestVersion.current) {
+        refreshInFlight.current = false;
+        return;
+      }
       const labels = ["transactions", "loans", "share capital", "sessions", "notifications", "guarantees", "member balances"];
       const failed = results.flatMap((result, index) => result.status === "rejected" ? [labels[index]] : []);
       setRefreshError(failed.length ? `Unable to refresh ${failed.join(", ")}. Previously loaded values may be out of date.` : "");
@@ -157,6 +167,7 @@ export default function UserDashboard() {
         })),
       }));
       setLoading(false);
+      refreshInFlight.current = false;
     }
 
   useEffect(() => {
@@ -172,11 +183,18 @@ export default function UserDashboard() {
     if (accessToken) {
       intervalId = window.setInterval(() => {
         loadDashboardData({ showLoading: false });
-      }, 15000);
+      }, 5000);
     }
+    const refreshWhenVisible = () => {
+      if (!document.hidden) loadDashboardData({ showLoading: false });
+    };
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    window.addEventListener("focus", refreshWhenVisible);
     return () => {
       cancelled = true;
       if (intervalId) window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      window.removeEventListener("focus", refreshWhenVisible);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, user?.mustChangePassword]);
