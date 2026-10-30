@@ -5,6 +5,7 @@ import {
   Bell,
   BriefcaseBusiness,
   FileText,
+  FileSpreadsheet,
   Headphones,
   Landmark,
   LayoutDashboard,
@@ -68,6 +69,7 @@ const financeNavItems = [
   { label: "Salary Deductions", suffix: "deductions", icon: BriefcaseBusiness },
   { label: "Member Profiles", suffix: "members", icon: UsersRound },
   { label: "Dividends", suffix: "dividends", icon: PieChart },
+  { label: "Financial Records", suffix: "financial-records", icon: FileSpreadsheet },
   { label: "Reports & Analytics", suffix: "reports", icon: TrendingUp },
   { label: "Notifications", suffix: "notifications", icon: Bell },
 
