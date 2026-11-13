@@ -57,6 +57,7 @@ import { changePassword } from "../services/authService.js";
 import {
   approveLoan,
   disburseLoan,
+  updateLoanDisbursementStatus,
   getAllCompanies,
   getAllDeductions,
   getAllDividends,
@@ -546,7 +547,7 @@ export default function FinanceDashboard() {
   }
   async function handleApproveLoan(id) {
     if (!id) return null;
-    const confirmed = window.confirm("Approve this loan request? The member will be notified immediately.");
+    const confirmed = window.confirm("Confirm this loan application? It will be approved for disbursement, and the member will be notified.");
     if (!confirmed) return null;
     setApprovingLoanId(id);
     try {
@@ -556,7 +557,7 @@ export default function FinanceDashboard() {
         loans: current.loans.map((loan) => loan.id === id ? { ...loan, ...updated } : loan),
       }));
       await loadAllData({ showLoading: false });
-      toast.success("Loan approved. The member has been notified.");
+      toast.success("Loan application confirmed. Disbursement remains pending, and the member has been notified.");
       return updated;
     } catch (e) {
       toast.error(e.message || "Failed to approve loan");
@@ -589,6 +590,19 @@ export default function FinanceDashboard() {
       await loadAllData({ showLoading: false });
     } catch (e) {
       alert(e.message);
+    }
+  }
+  async function handleLoanDisbursementDecision(id, status) {
+    const verb = status === 'COMPLETE' ? 'confirm' : 'deny';
+    if (!window.confirm(`Mark this loan disbursement as ${status === 'COMPLETE' ? 'Complete' : 'Denied'}?`)) return null;
+    try {
+      const updated = await updateLoanDisbursementStatus(id, status, accessToken);
+      setData((current) => ({ ...current, loans: current.loans.map((loan) => loan.id === id ? { ...loan, ...updated } : loan) }));
+      toast.success(`Loan disbursement ${status === 'COMPLETE' ? 'confirmed' : 'denied'}.`);
+      return updated;
+    } catch (error) {
+      toast.error(error.message || `Failed to ${verb} disbursement`);
+      return null;
     }
   }
   async function handleWriteOffLoan(id) {
@@ -638,6 +652,7 @@ export default function FinanceDashboard() {
             onApproveLoan={handleApproveLoan}
             onRejectLoan={handleRejectLoan}
             onDisburseLoan={handleDisburseLoan}
+            onLoanDisbursementDecision={handleLoanDisbursementDecision}
             onWriteOffLoan={handleWriteOffLoan}
             approvingLoanId={approvingLoanId}
             accessToken={accessToken}
@@ -825,7 +840,8 @@ function NotificationsPanel({
     if (["ACTIVE", "DISBURSED"].includes(normalized)) return "DISBURSED";
     return normalized || "PENDING_FINANCE";
   };
-  const isActionableStatus = (status) => ["PENDING", "UNDER_REVIEW", "PENDING_FINANCE"].includes(String(status || "").toUpperCase());
+  const isApplicationDecisionPending = (status) => ["PENDING", "UNDER_REVIEW", "FULLY_COVERED"].includes(String(status || "").toUpperCase());
+  const isApplicationRejectable = (status) => ["PENDING_GUARANTORS", "PENDING", "UNDER_REVIEW", "FULLY_COVERED"].includes(String(status || "").toUpperCase());
   const interestGenerated = (() => {
     const amount = Number(selectedLoanDetails.principal || selectedLoanDetails.amount || 0);
     const rate = Number(selectedLoanDetails.interestRate ?? selectedLoanDetails.interest ?? 0);
@@ -1254,22 +1270,22 @@ function NotificationsPanel({
 
                 {isEmergencyLoan ? (
                   <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">
-                    Emergency loans are processed automatically after eligibility and risk checks. No manual finance action is required.
+                    Emergency loans are approved automatically after eligibility and risk checks. Finance should confirm disbursement after the funds have been physically transferred.
                   </div>
                 ) : (
                   <div className="flex gap-3">
                     <button
                       type="button"
-                      disabled={decisionBusy || approvingLoanId === (selectedLoanDetails.id || selectedLoanDetails.loanId) || !isActionableStatus(selectedLoanDetails.status)}
+                      disabled={decisionBusy || approvingLoanId === (selectedLoanDetails.id || selectedLoanDetails.loanId) || !isApplicationDecisionPending(selectedLoanDetails.status)}
                       onClick={() => decideLoan("approve")}
                       className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                     >
                       {decisionBusy || approvingLoanId === (selectedLoanDetails.id || selectedLoanDetails.loanId) ? <RefreshCw className="animate-spin" size={16} /> : <CheckCircle2 size={16} />}
-                      Approve
+                      Confirm
                     </button>
                     <button
                       type="button"
-                      disabled={decisionBusy || !isActionableStatus(selectedLoanDetails.status)}
+                      disabled={decisionBusy || !isApplicationRejectable(selectedLoanDetails.status)}
                       onClick={() => decideLoan("reject")}
                       className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                     >
@@ -1860,6 +1876,7 @@ function UnifiedLoansPage({
   onApproveLoan,
   onRejectLoan,
   onDisburseLoan,
+  onLoanDisbursementDecision,
   onWriteOffLoan,
   approvingLoanId,
   accessToken,
@@ -1936,8 +1953,12 @@ function UnifiedLoansPage({
     if (["ACTIVE", "DISBURSED"].includes(normalized)) return "DISBURSED";
     return normalized || "PENDING_FINANCE";
   };
-  const isActionableStatus = (status) => ["PENDING", "UNDER_REVIEW", "PENDING_FINANCE"].includes(String(status || "").toUpperCase());
-  const isDisbursableStatus = (status) => String(status || "").toUpperCase() === "APPROVED";
+  const isApplicationDecisionPending = (status) => ["PENDING", "UNDER_REVIEW", "FULLY_COVERED"].includes(String(status || "").toUpperCase());
+  const isApplicationRejectable = (status) => ["PENDING_GUARANTORS", "PENDING", "UNDER_REVIEW", "FULLY_COVERED"].includes(String(status || "").toUpperCase());
+  const isEmergencyAutoApproved = (loan) => String(loan?.type || loan?.loanType || "").toUpperCase() === "EMERGENCY"
+    && (loan?.autoApproved === true || ["APPROVED", "AUTO_APPROVED_EMERGENCY"].includes(String(loan?.status || "").toUpperCase()));
+  const isDisbursableStatus = (loan) => String(loan?.status || "").toUpperCase() === "APPROVED"
+    && loan?.guaranteeCoverageSatisfied === true;
   const loanTypeLabel = (type) => `${String(type || "Loan").charAt(0)}${String(type || "Loan").slice(1).toLowerCase()} Loan`;
   const totalInterestForLoan = (loan) => {
     const amount = Number(loan?.principal || loan?.amount || 0);
@@ -1974,13 +1995,65 @@ function UnifiedLoansPage({
     },
     {
       key: "status",
-      label: "Status",
-      render: (v) => <StatusBadge status={v || "Pending"} />,
-      csv: (v) => v || "Pending",
+      label: "Repayment Status",
+      render: (_v, row) => {
+        const repaymentStatus = ["COMPLETED", "CLOSED", "PAID"].includes(String(row.status || "").toUpperCase())
+          ? "Closed"
+          : ["ACTIVE", "DISBURSED", "OVERDUE"].includes(String(row.status || "").toUpperCase()) ? "Active" : "—";
+        return repaymentStatus === "—" ? <span className="text-slate-400">—</span> : <StatusBadge status={repaymentStatus} />;
+      },
+      csv: (_v, row) => ["COMPLETED", "CLOSED", "PAID"].includes(String(row.status || "").toUpperCase()) ? "Closed" : ["ACTIVE", "DISBURSED", "OVERDUE"].includes(String(row.status || "").toUpperCase()) ? "Active" : "",
+    },
+    {
+      key: "applicationStatus",
+      label: "Application Decision",
+      render: (_v, row) => {
+        const status = String(row.status || "").toUpperCase();
+        const label = status === "AUTO_APPROVED_EMERGENCY" ? "Auto-approved"
+          : status === "PENDING_GUARANTORS" ? "Pending guarantors"
+          : status === "FULLY_COVERED" ? "Fully Guaranteed"
+            : ["PENDING", "UNDER_REVIEW"].includes(status) ? "Pending Finance"
+            : status === "APPROVED" ? "Approved"
+              : status === "REJECTED" ? "Rejected" : "—";
+        return label === "—" ? <span className="text-slate-400">—</span> : <StatusBadge status={label} />;
+      },
+      csv: (_v, row) => {
+        const status = String(row.status || "").toUpperCase();
+        return status === "AUTO_APPROVED_EMERGENCY" ? "Auto-approved"
+          : status === "PENDING_GUARANTORS" ? "Pending guarantors"
+          : status === "FULLY_COVERED" ? "Fully Guaranteed"
+            : ["PENDING", "UNDER_REVIEW"].includes(status) ? "Pending Finance"
+            : ["APPROVED", "REJECTED"].includes(status) ? status : "";
+      },
+    },
+    {
+      key: "guaranteeProgress",
+      label: "Guarantee Progress",
+      render: (_v, row) => {
+        const progress = row.guaranteeProgress || {};
+        const covered = Number(progress.totalGuaranteed || 0);
+        const required = Number(row.amount || row.principal || 0);
+        return <span className={row.guaranteeCoverageSatisfied ? "font-semibold text-emerald-700" : "text-slate-600"}>{formatCurrency(covered)} / {formatCurrency(required)}{row.guaranteeCoverageSatisfied ? " · Fully guaranteed" : ""}</span>;
+      },
+      csv: (_v, row) => `${Number(row.guaranteeProgress?.totalGuaranteed || 0)} / ${Number(row.amount || row.principal || 0)}`,
+    },
+    {
+      key: "disbursementStatus",
+      label: "Disbursement",
+      render: (v, row) => {
+        const state = String(v || "PENDING").toUpperCase();
+        if (state === "PENDING" && !["APPROVED", "AUTO_APPROVED_EMERGENCY", "ACTIVE", "DISBURSED"].includes(String(row.status || "").toUpperCase())) return <span className="text-slate-400">—</span>;
+        return <StatusBadge status={({ PENDING: "Pending", COMPLETE: "Complete", DENIED: "Denied" })[state] || "Pending"} />;
+      },
+      csv: (v, row) => {
+        const state = String(v || "PENDING").toUpperCase();
+        if (state === "PENDING" && !["APPROVED", "AUTO_APPROVED_EMERGENCY", "ACTIVE", "DISBURSED"].includes(String(row.status || "").toUpperCase())) return "";
+        return ({ PENDING: "Pending", COMPLETE: "Complete", DENIED: "Denied" })[state] || "Pending";
+      },
     },
     {
       key: "disbursedDate",
-      label: "Disbursed",
+      label: "Disbursed Date",
       render: (v) => formatDateSafe(v),
       csv: (v) => formatDateSafe(v),
     },
@@ -2071,6 +2144,7 @@ function UnifiedLoansPage({
         description="Loan lifecycle tracking"
         search={search}
         onSearch={setSearch}
+        dividedColumns
         columns={[
           ...loanColumns,
           {
@@ -2080,34 +2154,36 @@ function UnifiedLoansPage({
             render: (v, r) => {
               const s = String(r.status || "").toUpperCase();
               const approving = approvingLoanId === v;
+              const emergencyAutoApproved = isEmergencyAutoApproved(r);
+              const canConfirmDisbursement = emergencyAutoApproved || isDisbursableStatus(r);
               return (
                 <div className="flex flex-wrap gap-1">
-                  {isActionableStatus(s) && (
+                  {!emergencyAutoApproved && (isApplicationDecisionPending(s) || isApplicationRejectable(s)) && (
                     <>
-                      <button
+                      {isApplicationDecisionPending(s) ? <button
                         disabled={approving}
                         onClick={() => onApproveLoan?.(v)}
-                        className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 disabled:opacity-50"
+                        className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
                       >
                         {approving ? <RefreshCw className="animate-spin" size={12} /> : null}
-                        {approving ? "Approving" : "Approve"}
-                      </button>
-                      <button
+                        {approving ? "Confirming..." : "Confirm"}
+                      </button> : null}
+                      {isApplicationRejectable(s) ? <button
                         onClick={() => onRejectLoan?.(v)}
-                        className="text-xs font-semibold text-rose-700"
+                        className="rounded-md border border-rose-300 px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                        title={s === "PENDING_GUARANTORS" ? "Reject application" : "Reject application decision"}
                       >
                         Reject
-                      </button>
+                      </button> : null}
                     </>
                   )}
-                  {isDisbursableStatus(s) && (
-                    <button
-                      onClick={() => onDisburseLoan?.(v)}
-                      className="text-xs font-semibold text-sky-700"
-                    >
-                      Disburse
-                    </button>
+                  {canConfirmDisbursement && String(r.disbursementStatus || "PENDING").toUpperCase() === "PENDING" && (
+                    <>
+                      <button onClick={() => onLoanDisbursementDecision?.(v, "COMPLETE")} className="rounded-md bg-sky-700 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-sky-800">Confirm Disbursement</button>
+                      {!emergencyAutoApproved ? <button onClick={() => onLoanDisbursementDecision?.(v, "DENIED")} className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">Reject disbursement</button> : null}
+                    </>
                   )}
+                  {String(r.disbursementStatus || "PENDING").toUpperCase() !== "PENDING" && <span className="text-xs font-semibold text-slate-500">Disbursement recorded</span>}
                   {s === "REJECTED" && (
                     <span className="text-xs font-semibold text-slate-500">Decision recorded</span>
                   )}
@@ -2187,9 +2263,17 @@ function UnifiedLoansPage({
                   <div><dt className="text-slate-500">Current status</dt><dd className="mt-1"><StatusBadge status={selectedLoanRequest.financeStatus || displayLoanStatus(selectedLoanRequest.status)} /></dd></div>
                 </dl>
               </div>
-              {isActionableStatus(selectedLoanRequest.status) ? (
+              {(selectedLoanRequest.guarantors?.length > 0 || Number(selectedLoanRequest.selfGuaranteedAmount || 0) > 0) ? <div className="rounded-lg border border-slate-200 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div><h4 className="text-sm font-semibold text-slate-950">Guarantor confirmations</h4><p className="mt-1 text-xs text-slate-500">{selectedLoanRequest.guaranteeCoverageSatisfied ? "Full guarantee requirement satisfied." : "Waiting for enough accepted guarantees."}</p></div>
+                  <div className="text-right text-sm font-semibold text-slate-800">{formatCurrency(selectedLoanRequest.guaranteeProgress?.totalGuaranteed || 0)} / {formatCurrency(selectedLoanRequest.amount || selectedLoanRequest.principal || 0)}</div>
+                </div>
+                {Number(selectedLoanRequest.selfGuaranteedAmount || 0) > 0 ? <div className="mt-3 flex justify-between gap-3 rounded-md bg-slate-50 px-3 py-2 text-sm"><span>Applicant self-guarantee</span><span>{formatCurrency(selectedLoanRequest.selfGuaranteedAmount)} · Confirmed</span></div> : null}
+                {selectedLoanRequest.guarantors?.length ? <div className="mt-3 overflow-x-auto rounded-md border border-slate-200"><table className="min-w-full text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-3 py-2">Guarantor</th><th className="px-3 py-2">Member Number</th><th className="px-3 py-2">Amount</th><th className="px-3 py-2">Decision</th></tr></thead><tbody className="divide-y divide-slate-200">{selectedLoanRequest.guarantors.map((guarantor) => <tr key={guarantor.id}><td className="px-3 py-2 font-medium">{guarantor.memberName || "Member"}</td><td className="px-3 py-2">{guarantor.memberNumber || "—"}</td><td className="px-3 py-2">{formatCurrency(guarantor.amount)}</td><td className="px-3 py-2"><StatusBadge status={String(guarantor.status || "PENDING").replaceAll("_", " ")} /></td></tr>)}</tbody></table></div> : <p className="mt-3 text-sm text-slate-500">No external guarantors are required.</p>}
+              </div> : null}
+              {(isApplicationDecisionPending(selectedLoanRequest.status) || isApplicationRejectable(selectedLoanRequest.status)) ? (
                 <div className="flex gap-3">
-                  <button
+                  {isApplicationDecisionPending(selectedLoanRequest.status) ? <button
                     type="button"
                     disabled={approvingLoanId === selectedLoanRequest.id}
                     onClick={async () => {
@@ -2199,9 +2283,9 @@ function UnifiedLoansPage({
                     className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                   >
                     {approvingLoanId === selectedLoanRequest.id ? <RefreshCw className="animate-spin" size={16} /> : <CheckCircle2 size={16} />}
-                    Approve
-                  </button>
-                  <button
+                    Confirm
+                  </button> : null}
+                  {isApplicationRejectable(selectedLoanRequest.status) ? <button
                     type="button"
                     onClick={async () => {
                       const updated = await onRejectLoan?.(selectedLoanRequest.id);
@@ -2211,22 +2295,24 @@ function UnifiedLoansPage({
                   >
                     <XCircle size={16} />
                     Reject
-                  </button>
+                  </button> : null}
                 </div>
               ) : (
                 <div className="flex gap-3">
                   <div className="flex min-h-11 flex-1 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700">
                     {displayLoanStatus(selectedLoanRequest.status).replace(/_/g, " ")}
                   </div>
-                  {isDisbursableStatus(selectedLoanRequest.status) ? (
-                    <button
-                      type="button"
-                      onClick={() => onDisburseLoan?.(selectedLoanRequest.id)}
-                      className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white"
-                    >
-                      <Send size={16} />
-                      Disburse
-                    </button>
+                  {(isDisbursableStatus(selectedLoanRequest) || isEmergencyAutoApproved(selectedLoanRequest)) && String(selectedLoanRequest.disbursementStatus || "PENDING").toUpperCase() === "PENDING" ? (
+                    <div className="flex gap-2">
+                      <button type="button" onClick={async () => {
+                        const updated = await onLoanDisbursementDecision?.(selectedLoanRequest.id, "COMPLETE");
+                        if (updated) setSelectedLoanRequest((current) => ({ ...current, ...updated }));
+                      }} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-sky-700 px-4 py-2 text-sm font-semibold text-white"><CheckCircle2 size={16} />Confirm Disbursement</button>
+                      {!isEmergencyAutoApproved(selectedLoanRequest) ? <button type="button" onClick={async () => {
+                        const updated = await onLoanDisbursementDecision?.(selectedLoanRequest.id, "DENIED");
+                        if (updated) setSelectedLoanRequest((current) => ({ ...current, ...updated }));
+                      }} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"><XCircle size={16} />Reject disbursement</button> : null}
+                    </div>
                   ) : null}
                 </div>
               )}

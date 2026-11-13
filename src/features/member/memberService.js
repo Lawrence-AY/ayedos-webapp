@@ -108,6 +108,12 @@ export async function getMyLoans(accessToken) {
   return unwrapEnvelopeData(res.json)
 }
 
+export async function getMyLoanEligibility(accessToken) {
+  const res = await apiRequest('/api/member/loans/eligibility', { method: 'GET', accessToken, cache: false })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to fetch loan eligibility')
+  return unwrapEnvelopeData(res.json)
+}
+
 export async function getWalletCashOutSummary(accessToken) {
   const res = await apiRequest('/api/member/wallet/cash-out', { method: 'GET', accessToken, cache: false })
   if (!res.ok) throw new Error(res.json?.message || 'Failed to fetch cash-out balance')
@@ -249,18 +255,20 @@ export async function searchQualifiedGuarantors(query, accessToken) {
   return unwrapEnvelopeData(res.json)
 }
 
-export async function getGuarantorRequest(token) {
+export async function getGuarantorRequest(token, accessToken) {
   const res = await apiRequest(`/api/loans/guarantor-requests/${encodeURIComponent(token)}`, {
     method: 'GET',
+    accessToken,
     cache: false,
   })
   if (!res.ok) throw new Error(res.json?.message || 'Failed to fetch guarantor request')
   return unwrapEnvelopeData(res.json)
 }
 
-export async function respondToGuarantorRequest(token, decision, amount) {
+export async function respondToGuarantorRequest(token, decision, amount, accessToken) {
   const res = await apiRequest(`/api/loans/guarantor-requests/${encodeURIComponent(token)}/respond`, {
     method: 'POST',
+    accessToken,
     body: { decision, ...(amount ? { amount: Number(amount) } : {}) },
     cache: false,
   })

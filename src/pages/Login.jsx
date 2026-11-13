@@ -44,6 +44,20 @@ export default function Login() {
   const otpInputRef = useRef(null);
   const otpVerifyInFlightRef = useRef(false);
   const otpVerifyAbortRef = useRef(null);
+  const getLoginDestination = (loggedInUser) => {
+    const requestedReturnTo = location.state?.returnTo;
+    const defaultDestination = getPostLoginPath(loggedInUser);
+    const role = String(loggedInUser?.role || "").toUpperCase();
+    const canReturnToGuarantorRequest = ["MEMBER", "EMPLOYEE"].includes(role)
+      && !loggedInUser?.mustChangePassword
+      && defaultDestination !== "/onboarding";
+    const isGuarantorReturn = typeof requestedReturnTo === "string"
+      && (requestedReturnTo.startsWith("/guarantor-request/")
+        || requestedReturnTo.startsWith("/dashboard/user/loans?guarantorRequest="));
+    return canReturnToGuarantorRequest && isGuarantorReturn
+      ? requestedReturnTo
+      : defaultDestination;
+  };
   const maskEmail = (email) => {
   const [localPart, domain] = email.split('@');
   if (!domain) return email;
@@ -88,7 +102,7 @@ export default function Login() {
         signal: controller.signal,
       });
       setOtp("");
-      navigate(getPostLoginPath(verifiedUser), { replace: true });
+      navigate(getLoginDestination(verifiedUser), { replace: true });
     } catch (err) {
       if (err?.name !== "CanceledError" && err?.kind !== "cancelled") {
         if (err?.status === 401) {
@@ -135,7 +149,7 @@ export default function Login() {
         setOtpMessage("We sent a verification code to your registered phone and email.");
         return;
       }
-      navigate(getPostLoginPath(loggedInUser), { replace: true });
+      navigate(getLoginDestination(loggedInUser), { replace: true });
     } catch (err) {
       if (err?.status === 429 || err?.isRateLimited) {
         const seconds = Math.max(Number(err.retryAfterSeconds) || 60, 30);

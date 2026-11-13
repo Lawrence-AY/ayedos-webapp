@@ -137,6 +137,14 @@ export async function disburseLoan(id, accessToken) {
   return unwrapEnvelopeData(res.json)
 }
 
+export async function updateLoanDisbursementStatus(id, status, accessToken) {
+  const res = await apiRequest(`/api/finance/loans/${id}/disbursement-status`, {
+    method: 'POST', accessToken, body: { status }, cache: false, timeoutMs: 60000,
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to update loan disbursement status')
+  return unwrapEnvelopeData(res.json)
+}
+
 export async function writeOffLoan(id, reason, accessToken) {
   const res = await apiRequest(`/api/finance/loans/${id}/write-off`, { method: 'POST', accessToken, body: { reason } })
   if (!res.ok) throw new Error(res.json?.message || 'Failed to write off loan')

@@ -248,7 +248,7 @@ export function Toolbar({ search, onSearch, placeholder = "Search records...", a
   );
 }
 
-export function DataTable({ title, description, columns, data = [], emptyTitle, emptyDescription, search, onSearch, pageSize = 10, exportFilename, onFilter, onRowClick }) {
+export function DataTable({ title, description, columns, data = [], emptyTitle, emptyDescription, search, onSearch, pageSize = 10, exportFilename, onFilter, onRowClick, dividedColumns = true }) {
   const [page, setPage] = useState(1);
   const totalPages = Math.max(1, Math.ceil(data.length / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -285,13 +285,13 @@ export function DataTable({ title, description, columns, data = [], emptyTitle, 
               <thead className="sticky top-0 z-10">
                 <tr className="bg-slate-50">
                   {columns.map((column, index) => (
-                    <th key={`${column.key}-${index}`} scope="col" className="min-w-36 whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    <th key={`${column.key}-${index}`} scope="col" className={`min-w-36 whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-600 ${dividedColumns && index < columns.length - 1 ? "border-r border-slate-200 dark:border-slate-700" : ""}`}>
                       {column.label}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className={`divide-y ${dividedColumns ? "divide-slate-200" : "divide-slate-100"}`}>
                 {pageRows.map((row, index) => (
                   <tr
                     key={row.id || row._id || index}
@@ -302,7 +302,7 @@ export function DataTable({ title, description, columns, data = [], emptyTitle, 
                       <td
                         key={`${column.key}-${columnIndex}`}
                         onClick={column.stopRowClick ? (event) => event.stopPropagation() : undefined}
-                        className="max-w-72 truncate px-4 py-3 text-sm text-slate-700"
+                        className={`max-w-72 truncate px-4 py-3 text-sm text-slate-700 ${dividedColumns && columnIndex < columns.length - 1 ? "border-r border-slate-200 dark:border-slate-700" : ""}`}
                         title={String(row[column.key] ?? "")}
                       >
                         {column.render ? column.render(row[column.key], row) : (row[column.key] ?? "-")}
