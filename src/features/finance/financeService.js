@@ -86,16 +86,24 @@ export async function previewFinancialCsvImport(csv, accessToken) {
   return unwrapEnvelopeData(res.json)
 }
 
-export async function commitFinancialCsvImport(csv, accessToken) {
+export async function commitFinancialCsvImport(csv, accessToken, importMode = 'financial') {
   const res = await apiRequest('/api/finance/financial-import/commit', {
     method: 'POST',
     accessToken,
-    body: { csv },
+    body: { csv, importMode },
     cache: false,
     retry: false,
     timeoutMs: 60000,
   })
   if (!res.ok) throw new Error(res.json?.message || 'Failed to import financial records')
+  return unwrapEnvelopeData(res.json)
+}
+
+export async function commitSaccoLedger(records, sourceFile, accessToken) {
+  const res = await apiRequest('/api/finance/sacco-ledger/commit', {
+    method: 'POST', accessToken, body: { records, sourceFile }, cache: false, retry: false, timeoutMs: 60000,
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to import SACCO workbook ledger')
   return unwrapEnvelopeData(res.json)
 }
 

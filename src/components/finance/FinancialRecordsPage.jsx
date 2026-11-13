@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { Download, FileSpreadsheet, Upload } from "lucide-react";
 import { toast } from "sonner";
-import { commitFinancialCsvImport } from "../../features/finance/financeService.js";
+import { commitFinancialCsvImport, commitSaccoLedger } from "../../features/finance/financeService.js";
 import { rowsToCsv } from "../../utils/spreadsheetImport.js";
 
 const SHEETS = ["Bio Data", "Share Capital", "Savings", "Employer's Contribution", "Member Total", "Loan Account", "Sacco Account", "SAO (Money Movement In/Out)"];
@@ -11,11 +11,36 @@ const normalizeSheet = (name) => String(name || "").toLowerCase().replace(/[^a-z
 const SHEET_ALIASES = { "employercontribution": "Employer's Contribution", "employercontributions": "Employer's Contribution", "sao": "SAO (Money Movement In/Out)", "moneyinout": "SAO (Money Movement In/Out)", "saomovement": "SAO (Money Movement In/Out)" };
 const standardSheetName = (name) => {
   const normalized = normalizeSheet(name);
-  if (normalized.includes("sao") || normalized.includes("moneymovement") || normalized.includes("moneyinout")) return "SAO (Money Movement In/Out)";
+  if (normalized === "soa" || normalized === "sao" || normalized.includes("moneymovement") || normalized.includes("moneyinout")) return "SAO (Money Movement In/Out)";
   if (normalized.includes("employer") && normalized.includes("contribution")) return "Employer's Contribution";
   return SHEETS.find((sheet) => normalizeSheet(sheet) === normalized) || SHEET_ALIASES[normalized] || name;
 };
 const HEADER_HINTS = ["membernumber", "memberno", "memberid", "saccomemberno", "registrationnumber", "email", "staffid", "name", "amountpaid", "loanrepayment", "savings", "sharecapital", "employercontribution", "employercontrib", "interest", "balance", "paymentdate", "monthofpayment", "moneyin", "moneyout", "amount", "date", "description", "narration", "particulars", "transactiontype", "reference"];
+const normalizeHeader = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+const valueByHeaders = (row, aliases) => {
+  const wanted = aliases.map(normalizeHeader);
+  const entry = Object.entries(row).find(([key]) => wanted.includes(normalizeHeader(key)));
+  return String(entry?.[1] ?? "").trim();
+};
+const validateBioRow = (row) => Boolean(valueByHeaders(row, ["memberNumber", "memberNo", "memberId", "registrationNumber"]) && valueByHeaders(row, ["name", "fullName", "memberName"]));
+const validateContributionRow = (row) => Boolean(valueByHeaders(row, ["memberNumber", "memberNo", "memberId", "registrationNumber", "staffId", "payrollNumber", "name", "memberName"]));
+const validateLoanRow = (row) => validateContributionRow(row) && Boolean(valueByHeaders(row, ["amount", "loanAmount", "loanBalance", "outstandingLoan", "loanRepayment", "amountPaid", "balance"]));
+const validateSummaryRow = (row) => validateContributionRow(row);
+const validateBankStatementRow = (row) => Boolean(
+  valueByHeaders(row, ["payer", "from", "sender", "source"]) &&
+  valueByHeaders(row, ["beneficiary", "to", "recipient", "destination"]) &&
+  valueByHeaders(row, ["date", "transactionDate", "paymentDate"]),
+);
+const SHEET_VALIDATORS = {
+  "Bio Data": validateBioRow,
+  "Share Capital": validateContributionRow,
+  Savings: validateContributionRow,
+  "Employer's Contribution": validateContributionRow,
+  "Loan Account": validateLoanRow,
+  // SACCO account rows are system-level records and do not require a member key.
+  "Sacco Account": (row) => Object.values(row || {}).some((value) => String(value ?? "").trim()),
+  "SAO (Money Movement In/Out)": validateBankStatementRow,
+};
 const matrixToRecords = (matrix) => {
   const rows = matrix.filter((row) => row.some((cell) => String(cell ?? "").trim()));
   if (!rows.length) return [];
@@ -37,12 +62,18 @@ const sheetTotal = (rows = []) => rows.reduce((sum, row) => sum + Object.entries
 
 const parseWorkbook = async (file) => {
   const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
-  const sheets = Object.fromEntries(workbook.SheetNames.map((name) => [standardSheetName(name), matrixToRecords(XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1, defval: "", raw: false }))]));
+  const sheets = Object.fromEntries(workbook.SheetNames.map((name) => {
+    const standardName = standardSheetName(name);
+    const rows = matrixToRecords(XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1, defval: "", raw: false }));
+    const validator = SHEET_VALIDATORS[standardName];
+    return [standardName, validator ? rows.filter(validator) : rows];
+  }));
   // Some Sacco workbooks keep the eight standard sheets in fixed order but
   // use an abbreviated or blank SAO tab name. Preserve that data as SAO.
   const saoSource = workbook.SheetNames[7];
   if (!(sheets["SAO (Money Movement In/Out)"] || []).length && saoSource) {
-    sheets["SAO (Money Movement In/Out)"] = matrixToRecords(XLSX.utils.sheet_to_json(workbook.Sheets[saoSource], { header: 1, defval: "", raw: false }));
+    const saoRows = matrixToRecords(XLSX.utils.sheet_to_json(workbook.Sheets[saoSource], { header: 1, defval: "", raw: false }));
+    sheets["SAO (Money Movement In/Out)"] = saoRows.filter(SHEET_VALIDATORS["SAO (Money Movement In/Out)"]);
   }
   return sheets;
 };
@@ -65,6 +96,7 @@ export default function FinancialRecordsPage({ data, accessToken, onRefresh }) {
   const [session, setSession] = useState(null);
   const [activeSheet, setActiveSheet] = useState(SHEETS[0]);
   const [busy, setBusy] = useState(false);
+  const [importMode, setImportMode] = useState("financial");
   const [page, setPage] = useState(0);
   const [history, setHistory] = useState([]);
   const rows = session?.sheets?.[activeSheet] || [];
@@ -104,13 +136,18 @@ export default function FinancialRecordsPage({ data, accessToken, onRefresh }) {
     try {
       setBusy(true);
       const allRows = Object.entries(session.sheets).flatMap(([sheet, items]) => items.map((row) => ({ Sheet: sheet, ...row })));
-      const result = await commitFinancialCsvImport(rowsToCsv(allRows), accessToken);
-      setHistory((items) => [{ id: crypto.randomUUID(), fileName: session.fileName, uploadedBy: "Current user", createdAt: new Date().toISOString(), total: allRows.length, status: "Success", result }, ...items]);
-      toast.success(`Imported ${result?.imported?.length || allRows.length} financial records`);
+      const result = importMode === "financial"
+        ? await commitFinancialCsvImport(rowsToCsv(allRows), accessToken, "financial")
+        : await commitSaccoLedger(allRows.map(({ Sheet, ...row }) => ({ sheet: Sheet, row })), session.fileName, accessToken);
+      setHistory((items) => [{ id: result?.importId || crypto.randomUUID(), fileName: session.fileName, uploadedBy: "Current user", createdAt: new Date().toISOString(), total: allRows.length, status: "Success", result }, ...items]);
+      toast.success(importMode === "financial"
+        ? `Imported ${result?.imported?.length || 0} records. Employee balances updated; non-employee records archived for history.`
+        : `Archived ${result?.memberCount || 0} workbook ledger records for Admin/Finance viewing.`);
       onRefresh?.();
     } catch (error) {
-      setHistory((items) => [{ id: crypto.randomUUID(), fileName: session.fileName, uploadedBy: "Current user", createdAt: new Date().toISOString(), total: totalRows, status: "Failed" }, ...items]);
-      toast.error(error.message || "Financial import failed");
+      const message = error?.message || error?.response?.data?.message || "Financial import failed";
+      setHistory((items) => [{ id: crypto.randomUUID(), fileName: session.fileName, uploadedBy: "Current user", createdAt: new Date().toISOString(), total: totalRows, status: "Failed", error: message }, ...items]);
+      toast.error(message);
     } finally { setBusy(false); }
   }
 
@@ -130,10 +167,10 @@ export default function FinancialRecordsPage({ data, accessToken, onRefresh }) {
 
   return <div className="space-y-6">
     <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">Finance Portal</p><h1 className="text-2xl font-bold text-slate-950 dark:text-white">Financial Records</h1><p className="mt-1 text-sm text-slate-500">Stage, review, import, and export the master financial workbook.</p></div><button type="button" onClick={exportMaster} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white"><Download size={16}/>Export Master Financial Record</button></div>
-    <section className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-6 shadow-sm dark:border-emerald-900 dark:from-emerald-950/30 dark:to-slate-900"><div className="flex flex-wrap items-center justify-between gap-4"><div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-white shadow-sm dark:bg-slate-800"><FileSpreadsheet className="text-emerald-700" size={24}/></span><div><h2 className="font-bold">Workbook Upload & Preview</h2><p className="text-sm text-slate-500">Upload, review the 8 sheets, then confirm the import.</p></div></div><div className="flex flex-wrap items-center gap-2">{session ? <span className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-emerald-800 shadow-sm dark:bg-slate-800 dark:text-emerald-300">{session.fileName} · {totalRows} parsed records</span> : null}<label className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white"><Upload size={16}/>{session ? "Replace workbook" : busy ? "Processing..." : "Choose workbook"}<input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFile}/></label>{session ? <button type="button" onClick={() => { setSession(null); setPage(0); }} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">Clear</button> : null}</div></div>
+    <section className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-6 shadow-sm dark:border-emerald-900 dark:from-emerald-950/30 dark:to-slate-900"><div className="flex flex-wrap items-center justify-between gap-4"><div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-white shadow-sm dark:bg-slate-800"><FileSpreadsheet className="text-emerald-700" size={24}/></span><div><h2 className="font-bold">Workbook Upload & Preview</h2><p className="text-sm text-slate-500">Upload, review the 8 sheets, then confirm the import.</p></div></div><div className="flex flex-wrap items-center gap-2"><label className="text-xs font-semibold text-slate-600">Import as<select value={importMode} onChange={(event) => setImportMode(event.target.value)} className="ml-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold dark:border-slate-700 dark:bg-slate-800"><option value="financial">Financial records</option><option value="ledger">SACCO ledger (Admin/Finance archive)</option></select></label>{session ? <span className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-emerald-800 shadow-sm dark:bg-slate-800 dark:text-emerald-300">{session.fileName} · {totalRows} parsed records</span> : null}<label className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white"><Upload size={16}/>{session ? "Replace workbook" : busy ? "Processing..." : "Choose workbook"}<input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFile}/></label>{session ? <button type="button" onClick={() => { setSession(null); setPage(0); }} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">Clear</button> : null}</div></div>
     </section>
     <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{SHEETS.map((name, index) => { const items = cardRows[name] || []; const total = sheetTotal(items); const hasTotal = items.some((row) => Object.keys(row).some((key) => moneyKeys.some((hint) => normalizeSheet(key).includes(normalizeSheet(hint))))); return <button type="button" key={name} onClick={() => { setActiveSheet(name); setPage(0); document.getElementById("financial-records-viewer")?.scrollIntoView({ behavior: "smooth", block: "start" }); }} className={`group rounded-2xl border p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-slate-700 dark:bg-slate-900 ${activeSheet === name ? "border-emerald-500 bg-emerald-50/70 ring-2 ring-emerald-100 dark:bg-emerald-950/30" : "bg-white"}`}><div className="flex items-start justify-between"><span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-100 text-xl dark:bg-emerald-950/50">{cardIcons[index]}</span><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{items.length} rows</span></div><h3 className="mt-4 font-bold text-slate-900 dark:text-white">{name}</h3><p className="mt-1 min-h-10 text-xs leading-5 text-slate-500">{cardDescriptions[name]}</p>{hasTotal ? <p className="mt-3 text-lg font-bold text-emerald-700">KES {total.toLocaleString("en-KE", { maximumFractionDigits: 2 })}</p> : <p className="mt-3 text-xs font-semibold text-slate-400">Ready for workbook data</p>}</button>; })}</section>
     {session && <section id="financial-records-viewer" className="rounded-xl border bg-white p-5 dark:border-slate-700 dark:bg-slate-900"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-bold">Tabbed Workbook Viewer</h2><p className="text-xs text-slate-500">{session.fileName} · {totalRows} parsed records</p></div><button type="button" disabled={busy} onClick={commit} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Confirm Import</button></div><div className="mt-4 flex gap-2 overflow-x-auto border-b pb-2">{SHEETS.map((name) => <button type="button" key={name} onClick={() => { setActiveSheet(name); setPage(0); }} className={`whitespace-nowrap rounded-t px-3 py-2 text-sm font-semibold ${activeSheet === name ? "border-b-2 border-emerald-600 text-emerald-700" : "text-slate-500"}`}>{name}</button>)}</div><div className="mt-4 overflow-x-auto"><table className="min-w-full text-left text-sm"><thead><tr className="bg-[#D9EAD3]">{Object.keys(rows[0] || { "No data": "" }).map((key) => <th key={key} className="px-3 py-2 font-bold">{key}</th>)}</tr></thead><tbody>{visibleRows.map((row, index) => <tr key={index} className="border-b last:border-0">{Object.keys(rows[0] || { "No data": "" }).map((key) => <td key={key} className="px-3 py-2">{String(row[key] ?? "")}</td>)}</tr>)}</tbody></table></div><div className="mt-3 flex items-center justify-between text-xs text-slate-500"><span>Showing {rows.length ? page * pageSize + 1 : 0}-{Math.min((page + 1) * pageSize, rows.length)} of {rows.length}</span><div className="flex gap-2"><button type="button" disabled={page === 0} onClick={() => setPage((value) => value - 1)} className="rounded border px-2 py-1 disabled:opacity-40">Previous</button><button type="button" disabled={(page + 1) * pageSize >= rows.length} onClick={() => setPage((value) => value + 1)} className="rounded border px-2 py-1 disabled:opacity-40">Next</button></div></div></section>}
-    <section className="rounded-xl border bg-white p-5 dark:border-slate-700 dark:bg-slate-900"><h2 className="font-bold">Import History Log</h2><div className="mt-3 overflow-x-auto"><table className="min-w-full text-left text-sm"><thead><tr className="border-b text-xs uppercase text-slate-500"><th className="px-3 py-2">Import ID</th><th className="px-3 py-2">File Name</th><th className="px-3 py-2">Uploaded By</th><th className="px-3 py-2">Date/Time</th><th className="px-3 py-2">Records</th><th className="px-3 py-2">Status</th></tr></thead><tbody>{history.map((item) => <tr key={item.id} className="border-b"><td className="px-3 py-2 font-mono text-xs">{item.id.slice(0, 8)}</td><td className="px-3 py-2">{item.fileName}</td><td className="px-3 py-2">{item.uploadedBy}</td><td className="px-3 py-2">{new Date(item.createdAt).toLocaleString("en-KE")}</td><td className="px-3 py-2">{item.total}</td><td className="px-3 py-2">{item.status}</td></tr>)}{!history.length && <tr><td colSpan="6" className="px-3 py-8 text-center text-slate-500">No workbook imports in this session.</td></tr>}</tbody></table></div></section>
+    <section className="rounded-xl border bg-white p-5 dark:border-slate-700 dark:bg-slate-900"><h2 className="font-bold">Import History Log</h2><div className="mt-3 overflow-x-auto"><table className="min-w-full text-left text-sm"><thead><tr className="border-b text-xs uppercase text-slate-500"><th className="px-3 py-2">Import ID</th><th className="px-3 py-2">File Name</th><th className="px-3 py-2">Uploaded By</th><th className="px-3 py-2">Date/Time</th><th className="px-3 py-2">Records</th><th className="px-3 py-2">Status</th></tr></thead><tbody>{history.map((item) => <tr key={item.id} className="border-b"><td className="px-3 py-2 font-mono text-xs">{item.id.slice(0, 8)}</td><td className="px-3 py-2">{item.fileName}</td><td className="px-3 py-2">{item.uploadedBy}</td><td className="px-3 py-2">{new Date(item.createdAt).toLocaleString("en-KE")}</td><td className="px-3 py-2">{item.total}</td><td className="px-3 py-2" title={item.error || ""}>{item.status}{item.error ? <span className="ml-2 text-xs text-rose-600">({item.error})</span> : null}</td></tr>)}{!history.length && <tr><td colSpan="6" className="px-3 py-8 text-center text-slate-500">No workbook imports in this session.</td></tr>}</tbody></table></div></section>
   </div>;
 }
