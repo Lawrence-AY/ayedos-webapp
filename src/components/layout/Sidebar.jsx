@@ -53,6 +53,7 @@ const adminNavItems = [
   { label: "Member Management", suffix: "members", icon: UsersRound },
   { label: "Loan Management", suffix: "loans", icon: FileText },
   { label: "Transactions", suffix: "transactions", icon: ReceiptText },
+  { label: "Financial Records", suffix: "financial-records", icon: FileSpreadsheet },
   { label: "Dividends", suffix: "dividends", icon: BriefcaseBusiness },
   { label: "Salary Deductions", suffix: "deductions", icon: ReceiptText },
   { label: "Reports & Analytics", suffix: "reports", icon: LayoutDashboard },

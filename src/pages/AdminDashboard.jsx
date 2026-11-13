@@ -64,6 +64,7 @@ import {
   getGroupBorrowingOverview,
 } from "../features/finance/financeService.js";
 import GroupBorrowingOverview from "../components/staff-dashboard/GroupBorrowingOverview.jsx";
+import FinancialRecordsPage from "../components/finance/FinancialRecordsPage.jsx";
 import {
   AnalyticsPanel,
   DataTable,
@@ -127,7 +128,8 @@ export default function AdminDashboard() {
   const path = location.pathname;
   const db = getDashboardPath("ADMIN");
   let section = "home";
-  if (path.includes("/members")) section = "members";
+  if (path.includes("/financial-records")) section = "financial-records";
+  else if (path.includes("/members")) section = "members";
   else if (path.includes("/loans")) section = "loans";
   else if (path.includes("/transactions")) section = "transactions";
   else if (path.includes("/dividends")) section = "dividends";
@@ -271,6 +273,8 @@ export default function AdminDashboard() {
     if (loading) return <SkeletonDashboard />;
     if (globalSearch.trim()) return <StaffGlobalSearchResults query={globalSearch} accessToken={accessToken} role="ADMIN" />;
     switch (section) {
+      case "financial-records":
+        return <FinancialRecordsPage data={data} accessToken={accessToken} user={user} onRefresh={() => loadData({ showLoading: false })} />;
       case "members":
         return (
           <AdminMemberLifecycle

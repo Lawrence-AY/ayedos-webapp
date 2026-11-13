@@ -420,7 +420,7 @@ export default function FinanceDashboard() {
     }
     if (showLoading) setLoading(true);
     const results = await Promise.allSettled([
-      getAllTransactions(accessToken),
+      getAllTransactions(accessToken, { limit: 500 }),
       getAllLoans(accessToken),
       getAllShares(accessToken),
       getAllDeductions(accessToken),
@@ -633,7 +633,7 @@ export default function FinanceDashboard() {
     if (globalSearch.trim()) return <StaffGlobalSearchResults query={globalSearch} accessToken={accessToken} role="FINANCE" />;
     switch (activeSection) {
       case "financial-records":
-        return <FinancialRecordsPage data={data} accessToken={accessToken} onRefresh={() => loadAllData({ showLoading: false })} />;
+        return <FinancialRecordsPage data={data} accessToken={accessToken} user={user} onRefresh={() => loadAllData({ showLoading: false })} />;
       case "transactions":
         return (
           <TransactionsPage
@@ -1491,7 +1491,7 @@ function WalletLiquidityPage({ data }) {
   const pendingDividends = dividends
     .filter((dividend) => !["PAID", "VERIFIED", "SUCCESS"].includes(String(dividend.status || "").toUpperCase()))
     .reduce((sum, dividend) => sum + Number(dividend.amount || 0), 0);
-  const monthlyContributionDemand = deductions
+  const configuredMonthlyContributionDemand = deductions
     .filter((deduction) => deduction.isActive !== false)
     .reduce((sum, deduction) => sum + Number(deduction.amount || deduction.deduction || 0), 0);
   const recentWithdrawals = transactions
@@ -1503,8 +1503,13 @@ function WalletLiquidityPage({ data }) {
     .slice(0, 30)
     .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
   const activeSavings = members.reduce((sum, member) => sum + Number(member.savings || member.savingsBalance || 0), 0);
+  const workbookSummary = data.reports?.workbookSummary || {};
+  const workbookCashBalance = Number(workbookSummary.summaries?.["SAO (Money Movement In/Out)"]?.["Current Balance"]);
+  const workbookMonth = workbookSummary.accountImport?.reportingMonth;
+  const workbookMonthlyContributions = Number(data.reports?.timeSeries?.monthly?.find((period) => period.label === workbookMonth)?.deposits || 0);
+  const monthlyContributionDemand = configuredMonthlyContributionDemand || workbookMonthlyContributions;
   const plannedCapital = plannedTopUps.reduce((sum, item) => sum + item.amount, 0);
-  const currentLiquidity = Math.max(0, activeSavings + recentDeposits - recentWithdrawals + plannedCapital);
+  const currentLiquidity = Math.max(0, (Number.isFinite(workbookCashBalance) ? workbookCashBalance : activeSavings + recentDeposits - recentWithdrawals) + plannedCapital);
   const forecastDemand = pendingDisbursements + pendingDividends + monthlyContributionDemand + recentWithdrawals;
   const requiredBuffer = forecastDemand * 0.2;
   const requiredCapital = forecastDemand + requiredBuffer;
