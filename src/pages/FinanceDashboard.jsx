@@ -431,38 +431,38 @@ export default function FinanceDashboard() {
       getFinanceNotifications(accessToken, { limit: 100 }),
       getGroupBorrowingOverview(accessToken),
     ]);
-    setData({
+    setData((current) => ({
       transactions:
         results[0].status === "fulfilled" && Array.isArray(results[0].value)
           ? results[0].value.filter((transaction) => ["SUCCESS", "PAID", "COMPLETED"].includes(String(transaction.status || "").toUpperCase()))
-          : [],
+          : current.transactions,
       loans:
         results[1].status === "fulfilled" && Array.isArray(results[1].value)
           ? results[1].value
-          : [],
+          : current.loans,
       shares:
         results[2].status === "fulfilled" && Array.isArray(results[2].value)
           ? results[2].value
-          : [],
+          : current.shares,
       deductions:
         results[3].status === "fulfilled" && Array.isArray(results[3].value)
           ? results[3].value
-          : [],
+          : current.deductions,
       dividends:
         results[4].status === "fulfilled" && Array.isArray(results[4].value)
           ? results[4].value
-          : [],
+          : current.dividends,
       members:
         results[5].status === "fulfilled" && Array.isArray(results[5].value)
           ? results[5].value
-          : [],
+          : current.members,
       companies:
         results[6].status === "fulfilled" && Array.isArray(results[6].value)
           ? results[6].value
-          : [],
+          : current.companies,
       reports: results[7].status === "fulfilled" ? results[7].value : {},
-      groupBorrowing: results[9].status === "fulfilled" ? results[9].value : { items: [], summary: {} },
-    });
+      groupBorrowing: results[9].status === "fulfilled" ? results[9].value : current.groupBorrowing,
+    }));
     if (results[8].status === "fulfilled" && Array.isArray(results[8].value)) {
       const markAllTime = markAllReadAt.current ? new Date(markAllReadAt.current).getTime() : 0;
       setNotifications(results[8].value.map((notification) => {

@@ -445,7 +445,18 @@ export default function UserDashboard() {
                 setGuarantorRequestToken(decodeURIComponent(guarantorRequest[1]));
                 return;
               }
-              if (target.startsWith(`${dashboardBasePath}/`)) navigate(target);
+              if (target.startsWith(`${dashboardBasePath}/`)) {
+                navigate(target);
+                return;
+              }
+              // Older member notifications used /dashboard/member while the
+              // member portal route is /dashboard/user. Keep those links
+              // actionable and land on the notification detail area.
+              if (target.startsWith("/dashboard/member")) {
+                navigate(target.replace(/^\/dashboard\/member/, dashboardBasePath));
+                return;
+              }
+              navigate(`${dashboardBasePath}/notifications`);
             }}
           />
         </div>

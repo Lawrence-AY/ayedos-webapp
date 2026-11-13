@@ -691,15 +691,13 @@ function NotificationsPanel({
                 tabIndex={0}
                 onClick={() => {
                   if (!isRead) onMarkRead?.(notice.id);
-                  if (notice.actionUrl && onOpenNotice) onOpenNotice(notice);
-                  else setSelectedNotice(notice);
+                  setSelectedNotice(notice);
                 }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
                     if (!isRead) onMarkRead?.(notice.id);
-                    if (notice.actionUrl && onOpenNotice) onOpenNotice(notice);
-                    else setSelectedNotice(notice);
+                    setSelectedNotice(notice);
                   }
                 }}
                 className={`
