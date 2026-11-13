@@ -96,6 +96,7 @@ import {
 } from "../components/dashboard/EnterpriseDashboard.jsx";
 import { findMemberByNumber } from "../features/search/searchService.js";
 import GroupBorrowingOverview from "../components/staff-dashboard/GroupBorrowingOverview.jsx";
+import FinancialRecordsPage from "../components/finance/FinancialRecordsPage.jsx";
 import { applyLoanPaymentEvent, useDashboardEvents } from "../features/realtime/dashboardEvents.js";
 
 function filterRows(rows, search, keys) {
@@ -387,6 +388,7 @@ export default function FinanceDashboard() {
   const dashboardBase = getDashboardPath("FINANCE");
   let activeSection = "home";
   if (path.includes("/transactions")) activeSection = "transactions";
+  else if (path.includes("/financial-records")) activeSection = "financial-records";
   else if (path.includes("/loans")) activeSection = "loans";
   else if (path.includes("/liquidity")) activeSection = "liquidity";
   else if (path.includes("/deductions")) activeSection = "deductions";
@@ -616,6 +618,8 @@ export default function FinanceDashboard() {
     if (loading) return <SkeletonDashboard />;
     if (globalSearch.trim()) return <StaffGlobalSearchResults query={globalSearch} accessToken={accessToken} role="FINANCE" />;
     switch (activeSection) {
+      case "financial-records":
+        return <FinancialRecordsPage data={data} accessToken={accessToken} onRefresh={() => loadAllData({ showLoading: false })} />;
       case "transactions":
         return (
           <TransactionsPage
@@ -2853,7 +2857,6 @@ function MemberProfilesPage({ data, accessToken, onRefresh, currentUser }) {
         }
       />
       <FinanceMemberImport accessToken={accessToken} onImported={onRefresh} />
-      <FinanceFinancialCsvImport accessToken={accessToken} onImported={onRefresh} />
       <form onSubmit={submitMemberSearch} className="flex gap-2">
         <div className="relative flex-1">
         <Search
@@ -2948,6 +2951,7 @@ function FinanceMemberImport({ accessToken, onImported }) {
   const [selectedPreviewRow, setSelectedPreviewRow] = useState(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(null);
+  const [importHistory, setImportHistory] = useState([]);
 
   async function handleFile(event) {
     const file = event.target.files?.[0];
@@ -2994,6 +2998,7 @@ function FinanceMemberImport({ accessToken, onImported }) {
     setMessage(null);
     try {
       const result = await commitMemberImport(csv, accessToken);
+      setImportHistory((items) => [{ id: Date.now(), fileName, importedAt: new Date().toISOString(), records: result.imported?.length || preview?.readyCount || 0, status: "Success", content: csv }, ...items]);
       const created = (result.imported || []).filter((row) => row.accountCreated !== false).length;
       const recorded = (result.imported || []).filter((row) => row.accountCreated === false).length;
       const successText = `Created ${created} account${created === 1 ? "" : "s"} and saved ${recorded} record-only member${recorded === 1 ? "" : "s"}.`;
@@ -3072,6 +3077,7 @@ function FinanceMemberImport({ accessToken, onImported }) {
         </div>
       ) : null}
       {selectedPreviewRow ? <MemberImportPreviewDetail row={selectedPreviewRow} onClose={() => setSelectedPreviewRow(null)} /> : null}
+      <ImportHistoryLog history={importHistory} />
     </div>
   );
 }
@@ -3121,6 +3127,7 @@ function FinanceFinancialCsvImport({ accessToken, onImported, mode = "financial"
   const [fileName, setFileName] = useState("");
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [importHistory, setImportHistory] = useState([]);
 
   async function handleFile(event) {
     const file = event.target.files?.[0];
@@ -3156,6 +3163,7 @@ function FinanceFinancialCsvImport({ accessToken, onImported, mode = "financial"
     setBusy(true);
     try {
       const result = await commitFinancialCsvImport(csv, accessToken);
+      setImportHistory((items) => [{ id: Date.now(), fileName, importedAt: new Date().toISOString(), records: result.imported?.length || preview?.readyCount || 0, status: "Success", content: csv }, ...items]);
       if (mode === "dividends") {
         toast.success(`Published ${result.dividends?.imported?.length || 0} dividend allocation${result.dividends?.imported?.length === 1 ? "" : "s"}.`);
       } else {
@@ -3266,8 +3274,22 @@ function FinanceFinancialCsvImport({ accessToken, onImported, mode = "financial"
           </table>
         </div>
       ) : null}
+      <ImportHistoryLog history={importHistory} />
     </div>
   );
+}
+
+function ImportHistoryLog({ history = [] }) {
+  function download(item) {
+    const blob = new Blob([item.content || ""], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = item.fileName || "imported-records.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+  return <div className="mt-5 rounded-lg border bg-slate-50 p-4"><h4 className="text-sm font-bold text-slate-800">Import History Log</h4>{history.length ? <div className="mt-3 overflow-x-auto"><table className="min-w-full text-left text-xs"><thead><tr className="border-b text-slate-500"><th className="px-2 py-2">File</th><th className="px-2 py-2">Date/Time</th><th className="px-2 py-2">Records</th><th className="px-2 py-2">Status</th><th className="px-2 py-2">Action</th></tr></thead><tbody>{history.map((item) => <tr key={item.id} className="border-b last:border-0"><td className="px-2 py-2 font-medium">{item.fileName}</td><td className="px-2 py-2">{new Date(item.importedAt).toLocaleString("en-KE")}</td><td className="px-2 py-2">{item.records}</td><td className="px-2 py-2 text-emerald-700">{item.status}</td><td className="px-2 py-2"><button type="button" onClick={() => download(item)} className="font-semibold text-emerald-700 hover:underline">Download original</button></td></tr>)}</tbody></table></div> : <p className="mt-2 text-xs text-slate-500">No imports recorded in this session.</p>}</div>;
 }
 function FinanceMemberFinancialDetail({ member, accessToken, onBack }) {
   const [profile, setProfile] = useState(null);
