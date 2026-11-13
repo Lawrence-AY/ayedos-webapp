@@ -7,6 +7,7 @@ import { getDashboardPath } from "../utils/dashboardRoutes.js";
 import {
   getMemberProfile,
   getMyLoans,
+  getMyLoanEligibility,
   getMyGuarantees,
   getMyNotifications,
   getMyShares,
@@ -18,6 +19,7 @@ import {
 import { getAuthSessions } from "../services/authService.js";
 import DashboardOverview from "../components/user-dashboard/DashboardOverview.jsx";
 import LoansPage from "../components/user-dashboard/LoansPage.jsx";
+import GuarantorRequest from "./GuarantorRequest.jsx";
 import NotificationsPanel from "../components/user-dashboard/NotificationsPanel.jsx";
 import PortfolioPage from "../components/user-dashboard/PortfolioPage.jsx";
 import ProfileSettings from "../components/user-dashboard/ProfileSettings.jsx";
@@ -55,12 +57,14 @@ export default function UserDashboard() {
   const [search, setSearch] = useState("");
   const [remoteSearch, setRemoteSearch] = useState({ loading: false, error: "", results: null, query: "" });
   const [groupRealtimeRefresh, setGroupRealtimeRefresh] = useState(0);
+  const [guarantorRequestToken, setGuarantorRequestToken] = useState("");
   const [showValues, setShowValues] = useState(false);
   const locallyReadNotificationIds = useRef(new Set());
   const markAllReadAt = useRef(null);
   const [data, setData] = useState({
     transactions: [],
     loans: [],
+    loanEligibility: null,
     shares: [],
     notifications: [],
     notificationUnreadCount: 0,
@@ -68,6 +72,16 @@ export default function UserDashboard() {
     activeSessions: [],
     loginHistory: [],
   });
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const requestToken = params.get("guarantorRequest");
+    if (!requestToken) return;
+    setGuarantorRequestToken(requestToken);
+    params.delete("guarantorRequest");
+    const remainingQuery = params.toString();
+    navigate(`${location.pathname}${remainingQuery ? `?${remainingQuery}` : ""}`, { replace: true });
+  }, [location.pathname, location.search, navigate]);
 
   const markNotificationReadLocal = (id) => {
     const readAt = new Date().toISOString();
@@ -119,6 +133,7 @@ export default function UserDashboard() {
       const results = await Promise.allSettled([
         getMyTransactions(accessToken),
         getMyLoans(accessToken),
+        getMyLoanEligibility(accessToken),
         getMyShares(accessToken),
         getAuthSessions(accessToken),
         getMyNotifications(accessToken, { limit: 100 }),
@@ -129,12 +144,12 @@ export default function UserDashboard() {
         refreshInFlight.current = false;
         return;
       }
-      const labels = ["transactions", "loans", "share capital", "sessions", "notifications", "guarantees", "member balances"];
+      const labels = ["transactions", "loans", "loan eligibility", "share capital", "sessions", "notifications", "guarantees", "member balances"];
       const failed = results.flatMap((result, index) => result.status === "rejected" ? [labels[index]] : []);
       setRefreshError(failed.length ? `Unable to refresh ${failed.join(", ")}. Previously loaded values may be out of date.` : "");
-      const sessions = results[3].status === "fulfilled" && Array.isArray(results[3].value) ? results[3].value : [];
+      const sessions = results[4].status === "fulfilled" && Array.isArray(results[4].value) ? results[4].value : [];
 
-      const fetchedNotifications = results[4].status === "fulfilled" && Array.isArray(results[4].value) ? results[4].value : [];
+      const fetchedNotifications = results[5].status === "fulfilled" && Array.isArray(results[5].value) ? results[5].value : [];
       const notifications = fetchedNotifications.map((notification) => {
         const notificationTime = new Date(notification.createdAt || notification.time || 0).getTime();
         const markAllTime = markAllReadAt.current ? new Date(markAllReadAt.current).getTime() : 0;
@@ -147,15 +162,16 @@ export default function UserDashboard() {
       const fetchedUnreadCount = notifications.filter((notification) => !notification.read && !notification.isRead && !notification.readAt).length;
 
       setData((current) => ({
-        member: results[6].status === "fulfilled" ? results[6].value?.Member : current.member,
+        member: results[7].status === "fulfilled" ? results[7].value?.Member : current.member,
         transactions: results[0].status === "fulfilled" && Array.isArray(results[0].value)
           ? results[0].value
           : current.transactions,
         loans: results[1].status === "fulfilled" && Array.isArray(results[1].value) ? results[1].value : current.loans,
-        shares: results[2].status === "fulfilled" && Array.isArray(results[2].value) ? results[2].value : current.shares,
-        notifications: results[4].status === "fulfilled" ? notifications : current.notifications,
-        notificationUnreadCount: results[4].status === "fulfilled" ? fetchedUnreadCount : current.notificationUnreadCount,
-        guarantees: results[5].status === "fulfilled" && Array.isArray(results[5].value) ? results[5].value : current.guarantees,
+        loanEligibility: results[2].status === "fulfilled" ? results[2].value : current.loanEligibility,
+        shares: results[3].status === "fulfilled" && Array.isArray(results[3].value) ? results[3].value : current.shares,
+        notifications: results[5].status === "fulfilled" ? notifications : current.notifications,
+        notificationUnreadCount: results[5].status === "fulfilled" ? fetchedUnreadCount : current.notificationUnreadCount,
+        guarantees: results[6].status === "fulfilled" && Array.isArray(results[6].value) ? results[6].value : current.guarantees,
         activeSessions: sessions.filter((session) => String(session.status || "").toUpperCase() === "ACTIVE"),
         loginHistory: sessions.map((session) => ({
           date: session.date ? new Date(session.date).toLocaleString() : "-",
@@ -352,7 +368,7 @@ export default function UserDashboard() {
       );
     }
     if (path.includes("/loans")) {
-      return <LoansPage loans={data.loans} stats={stats} accessToken={accessToken} onRefresh={() => loadDashboardData({ showLoading: false })} search={search} showValues={showValues} />;
+      return <LoansPage loans={data.loans} stats={stats} loanEligibility={data.loanEligibility} accessToken={accessToken} onRefresh={() => loadDashboardData({ showLoading: false })} search={search} showValues={showValues} />;
     }
     if (path.includes("/security")) {
       return (
@@ -424,6 +440,11 @@ export default function UserDashboard() {
             }}
             onOpenNotice={(notice) => {
               const target = String(notice?.actionUrl || "");
+              const guarantorRequest = target.match(/^\/guarantor-request\/([^/?#]+)/);
+              if (guarantorRequest) {
+                setGuarantorRequestToken(decodeURIComponent(guarantorRequest[1]));
+                return;
+              }
               if (target.startsWith(`${dashboardBasePath}/`)) navigate(target);
             }}
           />
@@ -479,6 +500,13 @@ export default function UserDashboard() {
           {renderContent()}
         </div>
       </main>
+      {guarantorRequestToken ? <GuarantorRequest
+        requestToken={guarantorRequestToken}
+        accessToken={accessToken}
+        asModal
+        onClose={() => setGuarantorRequestToken("")}
+        onSubmitted={() => loadDashboardData({ showLoading: false })}
+      /> : null}
     </div>
   );
 }

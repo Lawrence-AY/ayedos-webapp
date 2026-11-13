@@ -167,26 +167,6 @@
   overflow-x: auto;
 }
 
-table {
-  width: 100%;
-  min-width: 640px;
-  border-collapse: collapse;
-}
-
-th,
-td {
-  padding: 14px 0;
-  text-align: left;
-  border-bottom: 1px solid rgba(10, 42, 67, 0.08);
-}
-
-th {
-  color: var(--color-muted);
-  font-size: 0.78rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 /* Status badges */
 .status-badge {
   display: inline-flex;

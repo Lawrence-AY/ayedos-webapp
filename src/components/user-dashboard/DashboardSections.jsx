@@ -2477,9 +2477,9 @@ function SecuritySection({
   );
 }
 
-function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues }) {
-  const isLoanEligible = Number(stats.shareCapital || 0) >= MIN_SHARE_CAPITAL;
-  const loanEligibilityMessage = "You are not yet eligible to apply for a loan. Please complete the minimum required share capital purchase before submitting a loan application.";
+function LoansPage({ loans, stats, loanEligibility, accessToken, onRefresh, search, showValues }) {
+  const isLoanEligible = Number(stats.shareCapital || 0) >= MIN_SHARE_CAPITAL && loanEligibility?.eligibleToApply !== false;
+  const loanEligibilityMessage = loanEligibility?.ineligibilityReasons?.join(" ") || "You are not yet eligible to apply for a loan. Please complete the minimum required share capital purchase before submitting a loan application.";
   const [loanForm, setLoanForm] = useState({
     type: "EMERGENCY",
     amount: "10000",
@@ -2504,7 +2504,7 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
   const [guarantorQuery, setGuarantorQuery] = useState("");
   const [guarantorResults, setGuarantorResults] = useState([]);
   const [guarantorLoading, setGuarantorLoading] = useState(false);
-  const activeLoans = loans.filter((loan) => ["ACTIVE", "APPROVED", "DISBURSED", "OVERDUE", "IN_ARREARS", "DEFAULTED"].includes(String(loan.status || "").toUpperCase()));
+  const activeLoans = loans.filter((loan) => ["ACTIVE", "APPROVED", "DISBURSED", "OVERDUE", "IN_ARREARS", "DEFAULTED"].includes(String(loan.status || "").toUpperCase()) && String(loan.disbursementStatus || "").toUpperCase() !== "DENIED");
   const hasPendingLoanApplication = loans.some((loan) => ["PENDING", "PENDING_GUARANTORS", "FULLY_COVERED", "UNDER_REVIEW"].includes(String(loan.status || "").toUpperCase()));
   const [repayLoanId, setRepayLoanId] = useState("");
   const totalBalance = activeLoans.reduce((sum, loan) => sum + loanOutstandingBalance(loan), 0);
@@ -2533,7 +2533,7 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
   );
   const payoutOtpVerified = payoutDestinationValid && loanForm.payoutOtp.trim().length >= 4;
   const canSubmitLoanRequest = payoutDestinationValid && payoutOtpVerified;
-  const selectedRepayLoanId = repayLoanId || activeLoans[0]?.id || "";
+  const selectedRepayLoanId = activeLoans.some((loan) => String(loan.id) === String(repayLoanId)) ? repayLoanId : activeLoans[0]?.id || "";
   const requestedAmount = Math.min(Number(loanForm.amount || 0), selectedProduct.max);
   const requestedDuration = Math.min(Number(loanForm.duration || 1), selectedProduct.duration);
   const monthlyRate = selectedProduct.interestRate / 100;
@@ -2564,12 +2564,15 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
   const nextAmount = calculateLoanNextDueAmount(nextLoan);
   const loanMoney = (value) => loanValuesVisible ? formatCurrency(value) : "KES ****";
 
-  const savingsBalance = Number(stats.totalSavings ?? stats.savings ?? stats.savingsBalance ?? 0);
-  const estimatedSelfGuarantee = loanForm.selfGuarantee ? Math.min(requestedAmount, savingsBalance) : 0;
+  const availableSelfGuarantee = Number(loanEligibility?.availableSelfGuaranteeSavings || 0);
+  const estimatedSelfGuarantee = loanForm.selfGuarantee ? Math.min(requestedAmount, availableSelfGuarantee) : 0;
   const externalGuaranteeNeeded = Math.max(0, requestedAmount - estimatedSelfGuarantee);
   const requiresGuarantors = loanForm.type !== "EMERGENCY" && externalGuaranteeNeeded > 0;
-  const unfundedGuarantee = selectedGuarantors.length > 0 ? 0 : externalGuaranteeNeeded;
-  const selectedMemberNames = selectedGuarantors.map((member) => member.name || member.memberNumber).join(", ");
+  const selectedGuaranteeTotal = Math.round(selectedGuarantors.reduce((sum, item) => sum + Number(item.guaranteeAmount || 0), 0) * 100) / 100;
+  const unfundedGuarantee = Math.max(0, Math.round((externalGuaranteeNeeded - selectedGuaranteeTotal) * 100) / 100);
+  const overAllocatedGuarantee = Math.max(0, Math.round((selectedGuaranteeTotal - externalGuaranteeNeeded) * 100) / 100);
+  const guaranteeAmountsValid = Math.abs(selectedGuaranteeTotal - externalGuaranteeNeeded) < 0.01
+    && selectedGuarantors.every((item) => Number(item.guaranteeAmount || 0) > 0 && Number(item.guaranteeAmount) <= Number(item.availableGuaranteeCapacity || 0));
 
   useEffect(() => {
     if (!requiresGuarantors || guarantorQuery.trim().length < 2) {
@@ -2601,7 +2604,9 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
     setSelectedGuarantors((prev) => {
       if (prev.some((item) => item.memberId === id)) return prev.filter((item) => item.memberId !== id);
       if (prev.length >= 5) return prev;
-      return [...prev, member];
+      const alreadyAllocated = prev.reduce((sum, item) => sum + Number(item.guaranteeAmount || 0), 0);
+      const amount = Math.min(Number(member.availableGuaranteeCapacity || 0), Math.max(0, externalGuaranteeNeeded - alreadyAllocated));
+      return [...prev, { ...member, guaranteeAmount: String(amount) }];
     });
   }
 
@@ -2615,11 +2620,16 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
     if (!canSubmitLoanRequest) { setMessage({ type: "error", text: "Verify your payout destination with the OTP sent to your registered mobile number before submitting your loan request." }); return; }
     if (selectedProduct.requiresFullShareCapital && stats.shareCapitalRemaining > 0) { setMessage({ type: "error", text: "Minimum share capital must be fully paid." }); return; }
     if (requiresGuarantors && selectedGuarantors.length < 1) { setMessage({ type: "error", text: "Select at least one guarantor, or use self-guarantee if your savings cover the loan." }); return; }
-    if (requiresGuarantors && unfundedGuarantee > 0) { setMessage({ type: "error", text: `Allocate ${formatCurrency(unfundedGuarantee)} more in guarantor requests.` }); return; }
+    if (requiresGuarantors && !guaranteeAmountsValid) {
+      const feedback = overAllocatedGuarantee > 0
+        ? `Reduce guarantor amounts by ${formatCurrency(overAllocatedGuarantee)}.`
+        : `Allocate ${formatCurrency(unfundedGuarantee)} more in guarantor requests.`;
+      setMessage({ type: "error", text: feedback }); return;
+    }
     if (loanForm.type !== "EMERGENCY" && !loanForm.reason.trim()) { setMessage({ type: "error", text: "Please add the reason for this loan request." }); return; }
     try {
       setBusyAction("borrow"); setConfirmation(null);
-      const result = await applyForLoan({ type: loanForm.type, amount: requestedAmount, duration: requestedDuration, interestRate: selectedProduct.interestRate, reason: loanForm.reason.trim(), payoutDestination, selfGuarantee: loanForm.selfGuarantee, selfGuaranteedAmount: loanForm.selfGuarantee ? estimatedSelfGuarantee : undefined, guarantors: requiresGuarantors ? selectedGuarantors.map((member) => ({ memberId: member.memberId, amount: externalGuaranteeNeeded })) : undefined }, accessToken);
+      const result = await applyForLoan({ type: loanForm.type, amount: requestedAmount, duration: requestedDuration, interestRate: selectedProduct.interestRate, reason: loanForm.reason.trim(), payoutDestination, selfGuarantee: loanForm.selfGuarantee, selfGuaranteedAmount: loanForm.selfGuarantee ? estimatedSelfGuarantee : undefined, guarantors: requiresGuarantors ? selectedGuarantors.map((member) => ({ memberId: member.memberId, amount: Number(member.guaranteeAmount) })) : undefined }, accessToken);
       const text = result?.loanDetails?.autoApproved ? "Emergency Loan Auto-Approved & Disbursed" : "Loan application submitted successfully";
       setMessage({ type: "success", text }); toast.success(text, { duration: 4000 });
       setLoanForm((current) => ({ ...current, reason: "", payoutChannel: "", payoutPhone: "", payoutBankCode: "", payoutAccountNumber: "", payoutAccountName: "", payoutOtp: "" }));
@@ -2806,14 +2816,14 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
                 />
                 <span>
                   <span className="block font-semibold">Self-guarantee with my savings</span>
-                  <span className="mt-1 block text-xs text-emerald-800">Up to {loanMoney(estimatedSelfGuarantee || savingsBalance)} will secure your own loan first. Any balance still requires external guarantors.</span>
+                  <span className="mt-1 block text-xs text-emerald-800">KES {loanMoney(availableSelfGuarantee)} is currently available for self-guaranteeing, after existing guarantees and active self-guarantee holds. This application will use up to {loanMoney(estimatedSelfGuarantee)}; any remaining amount needs external guarantors.</span>
                 </span>
               </label>
             ) : null}
             {requiresGuarantors ? (
               <div className="rounded-lg border border-sky-200 bg-sky-50 p-4">
                 <div className="mb-3 flex items-center gap-2"><UsersRound size={16} className="text-sky-700" /><span className="text-sm font-semibold text-sky-900">Guarantor management</span><span className="rounded-full bg-sky-200 px-2 py-0.5 text-xs font-semibold text-sky-700">{selectedGuarantors.length} selected</span></div>
-                <p className="mb-3 text-xs text-sky-700">Search active qualified SACCO members by name or member number. Each selected guarantor receives a 72-hour secure link and chooses the amount they accept.</p>
+                <p className="mb-3 text-xs text-sky-700">Search active qualified members, add more than one guarantor, and assign each a specific amount. They may confirm a lower amount after reviewing the request.</p>
                 <div className="relative mb-3">
                   <Search size={16} className="pointer-events-none absolute left-3 top-3.5 text-slate-400" />
                   <input value={guarantorQuery} onChange={(e) => setGuarantorQuery(e.target.value)} className="w-full rounded-lg border border-sky-200 bg-white py-3 pl-9 pr-3 text-sm" placeholder="Search member name or number" />
@@ -2823,22 +2833,39 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
                   {!guarantorLoading && guarantorQuery.trim().length >= 2 && guarantorResults.length === 0 ? (<p className="text-xs text-slate-500">No qualified members found.</p>) : null}
                   {guarantorResults.map((member) => {
                     const isSelected = selectedGuarantors.some((item) => item.memberId === member.memberId);
-                    return (<div key={member.memberId} className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 transition ${isSelected ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white"}`}><div><p className="text-sm font-semibold text-slate-800">{member.name}</p><p className="text-xs text-slate-500">{member.memberNumber}</p><span className={`mt-1 inline-block text-xs font-semibold ${member.isEligibleToGuarantee ? "text-emerald-700" : "text-rose-700"}`}>{member.status}</span></div><button type="button" disabled={!member.isEligibleToGuarantee} onClick={() => toggleGuarantor(member)} className={`min-h-9 rounded-lg px-3 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 ${isSelected ? "bg-rose-50 text-rose-700" : "bg-emerald-700 text-white"}`}>{isSelected ? "Remove request" : member.isEligibleToGuarantee ? "Send request" : "Unavailable"}</button></div>);
+                    return (<div key={member.memberId} className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 transition ${isSelected ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white"}`}><div><p className="text-sm font-semibold text-slate-800">{member.name}</p><p className="text-xs text-slate-500">{member.memberNumber}</p><span className={`mt-1 inline-block text-xs font-semibold ${member.isEligibleToGuarantee ? "text-emerald-700" : "text-rose-700"}`}>{member.status}</span><p className="mt-1 text-xs text-slate-500">Available guarantee capacity: {formatCurrency(member.availableGuaranteeCapacity)}</p></div><button type="button" disabled={!member.isEligibleToGuarantee || (!isSelected && selectedGuarantors.length >= 5)} onClick={() => toggleGuarantor(member)} className={`min-h-9 rounded-lg px-3 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 ${isSelected ? "bg-rose-50 text-rose-700" : "bg-emerald-700 text-white"}`}>{isSelected ? "Remove" : member.isEligibleToGuarantee ? "Add guarantor" : "Unavailable"}</button></div>);
                   })}
                 </div>
-                {selectedGuarantors.length > 0 && (<div className="mt-3 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">Guarantor request ready for: {selectedMemberNames}. Their savings information remains confidential and capacity will be verified securely when you submit.</div>)}
+                {selectedGuarantors.length > 0 ? <div className="mt-3 space-y-2">
+                  {selectedGuarantors.map((member) => {
+                    const otherAmount = selectedGuarantors.filter((item) => item.memberId !== member.memberId).reduce((sum, item) => sum + Number(item.guaranteeAmount || 0), 0);
+                    const maxAmount = Math.min(Number(member.availableGuaranteeCapacity || 0), Math.max(0, externalGuaranteeNeeded - otherAmount));
+                    return <div key={member.memberId} className="grid gap-2 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[1fr_180px_auto] sm:items-center">
+                      <div><p className="text-sm font-semibold text-slate-800">{member.name}</p><p className="text-xs text-slate-500">Member {member.memberNumber} · Max {formatCurrency(maxAmount)}</p></div>
+                      <label className="text-xs font-semibold text-slate-600">Guarantee amount
+                        <input type="number" min="1" step="1" max={maxAmount} value={member.guaranteeAmount} onChange={(event) => setSelectedGuarantors((current) => current.map((item) => item.memberId === member.memberId ? { ...item, guaranteeAmount: event.target.value.replace(/\D/g, "") } : item))} className="mt-1 min-h-10 w-full rounded-md border border-slate-200 px-3 text-sm" />
+                      </label>
+                      <button type="button" onClick={() => toggleGuarantor(member)} className="text-xs font-semibold text-rose-700">Remove</button>
+                    </div>;
+                  })}
+                </div> : null}
+                <div className={`mt-3 rounded-lg border px-3 py-2 text-sm ${guaranteeAmountsValid ? "border-emerald-300 bg-emerald-50 text-emerald-800" : "border-sky-200 bg-white text-sky-900"}`}>
+                  <div className="flex flex-wrap items-center justify-between gap-2"><span>Guaranteed: <strong>{formatCurrency(selectedGuaranteeTotal)}</strong> of <strong>{formatCurrency(externalGuaranteeNeeded)}</strong></span><span>Remaining: <strong>{formatCurrency(unfundedGuarantee)}</strong></span></div>
+                  {guaranteeAmountsValid && requiresGuarantors ? <><p className="mt-1 font-bold tracking-wide">FULL AMOUNT COVERED</p><p className="mt-1 text-xs font-normal">This reflects the selected request amounts; each guarantor must still confirm their commitment.</p></> : null}
+                  {overAllocatedGuarantee > 0 ? <p className="mt-1 text-xs">Reduce allocations by {formatCurrency(overAllocatedGuarantee)} to match the required guarantee amount.</p> : null}
+                </div>
               </div>
             ) : null}
-            <button disabled={!canSubmitLoanRequest} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"><FileText size={17} />{busyAction === "borrow" ? "Submitting..." : "Submit Loan Request"}</button>
+            <button disabled={!canSubmitLoanRequest || (requiresGuarantors && !guaranteeAmountsValid)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"><FileText size={17} />{busyAction === "borrow" ? "Submitting..." : "Submit Loan Request"}</button>
             </fieldset>
           </form>
         </Surface>
         <Surface className="p-4 sm:p-5">
           <h5 className="text-base font-semibold text-slate-950 dark:text-slate-100">Repay a loan</h5>
           <form onSubmit={submitRepayment} className="mt-4 grid gap-4">
-            <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">Loan
-              <select value={selectedRepayLoanId} onChange={(e) => setRepayLoanId(e.target.value)} className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                {activeLoans.length === 0 ? (<option>No active loans</option>) : activeLoans.map((loan) => (<option key={loan.id} value={loan.id}>{loan.type} - {loanMoney(loanOutstandingBalance(loan))}</option>))}
+            <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">Loan type and account
+              <select value={selectedRepayLoanId} onChange={(e) => { setRepayLoanId(e.target.value); setRepayAmount(""); }} disabled={!activeLoans.length} className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-900 disabled:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800">
+                {!activeLoans.length ? <option value="">No loans with an outstanding balance</option> : activeLoans.map((loan) => <option key={loan.id} value={loan.id}>{String(loan.type || "Loan").replaceAll("_", " ")} · Ref {String(loan.id).slice(0, 8)} · Balance {loanMoney(loanOutstandingBalance(loan))}</option>)}
               </select>
             </label>
             <Field label="Repayment amount" name="repayAmount" type="number" min="1" max={maximumWholeShillingPayment} value={repayAmount} onChange={(e) => setRepayAmount(e.target.value)} />
@@ -2848,6 +2875,7 @@ function LoansPage({ loans, stats, accessToken, onRefresh, search, showValues })
           </form>
         </Surface>
       </div>
+            {loanEligibility ? <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm sm:grid-cols-2 xl:grid-cols-3 dark:border-slate-700 dark:bg-slate-900"><div><span className="text-slate-500">Total member savings</span><strong className="mt-1 block">{formatCurrency(loanEligibility.totalSavings)}</strong></div><div><span className="text-slate-500">Committed to other members’ guarantees</span><strong className="mt-1 block">{formatCurrency(loanEligibility.savingsCommittedToOtherMembers)}</strong></div><div><span className="text-slate-500">Committed to own loans (pending and active)</span><strong className="mt-1 block">{formatCurrency(loanEligibility.savingsCommittedToOwnSelfGuarantees)}</strong></div><div><span className="text-slate-500">Available for self-guarantee</span><strong className="mt-1 block text-emerald-700">{formatCurrency(loanEligibility.availableSelfGuaranteeSavings)}</strong>{loanEligibility.selfGuaranteeIneligibilityReason && loanEligibility.selfGuaranteeIneligibilityReason !== "No free savings available" ? <span className="text-xs text-rose-700">{loanEligibility.selfGuaranteeIneligibilityReason}</span> : null}</div><div><span className="text-slate-500">Existing outstanding loans</span><strong className="mt-1 block">{formatCurrency(loanEligibility.outstandingLoanObligations)} · {loanEligibility.activeLoanCount} open</strong></div><div><span className="text-slate-500">Maximum {selectedProduct.name} request</span><strong className="mt-1 block">{formatCurrency(loanEligibility.maximumByProduct?.[loanForm.type]?.productLimit || selectedProduct.max)}</strong><span className="text-xs text-slate-500">Self-guaranteed up to {formatCurrency(loanEligibility.maximumByProduct?.[loanForm.type]?.maximumSelfGuaranteed || 0)}</span></div></div> : null}
       <LoanCalculator product={selectedProduct} amount={requestedAmount} duration={requestedDuration} totalInterest={totalInterest} monthlyRepayment={monthlyRepayment} />
       <LoansTable loans={rows} showValues={loanValuesVisible} />
       {confirmation ? <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-slate-950/60 p-0 backdrop-blur-sm sm:items-center sm:p-4"><div role="dialog" aria-modal="true" className="max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-2xl sm:max-w-md sm:rounded-2xl sm:p-6 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"><h3 className="text-lg font-semibold">Confirm {confirmation.type === "BORROW" ? "loan application" : "M-Pesa repayment"}</h3><div className="mt-4 space-y-3 rounded-lg border border-slate-100 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-800">{confirmation.type === "REPAY" ? <div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-slate-400">Account</span><strong className="text-right">Your SACCO member number</strong></div> : null}<div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-slate-400">Action</span><strong>{confirmation.type === "BORROW" ? "Borrow" : "Repay"}</strong></div><div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-slate-400">Total amount</span><strong className="text-right">{formatCurrency(confirmation.amount)}</strong></div>{confirmation.type === "REPAY" ? <div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-slate-400">M-Pesa phone</span><strong className="text-right">{confirmation.phone}</strong></div> : <div className="flex justify-between gap-4"><span className="text-slate-500 dark:text-slate-400">Calculated interest</span><strong className="text-right">{formatCurrency(confirmation.charges)}</strong></div>}</div>{confirmation.type === "REPAY" ? <p className="mt-4 rounded-lg border border-emerald-100 bg-emerald-50 p-3 text-sm leading-6 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200">An M-Pesa prompt will be sent to your phone {confirmation.phone}Please verify the details and enter your M-Pesa PIN to complete the repayment.</p> : null}<div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><button type="button" onClick={() => setConfirmation(null)} className="min-h-11 rounded-lg border border-slate-300 px-4 py-2 font-semibold dark:border-slate-600 dark:text-slate-200">Cancel</button><button type="button" onClick={(event) => confirmation.type === "BORROW" ? requestLoan(event, true) : submitRepayment(event, true)} className="min-h-11 rounded-lg bg-slate-950 px-4 py-2 font-semibold text-white dark:bg-emerald-700">{confirmation.type === "REPAY" ? "Send PIN Prompt" : "Confirm & Proceed"}</button></div></div></div> : null}
@@ -2948,7 +2976,7 @@ function LoansTable({ loans, showValues = true }) {
   };
   const statusMap = {
     PENDING_GUARANTORS: "Pending Guarantors",
-    FULLY_COVERED: "Fully Covered — Finance Review",
+    FULLY_COVERED: "Fully Guaranteed — Finance Review",
     UNDER_REVIEW: "Under Review",
     APPROVED: "Approved",
     REJECTED: "Rejected",
@@ -3043,7 +3071,11 @@ function LoansTable({ loans, showValues = true }) {
                     {loan.reason ? <span className="mt-1 block text-xs text-slate-500">{loan.reason}</span> : null}
                   </td>
                   <td className="px-5 py-4 text-sm">
-                    {loan.selfGuaranteed ? "Self-guaranteed | " : ""}{statusMap[String(loan.status || "").toUpperCase()] || normalizeStatus(loan.status)}
+                    <span className="block">{loan.selfGuaranteed ? "Self-guaranteed | " : ""}{statusMap[String(loan.status || "").toUpperCase()] || normalizeStatus(loan.status)}</span>
+                    {loan.guarantors?.length ? <div className="mt-2 space-y-1 text-xs text-slate-500">
+                      <p className="font-semibold text-slate-700">Guarantees: {loanMoney(loan.guaranteeProgress?.totalGuaranteed || 0)} / {loanMoney(loan.principal || loan.amount || 0)} accepted</p>
+                      {loan.guarantors.map((guarantor) => <p key={guarantor.id}>{guarantor.name || guarantor.memberNumber || "Guarantor"} · {loanMoney(guarantor.amount)} · {normalizeStatus(guarantor.status)}</p>)}
+                    </div> : null}
                   </td>
                   <td className="px-5 py-4 text-sm">
                     {loan.createdAt
