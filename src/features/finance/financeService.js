@@ -1,5 +1,5 @@
 // Finance feature services - comprehensive SACCO financial management
-import { apiRequest, unwrapEnvelopeData } from '../../lib/apiClient'
+import { apiRequest, clearApiCache, unwrapEnvelopeData } from '../../lib/apiClient'
 
 // ============================================================
 // TRANSACTIONS
@@ -99,11 +99,38 @@ export async function commitFinancialCsvImport(csv, accessToken, importMode = 'f
   return unwrapEnvelopeData(res.json)
 }
 
-export async function commitSaccoLedger(records, sourceFile, accessToken) {
+export async function commitSaccoLedger(records, sourceFile, accessToken, summaries = {}) {
   const res = await apiRequest('/api/finance/sacco-ledger/commit', {
-    method: 'POST', accessToken, body: { records, sourceFile }, cache: false, retry: false, timeoutMs: 60000,
+    method: 'POST', accessToken, body: { records, sourceFile, summaries }, cache: false, retry: false, timeoutMs: 60000,
   })
-  if (!res.ok) throw new Error(res.json?.message || 'Failed to import SACCO workbook ledger')
+  if (!res.ok) {
+    const error = new Error(res.json?.message || 'Failed to import SACCO workbook ledger')
+    error.requestId = res.json?.requestId || null
+    error.code = res.json?.errorCode || res.json?.code || null
+    throw error
+  }
+  clearApiCache()
+  return unwrapEnvelopeData(res.json)
+}
+
+export async function getSaccoLedgerImports(accessToken) {
+  const res = await apiRequest('/api/finance/sacco-ledger/imports', { method: 'GET', accessToken, cache: false })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to load workbook imports')
+  return unwrapEnvelopeData(res.json)
+}
+
+export async function getSaccoLedgerImport(importId, accessToken) {
+  const res = await apiRequest(`/api/finance/sacco-ledger/imports/${encodeURIComponent(importId)}`, { method: 'GET', accessToken, cache: false })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to load workbook records')
+  return unwrapEnvelopeData(res.json)
+}
+
+export async function applySaccoLedgerImport(importId, accessToken) {
+  const res = await apiRequest(`/api/finance/sacco-ledger/imports/${encodeURIComponent(importId)}/apply`, {
+    method: 'POST', accessToken, cache: false, retry: false, timeoutMs: 60000,
+  })
+  if (!res.ok) throw new Error(res.json?.message || 'Failed to apply archived workbook account data')
+  clearApiCache()
   return unwrapEnvelopeData(res.json)
 }
 
