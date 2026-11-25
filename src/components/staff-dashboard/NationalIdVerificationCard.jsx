@@ -1,0 +1,9 @@
+import { useState } from 'react';
+import { apiRequest, unwrapEnvelopeData } from '../../lib/apiClient.js';
+
+export default function NationalIdVerificationCard({ user, accessToken }) {
+  const [nationalId, setNationalId] = useState(user?.nationalId || '');
+  const [state, setState] = useState({ busy: false, message: '', error: '' });
+  async function verify(event) { event.preventDefault(); setState({ busy: true, message: '', error: '' }); try { const res = await apiRequest('/api/users/me/verify-national-id', { method: 'POST', accessToken, body: { nationalId }, cache: false, retry: false }); if (!res.ok) throw new Error(res.json?.message || 'National ID verification failed'); const data = unwrapEnvelopeData(res.json); setNationalId(data.nationalId || nationalId); setState({ busy: false, message: 'National ID verified and saved.', error: '' }); } catch (error) { setState({ busy: false, message: '', error: error.message }); } }
+  return <form onSubmit={verify} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-bold">National ID verification</h3><p className="mt-1 text-sm text-slate-500">Add and verify your National ID to enable National ID login.</p><div className="mt-4 flex gap-2"><input required inputMode="numeric" maxLength={30} value={nationalId} onChange={(event) => setNationalId(event.target.value.replace(/\D/g, '').slice(0, 30))} placeholder="National ID" className="w-full rounded-lg border px-3 py-2.5" /><button disabled={state.busy} className="shrink-0 rounded-lg bg-slate-950 px-4 py-2 font-semibold text-white disabled:opacity-50">{state.busy ? 'Verifying…' : 'Verify ID'}</button></div>{state.message && <p className="mt-3 text-sm font-semibold text-emerald-700">{state.message}</p>}{state.error && <p className="mt-3 text-sm font-semibold text-rose-700">{state.error}</p>}</form>;
+}
